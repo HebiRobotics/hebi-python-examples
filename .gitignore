@@ -1,0 +1,7 @@
+# PyCharm/JetBrains folders
+.idea/
+
+# Byte compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
