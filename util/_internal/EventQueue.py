@@ -12,18 +12,18 @@ class EventQueue(object):
     SDL_JOYBUTTONDOWN : "jbutton",
     SDL_JOYBUTTONUP : "jbutton",
     SDL_JOYDEVICEADDED : "jdevice",
-    SDL_JOYDEVICEREMOVED : "jdevice",
-  }
+    SDL_JOYDEVICEREMOVED : "jdevice" }
 
   def __init__(self):
     hooks = dict()
-    hooks[SDL_JOYAXISMOTION] = []
-    hooks[SDL_JOYBALLMOTION] = []
-    hooks[SDL_JOYHATMOTION] = []
-    hooks[SDL_JOYBUTTONDOWN] = []
-    hooks[SDL_JOYBUTTONUP] = []
-    hooks[SDL_JOYDEVICEADDED] = []
+    hooks[SDL_JOYAXISMOTION] = [_joystick_axis_motion]
+    hooks[SDL_JOYBALLMOTION] = [_joystick_ball_motion]
+    hooks[SDL_JOYHATMOTION] = [_joystick_hat_motion]
+    hooks[SDL_JOYBUTTONDOWN] = [_joystick_button_event]
+    hooks[SDL_JOYBUTTONUP] = [_joystick_button_event]
+    hooks[SDL_JOYDEVICEADDED] = [_joystick_added]
     hooks[SDL_JOYDEVICEREMOVED] = []
+
     self.__event_hooks = hooks
     self.__loop_mutex = threading.Lock()
 
@@ -56,6 +56,7 @@ class EventQueue(object):
 
   def start(self):
     self.__thread = threading.Thread(target=self.__run, name="SDL Event Processor")
+    self.__thread.start()
 
 
 # ------------------------------------------------------------------------------
@@ -63,17 +64,24 @@ class EventQueue(object):
 # ------------------------------------------------------------------------------
 
 
-from Joystick import Joystick
+from .Joystick import Joystick, GameControllerException
 
 
-def __joystick_added(sdl_event):
+def _joystick_added(sdl_event):
   joystick_id = sdl_event.which
-  joystick = Joystick(joystick_id)
-  print('Joystick (guid: {0}, name: "{1}") added'.format(joystick.guid, joystick.name))
-  Joystick._set_at(joystick_id, joystick)
+  try:
+    joystick = Joystick(joystick_id)
+    print('Joystick (guid: {0}, name: "{1}") added'.format(joystick.guid, joystick.name))
+    Joystick._set_at(joystick_id, joystick)
+  except GameControllerException as game:
+    import sdl2.ext.compat
+    print('Did not add Joystick "{0}" ({1})'.format(sdl2.ext.compat.stringify(SDL_JoystickNameForIndex(joystick_id), 'utf8'), game))
+  except Exception as e:
+    import sdl2.ext.compat
+    print('Could not add Joystick "{0}"'.format(sdl2.ext.compat.stringify(SDL_JoystickNameForIndex(joystick_id), 'utf8')))
 
 
-def __joystick_axis_motion(sdl_event):
+def _joystick_axis_motion(sdl_event):
   joystick_id = sdl_event.which
   ts = sdl_event.timestamp
   axis = sdl_event.axis
@@ -81,7 +89,7 @@ def __joystick_axis_motion(sdl_event):
   Joystick.at_index(joystick_id)._on_axis_motion(ts, axis, value)
 
 
-def __joystick_ball_motion(sdl_event):
+def _joystick_ball_motion(sdl_event):
   joystick_id = sdl_event.which
   ts = sdl_event.timestamp
   ball = sdl_event.ball
@@ -90,7 +98,7 @@ def __joystick_ball_motion(sdl_event):
   Joystick.at_index(joystick_id)._on_ball_motion(ts, ball, xrel, yrel)
 
 
-def __joystick_hat_motion(sdl_event):
+def _joystick_hat_motion(sdl_event):
   joystick_id = sdl_event.which
   ts = sdl_event.timestamp
   hat = sdl_event.hat
@@ -98,7 +106,7 @@ def __joystick_hat_motion(sdl_event):
   Joystick.at_index(joystick_id)._on_hat_motion(ts, hat, value)
 
 
-def __joystick_button_event(sdl_event):
+def _joystick_button_event(sdl_event):
   joystick_id = sdl_event.which
   ts = sdl_event.timestamp
   button = sdl_event.button
