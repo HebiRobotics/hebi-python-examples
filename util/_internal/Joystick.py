@@ -127,11 +127,31 @@ class Joystick(object):
     self._as_parameter_ = self.__joystick
     self.__initialize()
 
+    from .JoystickMappings import get_joystick_mapping
+    self.__joystick_mapping = get_joystick_mapping(self)
+
   def __del__(self):
     if (self.__gamepad):
       SDL_GameControllerClose(self.__gamepad)
     if (self.__joystick):
       SDL_JoystickClose(self.__joystick)
+
+  def __getattr__(self, item):
+    if self.__joystick_mapping == None:
+      raise AttributeError
+    elif item in self.__joystick_mapping:
+      return self.__joystick_mapping[item]()
+    elif item == '__joystick_mapping':
+      raise RuntimeError
+    else:
+      raise AttributeError
+
+  def __dir__(self):
+    s_dir = set(self.__dict__.keys())
+    s_dir = s_dir.union(set(dir(self.__class__)))
+    if self.__joystick_mapping != None:
+      s_dir = s_dir.union(set(self.__joystick_mapping.keys()))
+    return [entry for entry in s_dir]
 
   def __initialize(self):
 
@@ -140,6 +160,10 @@ class Joystick(object):
     num_hats = SDL_JoystickNumHats(self)
     num_buttons = SDL_JoystickNumButtons(self)
 
+    self.__num_axes = num_axes
+    self.__num_balls = num_balls
+    self.__num_hats = num_hats
+    self.__num_buttons = num_buttons
     self.__events = _JoystickEventsMap(num_axes, num_balls, num_hats, num_buttons)
 
     from ctypes import byref, c_int
@@ -259,6 +283,20 @@ class Joystick(object):
     return vals[hat]
 
   def get_button(self, button):
+    """
+
+    :param button: The button name or index. Strings are case insensitive.
+    :type button: int, str
+    :return:
+    """
+    if (type(button) == str):
+      if self.__joystick_mapping != None:
+        key = 'BUTTON_' + button.upper()
+        if key not in self.__joystick_mapping:
+          raise RuntimeError('Cannot find button {0} in mapping'.format(button))
+        return self.__joystick_mapping[key]()
+      else:
+        raise RuntimeError('Joystick has no mapping. You must retrieve button values by integer index')
     vals = self.__last_vals[Joystick.BUTTON]
     if (button < 0 or button >= len(vals)):
       raise IndexError('button index out of range. [0,{0}) are valid inputs'.format(len(vals)))
