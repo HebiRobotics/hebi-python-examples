@@ -55,6 +55,7 @@ class EventQueue(object):
 
   def start(self):
     self.__thread = threading.Thread(target=self.__run, name="SDL Event Processor")
+    self.__thread.daemon = True
     self.__thread.start()
 
 
@@ -63,6 +64,7 @@ class EventQueue(object):
 # ------------------------------------------------------------------------------
 
 
+from . import Joystick as JoystickModule
 from .Joystick import Joystick, GameControllerException
 
 
@@ -71,12 +73,13 @@ def _joystick_added(sdl_event):
   try:
     joystick = Joystick(joystick_id)
     print('Joystick (guid: {0}, name: "{1}") added'.format(joystick.guid, joystick.name))
-    Joystick._set_at(joystick_id, joystick)
+    JoystickModule._joysticks[joystick_id] = joystick
   except GameControllerException as game:
     import sdl2.ext.compat
     print('Did not add Joystick "{0}" ({1})'.format(sdl2.ext.compat.stringify(SDL_JoystickNameForIndex(joystick_id), 'utf8'), game))
   except Exception as e:
     import sdl2.ext.compat
+    print('WARNING: Caught Exception\n{0}'.format(e))
     print('Could not add Joystick "{0}"'.format(sdl2.ext.compat.stringify(SDL_JoystickNameForIndex(joystick_id), 'utf8')))
 
 

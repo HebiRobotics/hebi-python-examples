@@ -3,6 +3,8 @@
 class Igor2Config(object):
   """
   Used when starting up Igor II.
+
+  TODO: Add ability to select Joystick
   """
 
   def __init__(self):
