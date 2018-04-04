@@ -1,5 +1,11 @@
 import sys
 
+
+# ------------------------------------------------------------------------------
+# Classes
+# ------------------------------------------------------------------------------
+
+
 class MappingDesc(object):
 
   def __call__(self):
@@ -32,6 +38,11 @@ class MappingDesc(object):
 
 _Axis = 'Axis'
 _Button = 'Button'
+
+
+# ------------------------------------------------------------------------------
+# Mapping functions
+# ------------------------------------------------------------------------------
 
 
 def __map_ps3_cechzc2u(joystick):
@@ -74,7 +85,6 @@ def __map_ps4_cuh_zct2u(joystick):
   Model CUH-ZXT2U
 
   """
-
   d = dict()
   d['AXIS_LEFT_STICK_X'] = MappingDesc(_Axis, 0, 'Left Stick (x)', joystick)
   d['AXIS_LEFT_STICK_Y'] = MappingDesc(_Axis, 1, 'Left Stick (y)', joystick)
@@ -108,9 +118,15 @@ def __map_ps4_cuh_zct2u(joystick):
     raise RuntimeError('Unknown Operating System/Platform {0}'.format(sys.platform))
   return d
 
+
 __mappings = {
   '030000004c0500006802000011810000' : __map_ps3_cechzc2u,
   '030000004c050000cc09000011810000' : __map_ps4_cuh_zct2u }
+
+
+# ------------------------------------------------------------------------------
+# Public API
+# ------------------------------------------------------------------------------
 
 
 def get_joystick_mapping(joystick):
