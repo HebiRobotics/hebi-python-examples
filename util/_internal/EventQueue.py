@@ -2,7 +2,6 @@ from sdl2 import *
 import sdl2.ext
 import threading
 
-
 class EventQueue(object):
 
   __sdl_event_attr_dict = {
@@ -113,3 +112,6 @@ def _joystick_button_event(sdl_event):
   value = sdl_event.state
   Joystick.at_index(joystick_id)._on_button_event(ts, button, value)
 
+
+_singleton = EventQueue()
+_singleton.start()
