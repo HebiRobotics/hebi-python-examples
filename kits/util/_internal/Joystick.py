@@ -2,6 +2,8 @@
 
 from sdl2 import *
 from threading import Lock, Condition
+from .sdl_utils import SDL_JoystickGetGUIDString
+from .type_utils import assert_callable, assert_type, assert_prange
 
 SDL_InitSubSystem(SDL_INIT_JOYSTICK)
 SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER)
@@ -10,16 +12,12 @@ SDL_JoystickEventState(SDL_ENABLE)
 SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, b"1")
 
 
-def SDL_JoystickGetGUIDString(guid):
-  """See https://github.com/marcusva/py-sdl2/issues/75 for explanation"""
-  s = ''
-  for g in guid.data:
-    s += "{:x}".format(g >> 4)
-    s += "{:x}".format(g & 0x0F)
-  return s
+# ------------------------------------------------------------------------------
+# Helper classes
+# ------------------------------------------------------------------------------
 
 
-class _JoystickEventsMap(object):
+class JoystickEventsMap(object):
 
   def __init__(self, num_axes, num_balls, num_hats, num_buttons):
 
@@ -32,6 +30,9 @@ class _JoystickEventsMap(object):
       def __call__(self, *args):
         for callback in self.__callbacks:
           callback(*args)
+
+      def add_event_handler(self, callback):
+        self.__callbacks.append(callback)
 
       def notify_all(self):
         self.__cv.notify_all()
@@ -65,13 +66,13 @@ class _JoystickEventsMap(object):
     self.__dict = d
 
   def get_event(self, key, index):
+    assert_type(index, int, 'index')
+    assert_type(key, int, 'key')
     if not key in self.__dict:
-      raise KeyError('{0} is not in the dictionary'.format(key))
-    elif index >= len(self.__dict[key]):
-      raise IndexError('index {0} >= {1}'.format(index, len(self.__dict[key])))
-    elif index < 0:
-      raise IndexError('index {0} must be greater than zero'.format(index))
-    return self.__dict[key][index]
+      raise KeyError('{0} is not an event type'.format(key))
+    events = self.__dict[key]
+    assert_prange(index, len(events))
+    return events[index]
 
   def __getitem__(self, item):
     return self.get_event(*item)
@@ -82,7 +83,12 @@ class GameControllerException(RuntimeError):
     super(GameControllerException, self).__init__(*args, **kwargs)
 
 
-def _hat_get_val(value):
+# ------------------------------------------------------------------------------
+# Helper functions
+# ------------------------------------------------------------------------------
+
+
+def hat_get_val(value):
   hx = 0
   hy = 0
   if value & SDL_HAT_UP:
@@ -105,8 +111,13 @@ _joysticks = dict()
 _val_mapper = {
   AXIS : lambda value: value*0.0000305185, # value/32767.0
   BALL : lambda xrel,yrel: (xrel,yrel),
-  HAT : _hat_get_val,
+  HAT : hat_get_val,
   BUTTON : lambda value: value == SDL_PRESSED }
+
+
+# ------------------------------------------------------------------------------
+# Joystick Class
+# ------------------------------------------------------------------------------
 
 
 class Joystick(object):
@@ -162,7 +173,7 @@ class Joystick(object):
     self.__num_balls = num_balls
     self.__num_hats = num_hats
     self.__num_buttons = num_buttons
-    self.__events = _JoystickEventsMap(num_axes, num_balls, num_hats, num_buttons)
+    self.__events = JoystickEventsMap(num_axes, num_balls, num_hats, num_buttons)
 
     from ctypes import byref, c_int
 
@@ -222,6 +233,9 @@ class Joystick(object):
     event.release()
     return event, value
 
+  def __register_event_handler(self, idx, key, callback):
+    self.__events[key, idx].add_event_handler(callback)
+
   def _on_axis_motion(self, ts, axis, value):
     event, val = self.__update_last_val(axis, AXIS, value)
     event(ts, val)
@@ -240,75 +254,240 @@ class Joystick(object):
 
   @staticmethod
   def at_index(index):
+    """
+    :type index: int
+    :return: the Joystick at the given index
+    :rtype: Joystick
+
+    :raises TypeError: If `index` is not an int
+    :raises KeyError:  If `index` is not a joystick
+    """
+    assert_type(index, int, 'index')
     if not index in _joysticks:
       raise KeyError('Joystick {0} does not exist'.format(index))
     return _joysticks[index]
 
   @property
   def index(self):
+    """
+    :return: The index of this Joystick
+    :rtype:  int
+    """
     return self.__index
 
   @property
   def name(self):
+    """
+    :return: The name of the joystick
+    :rtype:  str
+    """
     import sdl2.ext.compat
     return sdl2.ext.compat.stringify(SDL_GameControllerName(self.__gamepad), 'utf8')
 
   @property
   def guid(self):
-    _guid = SDL_JoystickGetGUID(self)
-    return SDL_JoystickGetGUIDString(_guid)
+    """
+    :return: the GUID of the device this joystick represents
+    :rtype:  str
+    """
+    return SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(self))
+
+  def add_axis_event_handler(self, axis, handler):
+    """
+    TODO
+
+    :param axis: TODO
+    :type axis:  int, str
+    :param handler: TODO
+
+    :raises GameControllerException: If the joystick does not have a mapping
+    :raises TypeError: If `handler` is not callable or
+                       `axis` is not an int or str
+    :raises KeyError:  If `axis` is a str and is not a valid axis
+    :raises IndexError: If `axis` is an int and is out of range
+    """
+    assert_callable(handler)
+    if type(axis) == str:
+      axis = self.__joystick_mapping.get_axis(axis).index
+    assert_type(axis, int, 'axis')
+    self.__register_event_handler(axis, AXIS, handler)
+
+  def add_button_event_handler(self, button, handler):
+    """
+    TODO
+
+    :param button: TODO
+    :type button:  int, str
+    :param handler: TODO
+
+    :raises GameControllerException: If the joystick does not have a mapping
+    :raises TypeError: If `handler` is not callable or
+                       `button` is not an int or str
+    :raises KeyError:  If `button` is a str and is not a valid button
+    :raises IndexError: If `button` is an int and is out of range
+    """
+    assert_callable(handler)
+    if type(button) == str:
+      button = self.__joystick_mapping.get_button(button).index
+    assert_type(button, int, 'button')
+    self.__register_event_handler(button, BUTTON, handler)
+
+  def get_button_name(self, index):
+    """
+    Get the name of the button at the given index. If this joystick has no
+    mapping, then an exception will be thrown.
+
+    :param index: The index of the button
+    :type index:  int
+
+    :return: The human readable name of the button
+    :rtype:  str
+
+    :raises GameControllerException: If the joystick does not have a mapping
+    :raises TypeError:               If `index` is not an int
+    """
+    assert_type(index, int, 'index')
+    if self.__joystick_mapping == None:
+      raise GameControllerException('Joystick has no mapping')
+    return self.__joystick_mapping.get_button(index).name
 
   def get_axis(self, axis):
+    """
+    Retrieves the last value of the axis provided. This call does not block.
+
+    :param axis: the index or name of the axis. If this argument is a string,
+                 it is case insensitive.
+    :type axis:  int, str
+
+    :rtype: float
+
+    :raises GameControllerException: If the joystick does not have a mapping
+    :raises TypeError: If `axis` is not an int or str
+    :raises IndexError: If `axis` is an invalid index
+    """
     if (type(axis) == str):
       if self.__joystick_mapping != None:
         return self.__joystick_mapping.get_axis_value(axis)
       else:
-        raise RuntimeError('Joystick has no mapping. You must retrieve button values by integer index')
+        raise GameControllerException('Joystick has no mapping. You must retrieve button values by integer index')
+    assert_type(axis, int, 'axis')
     vals = self.__last_vals[AXIS]
-    if (axis < 0 or axis >= len(vals)):
-      raise IndexError('axis index out of range. [0,{0}) are valid inputs'.format(len(vals)))
+    assert_prange(axis, len(vals), 'axis index')
     return vals[axis]
 
   def get_ball(self, ball):
+    """
+    Retrieves the last value of the ball at the given index.
+    This call does not block.
+
+    :return: TODO
+    :rtype:  tuple
+
+    :raises TypeError: If `ball` is not an int
+    :raises IndexError: If `ball` is an invalid index
+    """
+    assert_type(ball, int, 'ball')
     vals = self.__last_vals[BALL]
-    if (ball < 0 or ball >= len(vals)):
-      raise IndexError('ball index out of range. [0,{0}) are valid inputs'.format(len(vals)))
+    assert_prange(ball, len(vals), 'ball index')
     return vals[ball]
 
   def get_hat(self, hat):
-    vals = self.__last_vals[HAT]
-    if (hat < 0 or hat >= len(vals)):
-      raise IndexError('hat index out of range. [0,{0}) are valid inputs'.format(len(vals)))
-    return vals[hat]
+    """
+    Retrieves the last value of the hat at the given index.
+    This call does not block.
 
-  def get_button_name(self, index):
-    return self.__joystick_mapping.get_button(index).name
+    :param hat:   The index of the hat
+    :type button: int
+
+    :return: TODO
+    :rtype:  tuple
+
+    :raises TypeError: If `hat` is not an int
+    :raises IndexError: If `hat` is an invalid index
+    """
+    assert_type(hat, int, 'hat')
+    vals = self.__last_vals[HAT]
+    assert_prange(hat, len(vals), 'hat index')
+    return vals[hat]
 
   def get_button(self, button):
     """
-    :param button: The button name or index. Strings are case insensitive.
-    :type button: int, str
-    :return:
+    Retrieves the last value of the button. This call does not block.
+
+    :param button: The index or name of the button. If this argument is
+                   a string, it is case insensitive.
+    :type button:  int, str
+    
+    :return: The most recent value received by the event loop of the button.
+             ``True`` corresponds to the button being pressed.
+    :rtype:  bool
+
+    :raises GameControllerException: If the joystick does not have a mapping
+    :raises TypeError:               If `button` is not an int or str
+    :raises IndexError:              If `button` is an invalid (int) index
     """
     if (type(button) == str):
       if self.__joystick_mapping != None:
         return self.__joystick_mapping.get_button_value(button)
       else:
-        raise RuntimeError('Joystick has no mapping. You must retrieve button values by integer index')
+        raise GameControllerException('Joystick has no mapping. You must retrieve button values by integer index')
+    assert_type(button, int, 'button')
     vals = self.__last_vals[BUTTON]
-    if (button < 0 or button >= len(vals)):
-      raise IndexError('button index out of range. [0,{0}) are valid inputs'.format(len(vals)))
+    assert_prange(button, len(vals), 'button index')
     return vals[button]
 
   def get_next_axis_state(self, axis, timeout=None):
+    """
+    Retrieves the next value of the given axis. This call blocks until
+    an sdl2.SDL_JOYAXISMOTION event has been received for the axis
+
+    :param axis: TODO
+    :type axis:  int, str
+
+    :raises GameControllerException: If the joystick does not have a mapping
+    :raises TypeError: If `axis` is not an int or str
+    :raises IndexError: If `axis` is an invalid index
+    """
     return self.__get_next_val(AXIS, axis, timeout)
 
   def get_next_ball_state(self, ball, timeout=None):
+    """
+    Retrieves the next value of the given ball. This call blocks until
+    an sdl2.SDL_JOYBALLMOTION event has been received for the ball
+
+    :param ball: TODO
+    :type ball:  int
+
+    :raises TypeError: If `ball` is not an int
+    :raises IndexError: If `ball` is an invalid index
+    """
     return self.__get_next_val(BALL, ball, timeout)
 
   def get_next_hat_state(self, hat, timeout=None):
+    """
+    Retrieves the next value of the given hat. This call blocks until
+    an sdl2.SDL_JOYHATMOTION event has been received for the hat
+
+    :param hat: TODO
+    :type hat:  int
+
+    :raises TypeError: If `hat` is not an int
+    :raises IndexError: If `hat` is an invalid index
+    """
     return self.__get_next_val(HAT, hat, timeout)
 
   def get_next_button_state(self, button, timeout=None):
+    """
+    Retrieves the next value of the given button. This call blocks until
+    an sdl2.SDL_JOYBUTTONDOWN or sdl2.SDL_JOYBUTTONUP event has been received
+    for the button
+
+    :param button: TODO
+    :type button:  int, str
+
+    :raises GameControllerException: If the joystick does not have a mapping
+    :raises TypeError: If `button` is not an int or str
+    :raises IndexError: If `button` is an invalid index
+    """
     return self.__get_next_val(BUTTON, button, timeout)
 

@@ -1,4 +1,5 @@
 import sys
+from .type_utils import assert_type, assert_prange
 
 
 # ------------------------------------------------------------------------------
@@ -21,18 +22,28 @@ class JoystickMappingEntry(object):
     elif type == 'Button':
       self.__func = lambda: mapper.joystick.get_button(index)
     else:
-      raise RuntimeError('Unknown type "{0}"'.format(type))
+      raise ValueError('Unknown type "{0}"'.format(type))
 
   @property
   def type(self):
+    """
+    :rtype: str
+    """
     return self.__type
 
   @property
   def index(self):
+    """
+    :rtype: int
+    """
     return self.__index
 
   @property
   def name(self):
+    """
+    :return: Human readable name of this entry
+    :rtype:  str
+    """
     return self.__name
 
 
@@ -45,6 +56,7 @@ class JoystickMapper(object):
     return self.__buttons[name]
 
   def __get_string(self, item):
+    assert_type(item, str, 'key')
     if item.startswith('AXIS_'):
       return self.__get_axis(item[5:])
     elif item.startswith('BUTTON_'):
@@ -52,11 +64,11 @@ class JoystickMapper(object):
     raise KeyError('Key {0} not found'.format(item))
 
   def __getitem__(self, item):
-    if type(item) == str:
-      return self.__get_string(item)
-    else:
-      raise TypeError('Key must be a str')
-
+    """
+    :type item: str
+    """
+    return self.__get_string(item)
+      
   def __init__(self, joystick):
     self.__joy = joystick
     self.__axes = dict()
@@ -66,24 +78,33 @@ class JoystickMapper(object):
 
   @property
   def axis_ids(self):
+    """
+    :rtype: list
+    """
     return self.__axis_ids[:]
 
   @property
   def button_ids(self):
+    """
+    :rtype: list
+    """
     return self.__button_ids[:]
 
   @property
   def joystick(self):
+    """
+    :rtype: .Joystick.Joystick
+    """
     return self.__joy
 
   def add_axis(self, index, name, key):
     """
-    :param index:
-    :type index: int
-    :param name: human readable representation of the axis
-    :type name: str
+    :param index: Index of the axis
+    :type index:  int
+    :param name: Human readable representation of the axis
+    :type name:  str
     :param key: Key of this axis
-    :type key: str
+    :type key:  str
     """
     entry = JoystickMappingEntry('Axis', index, name, self)
     self.__axes[key] = entry
@@ -92,12 +113,12 @@ class JoystickMapper(object):
 
   def add_button(self, index, name, key):
     """
-    :param index:
-    :type index: int
-    :param name: human readable representation of the button
-    :type name: str
+    :param index: Index of the button
+    :type index:  int
+    :param name: Human readable representation of the button
+    :type name:  str
     :param key: Key of this button
-    :type key: str
+    :type key:  str
     """
     entry = JoystickMappingEntry('Button', index, name, self)
     self.__buttons[key] = entry
@@ -105,6 +126,12 @@ class JoystickMapper(object):
     self.__button_ids.add('BUTTON_' + key.upper())
 
   def get_axis(self, axis):
+    """
+    :param axis: Index of the axis
+    :type axis:  int, str
+
+    :rtype: .JoystickMappingEntry
+    """
     if type(axis) == int:
       if axis in self.__axes:
         return self.__axes[axis]
@@ -113,13 +140,20 @@ class JoystickMapper(object):
       axiskey = axis.upper()
       if axiskey in self.__axes:
         return self.__axes[axiskey]
-      raise KeyError('Axis[{0}] not found'.format(axis))
+      raise KeyError('Axis["{0}"] not found'.format(axis))
     raise TypeError(type(axis))
 
   def get_axis_value(self, axis):
     return self.get_axis(axis)()
 
   def get_button(self, button):
+    """
+    :param button:
+    :type button:  int, str
+
+    :rtype: .JoystickMappingEntry
+    """
+
     if type(button) == int:
       if button in self.__buttons:
         return self.__buttons[button]
@@ -128,12 +162,11 @@ class JoystickMapper(object):
       buttonkey = button.upper()
       if buttonkey in self.__buttons:
         return self.__buttons[buttonkey]
-      raise KeyError('Button[{0}] not found'.format(button))
+      raise KeyError('Button["{0}"] not found'.format(button))
     raise TypeError(type(button))
 
   def get_button_value(self, button):
     return self.get_button(button)()
-
 
 
 # ------------------------------------------------------------------------------
@@ -167,8 +200,8 @@ def __map_ps3_cechzc2u(joystick):
   d.add_button(8, 'Select', 'SELECT')
   d.add_button(9, 'Start', 'START')
   d.add_button(10, 'Home', 'HOME')
-  d.add_button(11, 'Left Stick Click', 'LEFT_STICK_CLICK')
-  d.add_button(12, 'Right Stick Click', 'RIGHT_STICK_CLICK')
+  d.add_button(11, 'Left Stick', 'LEFT_STICK')
+  d.add_button(12, 'Right Stick', 'RIGHT_STICK')
   d.add_button(13, 'DPad Up', 'DPAD_UP')
   d.add_button(14, 'DPad Down', 'DPAD_DOWN')
   d.add_button(15, 'DPad Left', 'DPAD_LEFT')
@@ -187,9 +220,9 @@ def __map_ps4_cuh_zct2u(joystick):
   d.add_axis(0, 'Left Stick (x)', 'LEFT_STICK_X')
   d.add_axis(1, 'Left Stick (y)', 'LEFT_STICK_Y')
 
+  d.add_button(4, 'Left Shoulder', 'LEFT_SHOULDER')
+  d.add_button(5, 'Right Shoulder', 'RIGHT_SHOULDER')
   d.add_button(9, 'Options', 'OPTIONS')
-  d.add_button(4, 'Left Trigger', 'LEFT_TRIGGER')
-  d.add_button(5, 'Right Trigger', 'RIGHT_TRIGGER')
   d.add_button(8, 'Share', 'SHARE')
 
   if (sys.platform == 'darwin' or sys.platform == 'win32'):
@@ -198,11 +231,14 @@ def __map_ps4_cuh_zct2u(joystick):
     d.add_axis(2, 'Right Stick (x)', 'RIGHT_STICK_X')
     d.add_axis(5, 'Right Stick (y)', 'RIGHT_STICK_Y')
 
-    d.add_button(0, 'Square', 'SQUARE')
+    d.add_button(1, 'X', 'X')
     d.add_button(2, 'Circle', 'CIRCLE')
     d.add_button(3, 'Triangle', 'TRIANGLE')
-    d.add_button(1, 'X', 'X')
-    d.add_button(10, 'Left Stick', 'LEFT_STICK_CLICK')
+    d.add_button(0, 'Square', 'SQUARE')
+    d.add_button(6, 'Left Trigger', 'LEFT_TRIGGER')   #TODO: verify
+    d.add_button(7, 'Right Trigger', 'RIGHT_TRIGGER') #TODO: verify
+    d.add_button(10, 'Left Stick', 'LEFT_STICK')
+    d.add_button(11, 'Right Stick', 'RIGHT_STICK')    #TODO: verify
     d.add_button(13, 'Touchpad', 'TOUCHPAD')
   elif sys.platform.startswith('linux'):
     d.add_axis(2, 'Left Trigger', 'LEFT_TRIGGER')
@@ -210,11 +246,14 @@ def __map_ps4_cuh_zct2u(joystick):
     d.add_axis(3, 'Right Stick (x)', 'RIGHT_STICK_X')
     d.add_axis(4, 'Right Stick (y)', 'RIGHT_STICK_Y')
 
-    d.add_button(3, 'Square', 'SQUARE')
+    d.add_button(0, 'X', 'X')
     d.add_button(1, 'Circle', 'CIRCLE')
     d.add_button(2, 'Triangle', 'TRIANGLE')
-    d.add_button(0, 'X', 'X')
-    d.add_button(11, 'Left Stick', 'LEFT_STICK_CLICK')
+    d.add_button(3, 'Square', 'SQUARE')
+    d.add_button(6, 'Left Trigger', 'LEFT_TRIGGER')
+    d.add_button(7, 'Right Trigger', 'RIGHT_TRIGGER')
+    d.add_button(11, 'Left Stick', 'LEFT_STICK')
+    d.add_button(12, 'Right Stick', 'RIGHT_STICK')
     d.add_button(10, 'Touchpad', 'TOUCHPAD')
   else:
     raise RuntimeError('Unknown Operating System/Platform {0}'.format(sys.platform))

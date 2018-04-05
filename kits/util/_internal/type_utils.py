@@ -1,0 +1,35 @@
+
+
+def assert_callable(val, what='function'):
+  if not hasattr(val, '__call__'):
+    raise TypeError('{0} is not a callable object (does not have __call__)'.format(what))
+
+
+def assert_type(val, type_, what='input'):
+  if type(val) != type_:
+    raise TypeError('{0} must be of type {1}'.format(what, type_.__name__))
+
+
+def assert_range(val, infimum, supremum, what='index', l_inclusive=True, u_inclusive=False):
+  in_range = True
+  if l_inclusive:
+    l_str = '['
+    in_range = val >= infimum
+  else: # exclusive
+    l_str = '('
+    in_range = val > infimum
+
+  if u_inclusive:
+    u_str = ']'
+    in_range = in_range and val <= supremum
+  else: # exclusive
+    u_str = ')'
+    in_range = in_range and val < supremum
+
+  if not in_range:
+    raise IndexError('{0} out of range {1}{2},{3}{4}'.format(
+        what, l_str, infimum, supremum, u_str))
+
+
+def assert_prange(val, supremum, what='index'):
+  assert_range(val, 0, supremum, what=what)
