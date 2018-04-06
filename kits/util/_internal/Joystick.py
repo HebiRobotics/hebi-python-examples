@@ -16,35 +16,45 @@ SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, b"1")
 # Helper classes
 # ------------------------------------------------------------------------------
 
+class JoystickEvent(object):
+  """
+  TODO: Document
+  """
+
+  def __init__(self):
+    self.__callbacks = set()
+    self.__cv = Condition(Lock())
+
+  def __call__(self, *args):
+    for callback in self.__callbacks:
+      callback(*args)
+
+  def add_event_handler(self, callback):
+    """
+    Add an event handler to the given event
+    """
+    # May need to ensure that the input is hashable/has __eq__ & __cmp__
+    self.__callbacks.add(callback)
+
+  def notify_all(self):
+    self.__cv.notify_all()
+
+  def wait(self, timeout=None):
+    self.__cv.wait(timeout)
+
+  def acquire(self):
+    self.__cv.acquire()
+
+  def release(self):
+    self.__cv.release()
+
 
 class JoystickEventsMap(object):
+  """
+  TODO: Document
+  """
 
   def __init__(self, num_axes, num_balls, num_hats, num_buttons):
-
-    class JoystickEvent(object):
-
-      def __init__(self):
-        self.__callbacks = []
-        self.__cv = Condition(Lock())
-
-      def __call__(self, *args):
-        for callback in self.__callbacks:
-          callback(*args)
-
-      def add_event_handler(self, callback):
-        self.__callbacks.append(callback)
-
-      def notify_all(self):
-        self.__cv.notify_all()
-
-      def wait(self, timeout=None):
-        self.__cv.wait(timeout)
-
-      def acquire(self):
-        self.__cv.acquire()
-
-      def release(self):
-        self.__cv.release()
 
     d = dict()
     d[AXIS] = [None] * num_axes
@@ -66,6 +76,16 @@ class JoystickEventsMap(object):
     self.__dict = d
 
   def get_event(self, key, index):
+    """
+    TODO: Document
+
+    :param key:
+    :type key:  int
+    :param index:
+    :type index: int
+
+    :rtype: JoystickEvent
+    """
     assert_type(index, int, 'index')
     assert_type(key, int, 'key')
     if not key in self.__dict:
@@ -75,6 +95,13 @@ class JoystickEventsMap(object):
     return events[index]
 
   def __getitem__(self, item):
+    """
+    Calls :meth:`get_event` with the given input
+
+    :param item: tuple of key and index
+    :type item:  tuple
+    """
+    assert_type(item, tuple, 'item')
     return self.get_event(*item)
 
 
@@ -121,6 +148,13 @@ _val_mapper = {
 
 
 class Joystick(object):
+  """
+  Represents a joystick input device. This class is used to receive
+  input events from the user. Both asynchronous and synchronous facilities
+  are exposed.
+
+  This class wraps the SDL2 library.
+  """
 
   def __init__(self, index):
     self.__gamepad = SDL_GameControllerOpen(index)
@@ -155,8 +189,10 @@ class Joystick(object):
       raise AttributeError
 
   def __dir__(self):
-    s_dir = set(self.__dict__.keys())
-    s_dir = s_dir.union(set(dir(self.__class__)))
+    s_dir = set()
+    for entry in super(Joystick, self).__dir__():
+      s_dir.add(entry)
+
     if self.__joystick_mapping != None:
       s_dir = s_dir.union(self.__joystick_mapping.axis_ids)
       s_dir = s_dir.union(self.__joystick_mapping.button_ids)
@@ -251,6 +287,14 @@ class Joystick(object):
   def _on_button_event(self, ts, button, value):
     event, val = self.__update_last_val(button, BUTTON, value)
     event(ts, val)
+
+  @staticmethod
+  def joystick_count():
+    """
+    :return: The number of SDL Joysticks found
+    :rtype:  int
+    """
+    return SDL_NumJoysticks()
 
   @staticmethod
   def at_index(index):

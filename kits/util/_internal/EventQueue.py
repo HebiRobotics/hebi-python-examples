@@ -72,11 +72,9 @@ def _joystick_added(sdl_event):
   joystick_id = sdl_event.which
   try:
     joystick = Joystick(joystick_id)
-    print('Joystick (guid: {0}, name: "{1}") added'.format(joystick.guid, joystick.name))
     JoystickModule._joysticks[joystick_id] = joystick
   except GameControllerException as game:
     import sdl2.ext.compat
-    print('Did not add Joystick "{0}" ({1})'.format(sdl2.ext.compat.stringify(SDL_JoystickNameForIndex(joystick_id), 'utf8'), game))
   except Exception as e:
     import sdl2.ext.compat
     print('WARNING: Caught Exception\n{0}'.format(e))
