@@ -111,7 +111,7 @@ class JoystickMapper(object):
     self.__axes[index] = entry
     self.__axis_ids.add('AXIS_' + key.upper())
 
-  def add_button(self, index, name, key):
+  def add_button(self, index, name, key, analogues=None):
     """
     :param index: Index of the button
     :type index:  int
@@ -119,11 +119,17 @@ class JoystickMapper(object):
     :type name:  str
     :param key: Key of this button
     :type key:  str
+    :param analogues: List of potential analogues. For example, `SELECT` (PS3) is an analog to `SHARE` (PS4)
     """
     entry = JoystickMappingEntry('Button', index, name, self)
     self.__buttons[key] = entry
     self.__buttons[index] = entry
     self.__button_ids.add('BUTTON_' + key.upper())
+
+    if analogues != None:
+      for analog in analogues:
+        self.__buttons[analog] = entry
+        self.__button_ids.add('BUTTON_' + analog.upper())
 
   def get_axis(self, axis):
     """
@@ -197,9 +203,9 @@ def __map_ps3_cechzc2u(joystick):
   d.add_button(5, 'Right Shoulder', 'RIGHT_SHOULDER')
   d.add_button(6, 'Left Trigger', 'LEFT_TRIGGER')
   d.add_button(7, 'Right Trigger', 'RIGHT_TRIGGER')
-  d.add_button(8, 'Select', 'SELECT')
-  d.add_button(9, 'Start', 'START')
-  d.add_button(10, 'Home', 'HOME')
+  d.add_button(8, 'Select', 'SELECT', ['SHARE'])
+  d.add_button(9, 'Start', 'START', ['OPTIONS'])
+  d.add_button(10, 'Home', 'HOME', ['TOUCHPAD'])
   d.add_button(11, 'Left Stick', 'LEFT_STICK')
   d.add_button(12, 'Right Stick', 'RIGHT_STICK')
   d.add_button(13, 'DPad Up', 'DPAD_UP')
@@ -222,8 +228,8 @@ def __map_ps4_cuh_zct2u(joystick):
 
   d.add_button(4, 'Left Shoulder', 'LEFT_SHOULDER')
   d.add_button(5, 'Right Shoulder', 'RIGHT_SHOULDER')
-  d.add_button(9, 'Options', 'OPTIONS')
-  d.add_button(8, 'Share', 'SHARE')
+  d.add_button(9, 'Options', 'OPTIONS', ['START'])
+  d.add_button(8, 'Share', 'SHARE', ['SELECT'])
 
   if (sys.platform == 'darwin' or sys.platform == 'win32'):
     d.add_axis(3, 'Left Trigger', 'LEFT_TRIGGER')
@@ -239,7 +245,7 @@ def __map_ps4_cuh_zct2u(joystick):
     d.add_button(7, 'Right Trigger', 'RIGHT_TRIGGER') #TODO: verify
     d.add_button(10, 'Left Stick', 'LEFT_STICK')
     d.add_button(11, 'Right Stick', 'RIGHT_STICK')    #TODO: verify
-    d.add_button(13, 'Touchpad', 'TOUCHPAD')
+    d.add_button(13, 'Touchpad', 'TOUCHPAD', ['HOME'])
   elif sys.platform.startswith('linux'):
     d.add_axis(2, 'Left Trigger', 'LEFT_TRIGGER')
     d.add_axis(5, 'Right Trigger', 'RIGHT_TRIGGER')
@@ -254,7 +260,7 @@ def __map_ps4_cuh_zct2u(joystick):
     d.add_button(7, 'Right Trigger', 'RIGHT_TRIGGER')
     d.add_button(11, 'Left Stick', 'LEFT_STICK')
     d.add_button(12, 'Right Stick', 'RIGHT_STICK')
-    d.add_button(10, 'Touchpad', 'TOUCHPAD')
+    d.add_button(10, 'Touchpad', 'TOUCHPAD', ['HOME'])
   else:
     raise RuntimeError('Unknown Operating System/Platform {0}'.format(sys.platform))
   return d

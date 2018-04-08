@@ -1,3 +1,4 @@
+import hebi
 
 
 def assert_callable(val, what='function'):
@@ -15,6 +16,11 @@ def assert_length(val, length, what='input'):
 def assert_type(val, type_, what='input'):
   if type(val) != type_:
     raise TypeError('{0} must be of type {1}'.format(what, type_.__name__))
+
+
+def assert_instance(val, base_type_, what='input'):
+  if not isinstance(base_type_, hebi.GroupFeedback):
+    raise TypeError('{0} must be an instance of {1} (was {2})'.format(what, base_type_.__name__, type(val).__name__))
 
 
 def assert_range(val, infimum, supremum, what='index', l_inclusive=True, u_inclusive=False):

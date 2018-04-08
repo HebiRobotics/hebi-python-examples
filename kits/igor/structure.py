@@ -1,11 +1,13 @@
 import sys, threading
+import numpy as np
 
 from . import DemoUtils, Joystick
 from .config import Igor2Config
 from .event_handlers import register_igor_event_handlers
 
 # kits.util._internal.type_utils
-from ..util._internal.type_utils import assert_type
+from ..util._internal.type_utils import assert_instance, assert_type
+from ..util import math_func
 import hebi
 
 from time import sleep
@@ -15,17 +17,92 @@ from functools import partial as funpart
 class Chassis(object):
 
   def __init__(self):
+    self.__com = np.array([0.0, 0.0, 0.10+0.3], dtype=np.float64)
+    self.__mass = 6.0
     pass
+
+
+  @property
+  def com(self):
+    return self.__com
+
+  @property
+  def mass(self):
+    return self.__mass
 
 
 class Arm(object):
 
-  def __init__(self, name):
+  def __init__(self, name, group_indices):
+    assert name == 'Left' or name == 'Right'
+
     self.__name = name
+    self.__group_indices = group_indices
+    base_frame = np.identity(4, dtype=np.float64)
+    kin = hebi.robot_model.RobotModel()
+    kin.add_actuator('X5-4')
+
+    if name == 'Left':
+      mounting = 'left-inside'
+      base_frame[0:3, 3] = [0.0, 0.10, 0.20]
+      home_angles = np.array([0.0, 20.0, 60.0, 0.0], dtype=np.float64)
+    else:
+      mounting = 'right-inside'
+      base_frame[0:3, 3] = [0.0, -0.10, 0.20]
+      home_angles = np.array([0.0, -20.0, -60.0, 0.0], dtype=np.float64)
+
+    kin.add_bracket('X5-HeavyBracket', mounting)
+    kin.add_actuator('X5-9')
+    kin.add_link('X5', extension=0.325, twist=0.0)
+    kin.add_actuator('X5-4')
+    kin.add_link('X5', extension=0.325, twist=np.pi)
+    kin.add_actuator('X5-4')
+    kin.base_frame = base_frame
+    self.__kin = kin
+
+    home_angles = np.deg2rad(home_angles)
+    self.__home_angles = home_angles
+    self.__home_ef = kin.get_forward_kinematics('endeffector', home_angles)
+
 
   @property
   def name(self):
     return self.__name
+
+  def create_home_trajectory(self, group, reuse_fbk=None, duration=3.0):
+    """
+    Create a trajectory from the current pose to the home pose.
+    This is used on soft startup
+    ^^^ Is this the correct usage of "pose" ???
+    :return:
+    """
+    if reuse_fbk != None:
+      assert_instance(reuse_fbk, hebi.GroupFeedback, 'reuse_fbk')
+    elif reuse_fbk.size != group.size:
+      raise ValueError('reuse_fbk must be the same size as group ({0} != {1})'.format(reuse_fbk.size, group.size))
+    assert_type(duration, float, 'duration')
+    if duration < 1.0:
+      raise ValueError('duration must be greater than 1.0 seconds')
+
+    group.send_feedback_request()
+    reuse_fbk = group.get_next_feedback(reuse_fbk=reuse_fbk)
+
+    num_joints = len(self.__group_indices)
+    num_waypoints = 2
+    dim = (num_joints, num_waypoints)
+
+    current_positions = reuse_fbk.position[self.__group_indices]
+    home_angles = self.__home_angles
+
+    times = np.array([0.0, duration], dtype=np.float64)
+    pos = np.empty(dim, dtype=np.float64)
+    vel = np.zeros(dim, dtype=np.float64)
+    accel = np.zeros(dim, dtype=np.float64)
+
+    pos[:, 0] = current_positions
+    pos[:, 1] = home_angles
+
+    return hebi.trajectory.create_trajectory(times, pos, vel, accel)
 
   def set_x_velocity(self, value):
     print('{0} Velocity(x): {1}'.format(self.__name, value))
@@ -38,13 +115,107 @@ class Arm(object):
 
 
 class Leg(object):
+  """
+  Represents a leg (and wheel)
+  """
 
-  def __init__(self, name):
+  def __init__(self, name, group_indices):
+    assert name == 'Left' or name == 'Right'
+
     self.__name = name
+    self.__group_indices = group_indices
+    base_frame = np.identity(4, dtype=np.float64)
+
+    hip_t = np.identity(4, dtype=np.float64)
+    hip_t[0:3, 0:3] = math_func.rotate_x(np.pi*0.5)
+    hip_t[0:3, 3] = [0.0, 0.0225, 0.055]
+    self.__hip_t = hip_t
+
+    kin = hebi.robot_model.RobotModel()
+    kin.add_actuator('X5-9')
+    kin.add_link('X5', extension=0.375, twist=np.pi)
+    kin.add_actuator('X5-4')
+    kin.add_link('X5', extension=0.325, twist=np.pi)
+
+    home_knee_angle = np.deg2rad(130)
+    home_hip_angle = np.pi*0.5+home_knee_angle*0.5
+
+    if name == 'Left':
+      home_angles = np.array([home_hip_angle, home_knee_angle], dtype=np.float64)
+      base_frame[0:3, 3] = [0.0, 0.15, 0.0]
+      base_frame[0:3, 0:3] = math_func.rotate_x(np.pi * -0.5)
+    else:
+      home_angles = np.array([-home_hip_angle, -home_knee_angle], dtype=np.float64)
+      base_frame[0:3, 3] = [0.0, -0.15, 0.0]
+      base_frame[0:3, 0:3] = math_func.rotate_x(np.pi*0.5)
+
+    kin.base_frame = base_frame
+    self.__kin = kin
+    self.__home_angles = home_angles
+    self.__wheel_radius = 0.100
+    self.__wheel_base = 0.43
+
 
   @property
   def name(self):
     return self.__name
+
+  @property
+  def wheel_radius(self):
+    return self.__wheel_radius
+
+  @property
+  def wheel_base(self):
+    return self.__wheel_base
+
+  @property
+  def knee_angle(self):
+    """
+    :return: the commanded knee angle in radians
+    :rtype:  float
+    """
+
+  @property
+  def hip_angle(self):
+    """
+    :return: the commanded hip angle in radians
+    :rtype:  float
+    """
+
+  def create_home_trajectory(self, group, reuse_fbk=None, duration=3.0):
+    """
+    Create a trajectory from the current pose to the home pose.
+    This is used on soft startup
+    ^^^ Is this the correct usage of "pose" ???
+    :return:
+    """
+    if reuse_fbk != None:
+      assert_instance(reuse_fbk, hebi.GroupFeedback, 'reuse_fbk')
+    elif reuse_fbk.size != group.size:
+      raise ValueError('reuse_fbk must be the same size as group ({0} != {1})'.format(reuse_fbk.size, group.size))
+    assert_type(duration, float, 'duration')
+    if duration < 1.0:
+      raise ValueError('duration must be greater than 1.0 seconds')
+
+    group.send_feedback_request()
+    reuse_fbk = group.get_next_feedback(reuse_fbk=reuse_fbk)
+
+    num_joints = len(self.__group_indices)
+    num_waypoints = 2
+    dim = (num_joints, num_waypoints)
+
+    current_positions = reuse_fbk.position[self.__group_indices]
+    home_angles = self.__home_angles
+
+    times = np.array([0.0, duration], dtype=np.float64)
+    pos = np.empty(dim, dtype=np.float64)
+    vel = np.zeros(dim, dtype=np.float64)
+    accel = np.zeros(dim, dtype=np.float64)
+
+    pos[:, 0] = current_positions
+    pos[:, 1] = home_angles
+
+    return hebi.trajectory.create_trajectory(times, pos, vel, accel)
 
 
 # ------------------------------------------------------------------------------
@@ -111,10 +282,9 @@ def create_group(config, has_camera):
 
 # Used for Igor background controller thread
 if sys.version_info[0] == 3:
-  def is_main_thread_active():
-    return threading.main_thread().is_alive()
+  is_main_thread_active = lambda: threading.main_thread().is_alive()
 else:
-  is_main_thread_active = lambda : any((i.name == "MainThread") and i.is_alive() for i in threading.enumerate())
+  is_main_thread_active = lambda: any((i.name == "MainThread") and i.is_alive() for i in threading.enumerate())
 
 # ------------------------------------------------------------------------------
 # Igor Class
@@ -156,7 +326,7 @@ class Igor(object):
     Stop running Igor. This happens once the user requests the demo to stop,
     or when the running application begins to shut down.
 
-    This is only called by :meth:`__stop`
+    This is only called by :meth:`__start`
     """
     # TODO
     print('stopping Igor...')
@@ -231,10 +401,10 @@ class Igor(object):
     self.__joy_dead_zone = 0.06
 
     self.__chassis = Chassis()
-    self.__left_arm = Arm('Left')
-    self.__right_arm = Arm('Right')
-    self.__left_leg = Leg('Left')
-    self.__right_leg = Leg('Right')
+    self.__left_arm = Arm('Left', [6, 7, 8, 9])
+    self.__right_arm = Arm('Right', [10, 11, 12, 13])
+    self.__left_leg = Leg('Left', [2, 3])
+    self.__right_leg = Leg('Right', [4, 5])
 
     from threading import Lock
     self.__state_lock = Lock()
