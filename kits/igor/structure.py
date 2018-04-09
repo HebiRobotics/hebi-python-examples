@@ -10,7 +10,7 @@ from ..util._internal.type_utils import assert_instance, assert_type
 from ..util import math_func
 import hebi
 
-from time import sleep
+from time import sleep, time
 from functools import partial as funpart
 
 
@@ -64,34 +64,35 @@ class Arm(object):
     self.__home_angles = home_angles
     self.__home_ef = kin.get_forward_kinematics('endeffector', home_angles)
 
+  @property
+  def group_indices(self):
+    """
+    :return: a list of integers corresponding to the modules
+    this Arm represents in the Igor group
+    :rtype:  list
+    """
+    return self.__group_indices
 
   @property
   def name(self):
     return self.__name
 
-  def create_home_trajectory(self, group, reuse_fbk=None, duration=3.0):
+  def create_home_trajectory(self, fbk, duration=3.0):
     """
     Create a trajectory from the current pose to the home pose.
     This is used on soft startup
     ^^^ Is this the correct usage of "pose" ???
     :return:
     """
-    if reuse_fbk != None:
-      assert_instance(reuse_fbk, hebi.GroupFeedback, 'reuse_fbk')
-    elif reuse_fbk.size != group.size:
-      raise ValueError('reuse_fbk must be the same size as group ({0} != {1})'.format(reuse_fbk.size, group.size))
     assert_type(duration, float, 'duration')
     if duration < 1.0:
-      raise ValueError('duration must be greater than 1.0 seconds')
-
-    group.send_feedback_request()
-    reuse_fbk = group.get_next_feedback(reuse_fbk=reuse_fbk)
+      raise ValueError('duration must be greater than 1.0 second')
 
     num_joints = len(self.__group_indices)
     num_waypoints = 2
     dim = (num_joints, num_waypoints)
 
-    current_positions = reuse_fbk.position[self.__group_indices]
+    current_positions = fbk.position[self.__group_indices]
     home_angles = self.__home_angles
 
     times = np.array([0.0, duration], dtype=np.float64)
@@ -155,6 +156,14 @@ class Leg(object):
     self.__wheel_radius = 0.100
     self.__wheel_base = 0.43
 
+  @property
+  def group_indices(self):
+    """
+    :return: a list of integers corresponding to the modules
+    this Leg represents in the Igor group
+    :rtype:  list
+    """
+    return self.__group_indices
 
   @property
   def name(self):
@@ -182,29 +191,21 @@ class Leg(object):
     :rtype:  float
     """
 
-  def create_home_trajectory(self, group, reuse_fbk=None, duration=3.0):
+  def create_home_trajectory(self, fbk, duration=3.0):
     """
     Create a trajectory from the current pose to the home pose.
     This is used on soft startup
     ^^^ Is this the correct usage of "pose" ???
     :return:
     """
-    if reuse_fbk != None:
-      assert_instance(reuse_fbk, hebi.GroupFeedback, 'reuse_fbk')
-    elif reuse_fbk.size != group.size:
-      raise ValueError('reuse_fbk must be the same size as group ({0} != {1})'.format(reuse_fbk.size, group.size))
     assert_type(duration, float, 'duration')
     if duration < 1.0:
-      raise ValueError('duration must be greater than 1.0 seconds')
-
-    group.send_feedback_request()
-    reuse_fbk = group.get_next_feedback(reuse_fbk=reuse_fbk)
-
+      raise ValueError('duration must be greater than 1.0 second')
     num_joints = len(self.__group_indices)
     num_waypoints = 2
     dim = (num_joints, num_waypoints)
 
-    current_positions = reuse_fbk.position[self.__group_indices]
+    current_positions = fbk.position[self.__group_indices]
     home_angles = self.__home_angles
 
     times = np.array([0.0, duration], dtype=np.float64)
@@ -309,13 +310,90 @@ class Igor(object):
     """
     Contract: This method assumes the caller has acquired `__state_lock`
     """
-    return self.__quit
+    return self.__quit_flag
 
   def __continue(self):
     """
     Contract: This method assumes the caller has acquired `__state_lock`
     """
     return is_main_thread_active() and not self.__pending_quit()
+
+# ------------------------------------------------
+# Actions
+# ------------------------------------------------
+
+  def __soft_startup(self):
+    l_arm = self.__left_arm
+    r_arm = self.__right_arm
+    l_leg = self.__left_leg
+    r_leg = self.__right_leg
+
+    l_arm_i = l_arm.group_indices
+    r_arm_i = r_arm.group_indices
+    l_leg_i = l_leg.group_indices
+    r_leg_i = r_leg.group_indices
+
+    group = self.__group
+    fbk = hebi.GroupFeedback(group.size)
+    cmd = hebi.GroupCommand(group.size)
+
+    group.send_feedback_request()
+    fbk = group.get_next_feedback(reuse_fbk=fbk)
+
+    l_arm_t = l_arm.create_home_trajectory(fbk)
+    r_arm_t = r_arm.create_home_trajectory(fbk)
+    l_leg_t = l_leg.create_home_trajectory(fbk)
+    r_leg_t = r_leg.create_home_trajectory(fbk)
+
+    start_time = time()
+    t = 0.0
+
+    while t < 3.0:
+      # Limit commands initially
+      soft_start = min(t/3.0, 1.0)
+
+      pos, vel, accel = l_arm_t.get_state(t)
+      idx = 0
+      for i in l_arm_i:
+        cmd[i].position = pos[idx]
+        cmd[i].velocity = vel[idx]
+        # TODO: gravComp for effort
+
+      pos, vel, accel = r_arm_t.get_state(t)
+      idx = 0
+      for i in r_arm_i:
+        cmd[i].position = pos[idx]
+        cmd[i].velocity = vel[idx]
+        # TODO: gravComp for effort
+
+      pos, vel, accel = l_leg_t.get_state(t)
+      idx = 0
+      for i in l_leg_i:
+        cmd[i].position = pos[idx]
+        cmd[i].velocity = vel[idx]
+        # TODO: gravComp for effort
+
+      pos, vel, accel = r_leg_t.get_state(t)
+      idx = 0
+      for i in r_leg_i:
+        cmd[i].position = pos[idx]
+        cmd[i].velocity = vel[idx]
+        # TODO: gravComp for effort
+
+      group.send_command(cmd)
+      fbk = group.get_next_feedback(reuse_fbk=fbk)
+      t = time() - start_time
+
+
+  def __spin_once(self, bc):
+    """
+
+    :param bc:
+    :type bc:  bool
+    :return:
+    """
+  #TODO: Main loop
+  sleep(0.5)
 
 # ------------------------------------------------
 # Lifecycle functions
@@ -335,14 +413,20 @@ class Igor(object):
     """
     Main processing method. This runs on a background thread.
     """
+    self.__soft_startup()
+
+    # Delay registering event handlers until now, so Igor
+    # can start up without being interrupted by user commands.
+    # View this function in `event_handlers.py` to see
+    # all of the joystick event handlers registered
+    register_igor_event_handlers(self, self.__joy)
+
     self.__state_lock.acquire()
     while self.__continue():
       # We have `__state_lock` at this point. Access fields here before releasing lock
-      bc_enabled = self.__balance_controller_enabled
+      bc = self.__balance_controller_enabled
       self.__state_lock.release()
-
-      # TODO
-      sleep(0.5)
+      self.__spin_once(bc)
       self.__state_lock.acquire()
 
     self.__stop()
@@ -361,9 +445,6 @@ class Igor(object):
       on_error = funpart(on_error_find_joystick, group, group_command)
       joy = DemoUtils.retry_on_error(get_first_joystick, on_error)
 
-    # View this function in `event_handlers.py` to see 
-    # all of the joystick event handlers registered
-    register_igor_event_handlers(self, joy)
     self.__joy = joy
 
   def __load_gains(self):
@@ -397,6 +478,7 @@ class Igor(object):
     self.__has_camera = has_camera
     self.__joy = None
     self.__group = None
+    self.__proc_thread = None
 
     self.__joy_dead_zone = 0.06
 
@@ -410,7 +492,7 @@ class Igor(object):
     self.__state_lock = Lock()
     self.__started = False
     self.__balance_controller_enabled = True
-    self.__quit = False
+    self.__quit_flag = False
 
 # ------------------------------------------------
 # Public Interface
@@ -475,7 +557,7 @@ class Igor(object):
     """
     self.__state_lock.acquire()
     self.__ensure_started()
-    self.__quit = True
+    self.__quit_flag = True
     self.__state_lock.release()
 
   def set_balance_controller_state(self, state):
