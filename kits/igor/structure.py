@@ -31,6 +31,20 @@ class Chassis(object):
     return self.__mass
 
 
+class PeripheralBody(object):
+
+  def __init__(self, group_indices):
+    self.__group_indices = group_indices
+
+  @property
+  def group_indices(self):
+    """
+    :return: a list of integers corresponding to the modules
+    this Arm represents in the Igor group
+    :rtype:  list
+    """
+    return self.__group_indices
+
 class Arm(object):
 
   def __init__(self, name, group_indices):
@@ -177,19 +191,10 @@ class Leg(object):
   def wheel_base(self):
     return self.__wheel_base
 
-  @property
-  def knee_angle(self):
-    """
-    :return: the commanded knee angle in radians
-    :rtype:  float
-    """
-
-  @property
-  def hip_angle(self):
-    """
-    :return: the commanded hip angle in radians
-    :rtype:  float
-    """
+  def get_grav_comp_efforts(self, positions, gravity):
+    kin = self.__kin
+    positions = positions[self.__group_indices]
+    return math_func.get_grav_comp_efforts(kin, positions, gravity)
 
   def create_home_trajectory(self, fbk, duration=3.0):
     """
@@ -348,37 +353,49 @@ class Igor(object):
     start_time = time()
     t = 0.0
 
+    t_pose = np.identity(4, dtype=np.float64)
+    gravity = np.zeros(3, dtype=np.float64)
+
     while t < 3.0:
       # Limit commands initially
       soft_start = min(t/3.0, 1.0)
+      positions = fbk.position
 
+      grav_comp_efforts = l_arm_t.get_grav_comp_efforts(positions, gravity)
       pos, vel, accel = l_arm_t.get_state(t)
       idx = 0
       for i in l_arm_i:
-        cmd[i].position = pos[idx]
-        cmd[i].velocity = vel[idx]
-        # TODO: gravComp for effort
+        cmd = cmd[i]
+        cmd.position = pos[idx]
+        cmd.velocity = vel[idx]
+        cmd.effort = grav_comp_efforts[idx]
 
+      grav_comp_efforts = r_arm_t.get_grav_comp_efforts(positions, gravity)
       pos, vel, accel = r_arm_t.get_state(t)
       idx = 0
       for i in r_arm_i:
-        cmd[i].position = pos[idx]
-        cmd[i].velocity = vel[idx]
-        # TODO: gravComp for effort
+        cmd = cmd[i]
+        cmd.position = pos[idx]
+        cmd.velocity = vel[idx]
+        cmd.effort = grav_comp_efforts[idx]
 
+      grav_comp_efforts = l_leg_t.get_grav_comp_efforts(positions, gravity)
       pos, vel, accel = l_leg_t.get_state(t)
       idx = 0
       for i in l_leg_i:
-        cmd[i].position = pos[idx]
-        cmd[i].velocity = vel[idx]
-        # TODO: gravComp for effort
+        cmd = cmd[i]
+        cmd.position = pos[idx]
+        cmd.velocity = vel[idx]
+        cmd.effort = grav_comp_efforts[idx]
 
+      grav_comp_efforts = r_leg_t.get_grav_comp_efforts(positions, gravity)
       pos, vel, accel = r_leg_t.get_state(t)
       idx = 0
       for i in r_leg_i:
-        cmd[i].position = pos[idx]
-        cmd[i].velocity = vel[idx]
-        # TODO: gravComp for effort
+        cmd = cmd[i]
+        cmd.position = pos[idx]
+        cmd.velocity = vel[idx]
+        cmd.effort = grav_comp_efforts[idx]
 
       group.send_command(cmd)
       fbk = group.get_next_feedback(reuse_fbk=fbk)
