@@ -12,6 +12,7 @@ import hebi
 
 from time import sleep, time
 from functools import partial as funpart
+import traceback
 
 
 class Chassis(object):
@@ -35,161 +36,29 @@ class PeripheralBody(object):
 
   def __init__(self, group_indices):
     self.__group_indices = group_indices
+    self.__kin = hebi.robot_model.RobotModel()
+    self.__home_angles = None
+
+  @property
+  def _robot(self):
+    return self.__kin
+
+  @property
+  def home_angles(self):
+    return self.__home_angles
+
+  @home_angles.setter
+  def home_angles(self, value):
+    self.__home_angles = value
 
   @property
   def group_indices(self):
     """
     :return: a list of integers corresponding to the modules
-    this Arm represents in the Igor group
+    this body represents in the Igor group
     :rtype:  list
     """
     return self.__group_indices
-
-class Arm(object):
-
-  def __init__(self, name, group_indices):
-    assert name == 'Left' or name == 'Right'
-
-    self.__name = name
-    self.__group_indices = group_indices
-    base_frame = np.identity(4, dtype=np.float64)
-    kin = hebi.robot_model.RobotModel()
-    kin.add_actuator('X5-4')
-
-    if name == 'Left':
-      mounting = 'left-inside'
-      base_frame[0:3, 3] = [0.0, 0.10, 0.20]
-      home_angles = np.array([0.0, 20.0, 60.0, 0.0], dtype=np.float64)
-    else:
-      mounting = 'right-inside'
-      base_frame[0:3, 3] = [0.0, -0.10, 0.20]
-      home_angles = np.array([0.0, -20.0, -60.0, 0.0], dtype=np.float64)
-
-    kin.add_bracket('X5-HeavyBracket', mounting)
-    kin.add_actuator('X5-9')
-    kin.add_link('X5', extension=0.325, twist=0.0)
-    kin.add_actuator('X5-4')
-    kin.add_link('X5', extension=0.325, twist=np.pi)
-    kin.add_actuator('X5-4')
-    kin.base_frame = base_frame
-    self.__kin = kin
-
-    home_angles = np.deg2rad(home_angles)
-    self.__home_angles = home_angles
-    self.__home_ef = kin.get_forward_kinematics('endeffector', home_angles)
-
-  @property
-  def group_indices(self):
-    """
-    :return: a list of integers corresponding to the modules
-    this Arm represents in the Igor group
-    :rtype:  list
-    """
-    return self.__group_indices
-
-  @property
-  def name(self):
-    return self.__name
-
-  def create_home_trajectory(self, fbk, duration=3.0):
-    """
-    Create a trajectory from the current pose to the home pose.
-    This is used on soft startup
-    ^^^ Is this the correct usage of "pose" ???
-    :return:
-    """
-    assert_type(duration, float, 'duration')
-    if duration < 1.0:
-      raise ValueError('duration must be greater than 1.0 second')
-
-    num_joints = len(self.__group_indices)
-    num_waypoints = 2
-    dim = (num_joints, num_waypoints)
-
-    current_positions = fbk.position[self.__group_indices]
-    home_angles = self.__home_angles
-
-    times = np.array([0.0, duration], dtype=np.float64)
-    pos = np.empty(dim, dtype=np.float64)
-    vel = np.zeros(dim, dtype=np.float64)
-    accel = np.zeros(dim, dtype=np.float64)
-
-    pos[:, 0] = current_positions
-    pos[:, 1] = home_angles
-
-    return hebi.trajectory.create_trajectory(times, pos, vel, accel)
-
-  def set_x_velocity(self, value):
-    print('{0} Velocity(x): {1}'.format(self.__name, value))
-
-  def set_y_velocity(self, value):
-    print('{0} Velocity(y): {1}'.format(self.__name, value))
-
-  def set_z_velocity(self, value):
-    print('{0} Velocity(z): {1}'.format(self.__name, value))
-
-
-class Leg(object):
-  """
-  Represents a leg (and wheel)
-  """
-
-  def __init__(self, name, group_indices):
-    assert name == 'Left' or name == 'Right'
-
-    self.__name = name
-    self.__group_indices = group_indices
-    base_frame = np.identity(4, dtype=np.float64)
-
-    hip_t = np.identity(4, dtype=np.float64)
-    hip_t[0:3, 0:3] = math_func.rotate_x(np.pi*0.5)
-    hip_t[0:3, 3] = [0.0, 0.0225, 0.055]
-    self.__hip_t = hip_t
-
-    kin = hebi.robot_model.RobotModel()
-    kin.add_actuator('X5-9')
-    kin.add_link('X5', extension=0.375, twist=np.pi)
-    kin.add_actuator('X5-4')
-    kin.add_link('X5', extension=0.325, twist=np.pi)
-
-    home_knee_angle = np.deg2rad(130)
-    home_hip_angle = np.pi*0.5+home_knee_angle*0.5
-
-    if name == 'Left':
-      home_angles = np.array([home_hip_angle, home_knee_angle], dtype=np.float64)
-      base_frame[0:3, 3] = [0.0, 0.15, 0.0]
-      base_frame[0:3, 0:3] = math_func.rotate_x(np.pi * -0.5)
-    else:
-      home_angles = np.array([-home_hip_angle, -home_knee_angle], dtype=np.float64)
-      base_frame[0:3, 3] = [0.0, -0.15, 0.0]
-      base_frame[0:3, 0:3] = math_func.rotate_x(np.pi*0.5)
-
-    kin.base_frame = base_frame
-    self.__kin = kin
-    self.__home_angles = home_angles
-    self.__wheel_radius = 0.100
-    self.__wheel_base = 0.43
-
-  @property
-  def group_indices(self):
-    """
-    :return: a list of integers corresponding to the modules
-    this Leg represents in the Igor group
-    :rtype:  list
-    """
-    return self.__group_indices
-
-  @property
-  def name(self):
-    return self.__name
-
-  @property
-  def wheel_radius(self):
-    return self.__wheel_radius
-
-  @property
-  def wheel_base(self):
-    return self.__wheel_base
 
   def get_grav_comp_efforts(self, positions, gravity):
     kin = self.__kin
@@ -224,6 +93,110 @@ class Leg(object):
     return hebi.trajectory.create_trajectory(times, pos, vel, accel)
 
 
+class Arm(PeripheralBody):
+
+  def __init__(self, name, group_indices):
+    assert name == 'Left' or name == 'Right'
+    super(Arm, self).__init__(group_indices)
+
+    self.__name = name
+    self.__vel = np.empty(3, dtype=np.float64)
+    base_frame = np.identity(4, dtype=np.float64)
+    kin = self._robot
+    kin.add_actuator('X5-4')
+
+    if name == 'Left':
+      mounting = 'left-inside'
+      base_frame[0:3, 3] = [0.0, 0.10, 0.20]
+      home_angles = np.array([0.0, 20.0, 60.0, 0.0], dtype=np.float64)
+    else:
+      mounting = 'right-inside'
+      base_frame[0:3, 3] = [0.0, -0.10, 0.20]
+      home_angles = np.array([0.0, -20.0, -60.0, 0.0], dtype=np.float64)
+
+    kin.add_bracket('X5-HeavyBracket', mounting)
+    kin.add_actuator('X5-9')
+    kin.add_link('X5', extension=0.325, twist=0.0)
+    kin.add_actuator('X5-4')
+    kin.add_link('X5', extension=0.325, twist=np.pi)
+    kin.add_actuator('X5-4')
+    kin.base_frame = base_frame
+
+    home_angles = np.deg2rad(home_angles)
+    self.home_angles = home_angles
+    self.__home_ef = kin.get_forward_kinematics('endeffector', home_angles)
+
+  @property
+  def name(self):
+    return self.__name
+
+  @property
+  def velocity(self):
+    return self.__vel
+
+  def set_x_velocity(self, value):
+    self.__vel[0] = value
+
+  def set_y_velocity(self, value):
+    self.__vel[1] = value
+
+  def set_z_velocity(self, value):
+    self.__vel[2] = value
+
+
+class Leg(PeripheralBody):
+  """
+  Represents a leg (and wheel)
+  """
+
+  def __init__(self, name, group_indices):
+    assert name == 'Left' or name == 'Right'
+    super(Leg, self).__init__(group_indices)
+
+    self.__name = name
+    base_frame = np.identity(4, dtype=np.float64)
+
+    hip_t = np.identity(4, dtype=np.float64)
+    hip_t[0:3, 0:3] = math_func.rotate_x(np.pi*0.5)
+    hip_t[0:3, 3] = [0.0, 0.0225, 0.055]
+    self.__hip_t = hip_t
+
+    kin = self._robot
+    kin.add_actuator('X5-9')
+    kin.add_link('X5', extension=0.375, twist=np.pi)
+    kin.add_actuator('X5-4')
+    kin.add_link('X5', extension=0.325, twist=np.pi)
+
+    home_knee_angle = np.deg2rad(130)
+    home_hip_angle = (np.pi*0.5)+(home_knee_angle*0.5)
+
+    if name == 'Left':
+      home_angles = np.array([home_hip_angle, home_knee_angle], dtype=np.float64)
+      base_frame[0:3, 3] = [0.0, 0.15, 0.0]
+      base_frame[0:3, 0:3] = math_func.rotate_x(np.pi*-0.5)
+    else:
+      home_angles = np.array([-home_hip_angle, -home_knee_angle], dtype=np.float64)
+      base_frame[0:3, 3] = [0.0, -0.15, 0.0]
+      base_frame[0:3, 0:3] = math_func.rotate_x(np.pi*0.5)
+
+    kin.base_frame = base_frame
+    self.home_angles = home_angles
+    self.__wheel_radius = 0.100
+    self.__wheel_base = 0.43
+
+  @property
+  def name(self):
+    return self.__name
+
+  @property
+  def wheel_radius(self):
+    return self.__wheel_radius
+
+  @property
+  def wheel_base(self):
+    return self.__wheel_base
+
+
 # ------------------------------------------------------------------------------
 # Helper Functions for Igor class
 # ------------------------------------------------------------------------------
@@ -244,6 +217,26 @@ def get_first_joystick():
       return Joystick.at_index(i)
     except:
       pass
+
+
+def set_command_subgroup_pve(group_command, pos, vel, effort, indices):
+  """
+  Set position, velocity, and effort for certain modules in a group
+
+  :param group_command:
+  :param pos:
+  :param vel:
+  :param effort:
+  :param indices:
+  :return:
+  """
+  idx = 0
+  for i in indices:
+    cmd = group_command[i]
+    cmd.position = pos[idx]
+    cmd.velocity = vel[idx]
+    cmd.effort = effort[idx]
+    idx = idx + 1
 
 
 def create_group(config, has_camera):
@@ -292,9 +285,13 @@ if sys.version_info[0] == 3:
 else:
   is_main_thread_active = lambda: any((i.name == "MainThread") and i.is_alive() for i in threading.enumerate())
 
+
 # ------------------------------------------------------------------------------
 # Igor Class
 # ------------------------------------------------------------------------------
+
+def show_command(command, ts):
+  print('\n--------------------------------\nt={3}\nposition:\n{0}\nvelocity:\n{1}\neffort:\n{2}\n'.format(command.position, command.velocity, command.effort, ts))
 
 
 class Igor(object):
@@ -339,67 +336,51 @@ class Igor(object):
     r_leg_i = r_leg.group_indices
 
     group = self.__group
-    fbk = hebi.GroupFeedback(group.size)
-    cmd = hebi.GroupCommand(group.size)
+    group_feedback = self.__group_feedback
+    group_command = self.__group_command
 
-    group.send_feedback_request()
-    fbk = group.get_next_feedback(reuse_fbk=fbk)
+    #group.send_feedback_request()
+    group_feedback = group.get_next_feedback(reuse_fbk=group_feedback)
 
-    l_arm_t = l_arm.create_home_trajectory(fbk)
-    r_arm_t = r_arm.create_home_trajectory(fbk)
-    l_leg_t = l_leg.create_home_trajectory(fbk)
-    r_leg_t = r_leg.create_home_trajectory(fbk)
+    l_arm_t = l_arm.create_home_trajectory(group_feedback)
+    r_arm_t = r_arm.create_home_trajectory(group_feedback)
+    l_leg_t = l_leg.create_home_trajectory(group_feedback)
+    r_leg_t = r_leg.create_home_trajectory(group_feedback)
 
     start_time = time()
     t = 0.0
 
     t_pose = np.identity(4, dtype=np.float64)
-    gravity = np.zeros(3, dtype=np.float64)
+    gravity = -1.0*t_pose[2, 0:3]
 
     while t < 3.0:
       # Limit commands initially
       soft_start = min(t/3.0, 1.0)
-      positions = fbk.position
+      positions = group_feedback.position
 
-      grav_comp_efforts = l_arm_t.get_grav_comp_efforts(positions, gravity)
+      grav_comp_efforts = l_arm.get_grav_comp_efforts(positions, gravity)
       pos, vel, accel = l_arm_t.get_state(t)
-      idx = 0
-      for i in l_arm_i:
-        cmd = cmd[i]
-        cmd.position = pos[idx]
-        cmd.velocity = vel[idx]
-        cmd.effort = grav_comp_efforts[idx]
+      set_command_subgroup_pve(group_command, pos, vel, grav_comp_efforts, l_arm_i)
 
-      grav_comp_efforts = r_arm_t.get_grav_comp_efforts(positions, gravity)
+      grav_comp_efforts = r_arm.get_grav_comp_efforts(positions, gravity)
       pos, vel, accel = r_arm_t.get_state(t)
-      idx = 0
-      for i in r_arm_i:
-        cmd = cmd[i]
-        cmd.position = pos[idx]
-        cmd.velocity = vel[idx]
-        cmd.effort = grav_comp_efforts[idx]
+      set_command_subgroup_pve(group_command, pos, vel, grav_comp_efforts, r_arm_i)
 
-      grav_comp_efforts = l_leg_t.get_grav_comp_efforts(positions, gravity)
+      grav_comp_efforts = l_leg.get_grav_comp_efforts(positions, gravity)
       pos, vel, accel = l_leg_t.get_state(t)
-      idx = 0
-      for i in l_leg_i:
-        cmd = cmd[i]
-        cmd.position = pos[idx]
-        cmd.velocity = vel[idx]
-        cmd.effort = grav_comp_efforts[idx]
+      set_command_subgroup_pve(group_command, pos, vel, grav_comp_efforts, l_leg_i)
 
-      grav_comp_efforts = r_leg_t.get_grav_comp_efforts(positions, gravity)
+      grav_comp_efforts = r_leg.get_grav_comp_efforts(positions, gravity)
       pos, vel, accel = r_leg_t.get_state(t)
-      idx = 0
-      for i in r_leg_i:
-        cmd = cmd[i]
-        cmd.position = pos[idx]
-        cmd.velocity = vel[idx]
-        cmd.effort = grav_comp_efforts[idx]
+      set_command_subgroup_pve(group_command, pos, vel, grav_comp_efforts, r_leg_i)
 
-      group.send_command(cmd)
-      fbk = group.get_next_feedback(reuse_fbk=fbk)
-      t = time() - start_time
+      # Scale effort
+      group_command.effort = soft_start*group_command.effort
+      #show_command(group_cmd, t)
+      group.send_command(group_command)
+      #group.send_feedback_request()
+      group_feedback = group.get_next_feedback(reuse_fbk=group_feedback)
+      t = time()-start_time
 
 
   def __spin_once(self, bc):
@@ -409,8 +390,14 @@ class Igor(object):
     :type bc:  bool
     :return:
     """
-  #TODO: Main loop
-  sleep(0.5)
+    l_arm = self.__left_arm
+    r_arm = self.__right_arm
+    l_arm_i = l_arm.group_indices
+    r_arm_i = r_arm.group_indices
+
+    sleep(0.5)
+
+
 
 # ------------------------------------------------
 # Lifecycle functions
@@ -466,7 +453,6 @@ class Igor(object):
 
   def __load_gains(self):
     group = self.__group
-    group.feedback_frequency = 100.0
 
     # Bail out if group is imitation
     if self.__config.is_imitation:
@@ -475,17 +461,21 @@ class Igor(object):
     gains_command = hebi.GroupCommand(group.size)
     sleep(0.1)
 
-    if self.__has_camera:
-      gains_command.load_gains(self.__config.gains_xml)
-    else:
-      gains_command.load_gains(self.__config.gains_no_camera_xml)
-    
+    try:
+      if self.__has_camera:
+        gains_command.read_gains(self.__config.gains_xml)
+      else:
+        gains_command.read_gains(self.__config.gains_no_camera_xml)
+    except Exception as e:
+      print('Warning: Could not load gains\nException: {0}'.format(e))
+      return
+
     # Send gains multiple times
     for i in range(3):
       group.send_command(gains_command)
       sleep(0.1)
 
-  def __init__(self, has_camera=True, config=None):
+  def __init__(self, has_camera=False, config=None):
     if config == None:
       self.__config = Igor2Config()
     else:
@@ -495,6 +485,9 @@ class Igor(object):
     self.__has_camera = has_camera
     self.__joy = None
     self.__group = None
+    self.__group_command = None
+    self.__group_feedback = None
+    self.__group_info = None
     self.__proc_thread = None
 
     self.__joy_dead_zone = 0.06
@@ -531,7 +524,15 @@ class Igor(object):
       self.__state_lock.release()
       return
     
-    self.__group = create_group(self.__config, self.__has_camera)
+    group = create_group(self.__config, self.__has_camera)
+    group.command_lifetime = 100.0
+    group.feedback_frequency = 100.0
+
+    self.__group = group
+    self.__group_command = hebi.GroupCommand(group.size)
+    self.__group_feedback = hebi.GroupFeedback(group.size)
+    self.__group_info = hebi.GroupInfo(group.size)
+
     self.__find_joystick()
     self.__load_gains()
 
@@ -598,6 +599,10 @@ class Igor(object):
 # ------------------------------------------------
 # Properties
 # ------------------------------------------------
+
+  @property
+  def group(self):
+    return self.__group
 
   @property
   def joystick_dead_zone(self):

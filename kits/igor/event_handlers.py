@@ -99,6 +99,35 @@ def zero_arm_z_event(igor, both_triggers_released, ts, pressed):
 
 
 # ------------------------------------------------------------------------------
+# Chassis Event Handlers
+# ------------------------------------------------------------------------------
+
+
+def chassis_velocity_event(chassis, ts, axis_value):
+  """
+  Event handler when right stick Y-Axis motion occurs.
+  TODO: document
+
+  :param chassis:      (bound parameter)
+  :param ts:           (ignored)
+  :param axis_value:   [-1,1] value of the axis
+  """
+  pass
+
+
+def chassis_yaw_event(chassis, ts, axis_value):
+  """
+  Event handler when right stick X-Axis motion occurs.
+  TODO: document
+
+  :param chassis:      (bound parameter)
+  :param ts:           (ignored)
+  :param axis_value:   [-1,1] value of the axis
+  """
+  pass
+
+
+# ------------------------------------------------------------------------------
 # Misc Event Handlers
 # ------------------------------------------------------------------------------
 
@@ -242,6 +271,17 @@ def register_igor_event_handlers(igor, joystick):
   zero_arm_z = funpart(zero_arm_z_event, igor, both_triggers)
   joystick.add_button_event_handler('LEFT_TRIGGER', zero_arm_z)
   joystick.add_button_event_handler('RIGHT_TRIGGER', zero_arm_z)
+
+  # ----------------------
+  # Chassis event handlers
+
+  # Reacts to right stick Y-axis
+  chassis_velocity = funpart(chassis_velocity_event, igor.chassis)
+  joystick.add_axis_event_handler('RIGHT_STICK_Y', chassis_velocity)
+
+  # Reacts to right stick X-axis
+  chassis_yaw = funpart(chassis_yaw_event, igor.chassis)
+  joystick.add_axis_event_handler('RIGHT_STICK_X', chassis_yawz)
 
   # -------------
   # Stance height

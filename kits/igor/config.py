@@ -1,4 +1,5 @@
 
+import os
 
 class Igor2Config(object):
   """
@@ -7,7 +8,7 @@ class Igor2Config(object):
   TODO: Add ability to select Joystick
   """
 
-  def __init__(self, imitation=True):
+  def __init__(self, imitation=False):
     self.__module_names = ['wheel1', 'wheel2',
                            'hip1', 'knee1',
                            'hip2', 'knee2',
@@ -16,8 +17,9 @@ class Igor2Config(object):
                            'camTilt']
     self.__module_names_no_cam = self.__module_names[0:-1]
     self.__family = 'Igor II'
-    self.__default_gains = 'igorGains.xml'
-    self.__default_gains_no_cam = 'igorGains_noCamera.xml'
+    here_path = os.path.dirname(__file__)
+    self.__default_gains = os.path.join(here_path, 'igorGains.xml')
+    self.__default_gains_no_cam = os.path.join(here_path, 'igorGains_noCamera.xml')
     self.__imitation = imitation
 
   @property
