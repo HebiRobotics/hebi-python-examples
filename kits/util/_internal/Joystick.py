@@ -336,6 +336,16 @@ class Joystick(object):
     """
     return SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(self))
 
+  def add_dpad_event_handler(self, handler):
+    """
+    FIXME - do dpads get names? do they get indices, or do all controllers only have one?
+    TODO: document
+    :param handler:
+    :return:
+    """
+    assert_callable(handler)
+    self.__register_event_handler(0, HAT, handler)
+
   def add_axis_event_handler(self, axis, handler):
     """
     TODO

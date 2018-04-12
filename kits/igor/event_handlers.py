@@ -98,6 +98,30 @@ def zero_arm_z_event(igor, both_triggers_released, ts, pressed):
     igor.right_arm.set_z_velocity(0.0)
 
 
+def wrist_vel_event(igor, ts, hx, hy):
+  """
+  Event handler when d-pad is pressed.
+  This event handler will set the velocity of the wrists.
+  TODO: implement and document
+
+  :param igor:  (bound parameter)
+  :param ts:    (ignored)
+  :param hx:
+  :param hy:
+  :return:
+  """
+  l_arm = igor.left_arm
+  r_arm = igor.right_arm
+  if hy == 0:
+    l_arm.set_wrist_velocity(0.0)
+    r_arm.set_wrist_velocity(0.0)
+  else:
+    joy_low_pass = 0.95
+    vel = (joy_low_pass*(l_arm.wrist_velocity+r_arm.wrist_velocity)*0.5)+hy*(1.0-joy_low_pass)*0.25
+    l_arm.set_wrist_velocity(vel)
+    r_arm.set_wrist_velocity(vel)
+
+
 # ------------------------------------------------------------------------------
 # Chassis Event Handlers
 # ------------------------------------------------------------------------------
@@ -164,7 +188,9 @@ def stance_height_event(igor, vel_calc, ts, pressed):
     igor.left_leg.set_knee_velocity(1.0)
     igor.right_leg.set_knee_velocity(1.0)
     if igor.left_leg.knee_angle > 2.5:
-      igor.request_restart()
+      print('FIXME: Haven\'t implemented restart. Program will now exit instead.')
+      #igor.request_restart()
+      igor.request_stop()
   else:
     val = vel_calc()
     igor.left_leg.set_knee_velocity(val)
@@ -299,6 +325,10 @@ def register_igor_event_handlers(igor, joystick):
   zero_arm_z = funpart(zero_arm_z_event, igor, both_triggers)
   joystick.add_button_event_handler('LEFT_TRIGGER', zero_arm_z)
   joystick.add_button_event_handler('RIGHT_TRIGGER', zero_arm_z)
+
+  # Reacts to D-Pad pressed/released
+  wrist_vel = funpart(wrist_vel_event, igor)
+  joystick.add_dpad_event_handler(wrist_vel)
 
   # ----------------------
   # Chassis event handlers

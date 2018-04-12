@@ -157,7 +157,10 @@ def rot2ea(R, output=None):
 
 
 def get_grav_comp_efforts(robot, positions, gravity):
-  gravity = gravity / np.linalg.norm(gravity)*9.81
+  g_norm = np.linalg.norm(gravity)
+  if g_norm > 0.0:
+    gravity = gravity/g_norm*9.81
+
   jacobians = robot.get_jacobians('CoM', positions)
   comp_torque = np.zeros((robot.dof_count, 1))
   wrench = np.zeros(6)

@@ -359,6 +359,9 @@ class Chassis(BaseBody):
 
 class Arm(PeripheralBody):
 
+  damper_gains = np.matrix([1.0, 1.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float64).T
+  spring_gains = np.matrix([100.0, 10.0, 100.0, 0.0, 0.0, 0.0], dtype=np.float64).T
+
   def __init__(self, val_lock, name, group_indices):
     assert name == 'Left' or name == 'Right'
     super(Arm, self).__init__(val_lock, group_indices, name)
@@ -370,12 +373,12 @@ class Arm(PeripheralBody):
     kin.add_actuator('X5-4')
 
     if name == 'Left':
-      self._direction = 1
+      self._direction = 1.0
       mounting = 'left-inside'
       base_frame[0:3, 3] = [0.0, 0.10, 0.20]
       home_angles = np.array([0.0, 20.0, 60.0, 0.0], dtype=np.float64)
     else:
-      self._direction = -1
+      self._direction = -1.0
       mounting = 'right-inside'
       base_frame[0:3, 3] = [0.0, -0.10, 0.20]
       home_angles = np.array([0.0, -20.0, -60.0, 0.0], dtype=np.float64)
@@ -399,6 +402,7 @@ class Arm(PeripheralBody):
     self._new_grip_pos = self._grip_pos.copy()
     self._joint_angles = home_angles.copy()
     self._joint_velocities = np.empty(4, np.float64)
+    self._wrist_vel = 0.0
 
     # Additionally, calculate determinant of jacobians
     self._current_det_actual = None
@@ -417,19 +421,23 @@ class Arm(PeripheralBody):
     positions = positions[self.group_indices]
     xyz_objective = hebi.robot_model.endeffector_position_objective(self._new_grip_pos)
     new_arm_joint_angs = robot.solve_inverse_kinematics(positions, xyz_objective)
-    new_arm_joint_vels = np.linalg.solve(self.current_j_actual[0:3, 0:3], self._vel)
+
+    #new_arm_joint_vels = np.linalg.lstsq(self.current_j_actual[0:3, 0:3], self._vel, rcond=None)[0]
 
     jacobian_new = robot.get_jacobian_end_effector(new_arm_joint_angs)[0:3, 0:3]
     det_J_new = abs(np.linalg.det(jacobian_new))
 
-    #FIXME: figure out how to incorporate L920-L924 logic from MATLAB example
-    self._grip_pos[:] = self._new_grip_pos
-    self._joint_angles[0:3] = new_arm_joint_angs[0:3]
-    self._joint_velocities[0:3] = new_arm_joint_vels[0:3]
+    if (self._current_det_expected < 0.010) and (det_J_new < self._current_det_expected):
+      # Near singularity - don't command arm towards it
+      self._joint_velocities[0:3] = 0.0
+    else:
+      self._joint_velocities[0:3] = np.linalg.solve(self.current_j_actual[0:3, 0:3], self._vel)
+      self._joint_angles[0:3] = new_arm_joint_angs[0:3]
+      self._grip_pos[:] = self._new_grip_pos
 
-    joy_low_pass = 0.95
+    wrist_vel_cmd = self._wrist_vel
 
-    self._joint_velocities[3] = new_arm_joint_angs[1]+new_arm_joint_angs[2]+(self._direction*joy_low_pass)
+    self._joint_velocities[3] = self._joint_velocities[1]+self._joint_velocities[2]+(self._direction*wrist_vel_cmd)
     self._joint_angles[3] = self._joint_angles[3] + self._joint_velocities[3]*dt
 
   @property
@@ -446,6 +454,10 @@ class Arm(PeripheralBody):
     return self._vel
 
   @property
+  def wrist_velocity(self):
+    return self._wrist_vel
+
+  @property
   def grip_position(self):
     return self._grip_pos
 
@@ -454,14 +466,37 @@ class Arm(PeripheralBody):
     self._current_det_actual = np.linalg.det(self._current_j_actual[0:4, 0:4])
     self._current_det_expected = np.linalg.det(self._current_j_expected[0:4, 0:4])
 
-  def update_command(self, group_command):
-    idx = 0
+  def update_command(self, group_command, positions, velocities, pose, soft_start):
     pos = self._joint_angles
     vel = self._joint_velocities
+
+    positions = positions[self.group_indices]
+    velocities = velocities[self.group_indices]
+
+    # Positions and velocities are already known at this point - don't need to calculate them
+
+    # ----------------
+    # Calculate effort
+    xyz_error = self._grip_pos-self.current_tip_fk[0:3, 3].ravel()
+    pos_error = np.zeros((6, 1), dtype=np.float64)
+    pos_error[0:3] = xyz_error.T
+    vel_error = np.matrix(vel - velocities).T
+    vel_error = self.current_j_actual * vel_error
+
+    pos_dot = np.multiply(Arm.spring_gains, pos_error)
+    vel_dot = np.multiply(Arm.damper_gains, vel_error)
+    impedance_torque = self.current_j_actual.T*(pos_dot+vel_dot)
+    grav_comp_torque = math_func.get_grav_comp_efforts(self._robot, positions, -pose[2, 0:3])
+
+    effort = soft_start*impedance_torque.ravel()+grav_comp_torque.ravel()
+
+    # Send commands
+    idx = 0
     for i in self.group_indices:
       cmd = group_command[i]
       cmd.position = pos[idx]
       cmd.velocity = vel[idx]
+      cmd.effort = effort[0, idx]
       idx = idx + 1
 
   def set_x_velocity(self, value):
@@ -479,11 +514,20 @@ class Arm(PeripheralBody):
     self._vel[2] = value
     self.release_value_lock()
 
+  def set_wrist_velocity(self, value):
+    self.acquire_value_lock()
+    self._wrist_vel = value
+    self.release_value_lock()
+
 
 class Leg(PeripheralBody):
   """
   Represents a leg (and wheel)
   """
+
+  damper_gains = np.matrix([2.0, 0.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float64).T
+  spring_gains = np.matrix([400.0, 0.0, 100.0, 0.0, 0.0, 0.0], dtype=np.float64).T
+  roll_gains = np.matrix([0.0, 0.0, 10.0, 0.0, 0.0, 0.0], dtype=np.float64).T
 
   def __init__(self, val_lock, name, group_indices):
     assert name == 'Left' or name == 'Right'
@@ -507,10 +551,12 @@ class Leg(PeripheralBody):
     home_hip_angle = (np.pi*0.5)+(home_knee_angle*0.5)
 
     if name == 'Left':
+      self._direction = 1.0
       home_angles = np.array([home_hip_angle, home_knee_angle], dtype=np.float64)
       base_frame[0:3, 3] = [0.0, 0.15, 0.0]
       base_frame[0:3, 0:3] = math_func.rotate_x(np.pi*-0.5)
     else:
+      self._direction = -1.0
       home_angles = np.array([-home_hip_angle, -home_knee_angle], dtype=np.float64)
       base_frame[0:3, 3] = [0.0, -0.15, 0.0]
       base_frame[0:3, 0:3] = math_func.rotate_x(np.pi*0.5)
@@ -527,6 +573,9 @@ class Leg(PeripheralBody):
     self._knee_angle_max = 2.65
     self._knee_angle_min = 0.65
 
+    # Additionally calculate commanded end effector position
+    self._current_cmd_tip_fk = None
+
   def integrate_step(self, dt, hip_pitch):
     """
     Called by Igor. User should not call this directly.
@@ -536,6 +585,46 @@ class Leg(PeripheralBody):
     """
     self._knee_angle = self._knee_angle+self._knee_velocity*dt
     self._hip_angle = (np.pi+self._knee_angle)*0.5+hip_pitch
+
+  def update_position(self, positions, commanded_positions):
+    super(Leg, self).update_position(positions, commanded_positions)
+    self._current_cmd_tip_fk = self._robot.get_forward_kinematics('endeffector', commanded_positions[self.group_indices])[0]
+
+  def update_command(self, group_command, commanded_velocities, velocities, roll_angle, soft_start):
+    indices = self.group_indices
+    hip_idx = indices[0]
+    knee_idx = indices[1]
+
+    hip_cmd = group_command[hip_idx]
+    knee_cmd = group_command[knee_idx]
+
+    velocities = velocities[self.group_indices]
+    commanded_velocities = commanded_velocities[self.group_indices]
+    vel_error = np.matrix(commanded_velocities-velocities).T
+
+    # -------------------------------
+    # Calculate position and velocity
+    hip_cmd.position = self._direction*self._hip_angle
+    hip_cmd.velocity = self._direction*self._knee_velocity*0.5
+    knee_cmd.position = self._direction*self._knee_angle
+    knee_cmd.velocity = self._direction*self._knee_velocity
+
+    # ----------------
+    # Calculate effort
+    xyz_error = self._current_cmd_tip_fk[0:3, 3]-self.current_tip_fk[0:3, 3]
+    pos_error = np.zeros((6, 1), dtype=np.float64)
+    pos_error[0:3] = xyz_error
+    vel_error = self.current_j_actual*vel_error
+    roll_sign = self._direction
+
+    pos_dot = np.multiply(Leg.spring_gains, pos_error)
+    vel_dot = np.multiply(Leg.damper_gains, vel_error)
+    e_term = np.multiply(Leg.roll_gains, roll_angle)*roll_sign
+    impedance_torque = self.current_j_actual.T*(pos_dot + vel_dot + e_term)
+    impedance_torque = impedance_torque.T*soft_start
+
+    hip_cmd.effort = impedance_torque[0, 0]
+    knee_cmd.effort = impedance_torque[0, 1]
 
   @property
   def hip_angle(self):
@@ -642,6 +731,231 @@ if sys.version_info[0] == 3:
   is_main_thread_active = lambda: threading.main_thread().is_alive()
 else:
   is_main_thread_active = lambda: any((i.name == "MainThread") and i.is_alive() for i in threading.enumerate())
+
+
+# ------------------------------------------------------------------------------
+# Debugging stuff
+# ------------------------------------------------------------------------------
+
+
+import wx
+import wx.grid as gridlib
+from pubsub import pub
+
+class Form(wx.Frame):
+
+  def __init__(self, igor):
+    self._igor = igor
+    self._group_command = hebi.GroupCommand(igor.group.size)
+
+    wx.Frame.__init__(self, parent=None, title="Igor II Data")
+    panel = wx.Panel(self)
+
+    #font = wx.SystemSettings_GetFont(wx.SYS_SYSTEM_FONT)
+    #font.SetPointSize(9)
+
+    vbox = wx.BoxSizer(wx.VERTICAL)
+    hbox_l_leg = wx.BoxSizer(wx.HORIZONTAL)
+    hbox_r_leg = wx.BoxSizer(wx.HORIZONTAL)
+    hbox_l_arm = wx.BoxSizer(wx.HORIZONTAL)
+    hbox_r_arm = wx.BoxSizer(wx.HORIZONTAL)
+    hbox_wheel = wx.BoxSizer(wx.HORIZONTAL)
+
+    # Labels
+    l_leg_st = wx.StaticText(panel, label='Left Leg')
+    r_leg_st = wx.StaticText(panel, label='Right Leg')
+    l_arm_st = wx.StaticText(panel, label='Left Arm')
+    r_arm_st = wx.StaticText(panel, label='Right Arm')
+    wheel_st = wx.StaticText(panel, label='Wheels')
+    #l_leg_st.SetFont(font)
+    #r_leg_st.SetFont(font)
+    #l_arm_st.SetFont(font)
+    #r_arm_st.SetFont(font)
+
+    # Grids
+    l_leg_grid = gridlib.Grid(panel)
+    r_leg_grid = gridlib.Grid(panel)
+    l_arm_grid = gridlib.Grid(panel)
+    r_arm_grid = gridlib.Grid(panel)
+    wheel_grid = gridlib.Grid(panel)
+
+    # Create size
+    l_leg_grid.CreateGrid(3, 2)
+    r_leg_grid.CreateGrid(3, 2)
+    l_arm_grid.CreateGrid(3, 4)
+    r_arm_grid.CreateGrid(3, 4)
+    wheel_grid.CreateGrid(1, 2)
+
+    # Set rows for all
+    l_leg_grid.SetRowLabelValue(0, "Position")
+    r_leg_grid.SetRowLabelValue(0, "Position")
+    l_arm_grid.SetRowLabelValue(0, "Position")
+    r_arm_grid.SetRowLabelValue(0, "Position")
+    wheel_grid.SetRowLabelValue(0, "Velocity")
+    l_leg_grid.SetRowLabelValue(1, "Velocity")
+    r_leg_grid.SetRowLabelValue(1, "Velocity")
+    l_arm_grid.SetRowLabelValue(1, "Velocity")
+    r_arm_grid.SetRowLabelValue(1, "Velocity")
+    l_leg_grid.SetRowLabelValue(2, "Effort")
+    r_leg_grid.SetRowLabelValue(2, "Effort")
+    l_arm_grid.SetRowLabelValue(2, "Effort")
+    r_arm_grid.SetRowLabelValue(2, "Effort")
+
+    # Set leg cols
+    l_leg_grid.SetColLabelValue(0, "Hip")
+    l_leg_grid.SetColLabelValue(1, "Knee")
+    r_leg_grid.SetColLabelValue(0, "Hip")
+    r_leg_grid.SetColLabelValue(1, "Knee")
+
+    # Set arm cols
+    l_arm_grid.SetColLabelValue(0, "Base")
+    r_arm_grid.SetColLabelValue(0, "Base")
+    l_arm_grid.SetColLabelValue(1, "Shoulder")
+    r_arm_grid.SetColLabelValue(1, "Shoulder")
+    l_arm_grid.SetColLabelValue(2, "Elbow")
+    r_arm_grid.SetColLabelValue(2, "Elbow")
+    l_arm_grid.SetColLabelValue(3, "Wrist")
+    r_arm_grid.SetColLabelValue(3, "Wrist")
+
+    # Wheel cols
+    wheel_grid.SetColLabelValue(0, "Left")
+    wheel_grid.SetColLabelValue(1, "Right")
+
+    self._l_leg_grid = l_leg_grid
+    self._r_leg_grid = r_leg_grid
+    self._l_arm_grid = l_arm_grid
+    self._r_arm_grid = r_arm_grid
+    self._wheel_grid = wheel_grid
+
+    # Data
+    self._l_leg_pos = np.empty(2, dtype=float)
+    self._l_leg_vel = np.empty(2, dtype=float)
+    self._l_leg_eff = np.empty(2, dtype=float)
+    self._r_leg_pos = np.empty(2, dtype=float)
+    self._r_leg_vel = np.empty(2, dtype=float)
+    self._r_leg_eff = np.empty(2, dtype=float)
+    self._l_arm_pos = np.empty(4, dtype=float)
+    self._l_arm_vel = np.empty(4, dtype=float)
+    self._l_arm_eff = np.empty(4, dtype=float)
+    self._r_arm_pos = np.empty(4, dtype=float)
+    self._r_arm_vel = np.empty(4, dtype=float)
+    self._r_arm_eff = np.empty(4, dtype=float)
+
+    self._l_wheel_vel = 0.0
+    self._r_wheel_vel = 0.0
+
+    hbox_l_leg.Add(l_leg_st, flag=wx.RIGHT, border=8)
+    hbox_l_leg.Add(l_leg_grid, proportion=1)
+
+    hbox_r_leg.Add(r_leg_st, flag=wx.RIGHT, border=8)
+    hbox_r_leg.Add(r_leg_grid, proportion=1)
+
+    hbox_l_arm.Add(l_arm_st, flag=wx.RIGHT, border=8)
+    hbox_l_arm.Add(l_arm_grid, proportion=1)
+
+    hbox_r_arm.Add(r_arm_st, flag=wx.RIGHT, border=8)
+    hbox_r_arm.Add(r_arm_grid, proportion=1)
+
+    hbox_wheel.Add(wheel_st, flag=wx.RIGHT, border=8)
+    hbox_wheel.Add(wheel_grid, proportion=1)
+
+    vbox.Add(hbox_l_leg, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
+    vbox.Add((-1, 10))
+    vbox.Add(hbox_r_leg, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
+    vbox.Add((-1, 10))
+    vbox.Add(hbox_l_arm, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
+    vbox.Add((-1, 10))
+    vbox.Add(hbox_r_arm, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
+    vbox.Add((-1, 10))
+    vbox.Add(hbox_wheel, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP, border=10)
+    vbox.Add((-1, 10))
+
+    vbox.Fit(self)
+    panel.SetSizer(vbox)
+    pub.subscribe(self._update_container, "update")
+    panel.Layout()
+
+  def _update_container(self):
+    igor = self._igor
+    group_command = self._group_command
+
+    l_leg = igor.left_leg
+    r_leg = igor.right_leg
+    l_arm = igor.left_arm
+    r_arm = igor.right_arm
+
+    l_leg_i = l_leg.group_indices
+    r_leg_i = r_leg.group_indices
+    l_arm_i = l_arm.group_indices
+    r_arm_i = r_arm.group_indices
+
+    pos = group_command.position
+    vel = group_command.velocity
+    eff = group_command.effort
+
+    self._l_leg_pos[:] = pos[l_leg_i]
+    self._l_leg_vel[:] = vel[l_leg_i]
+    self._l_leg_eff[:] = eff[l_leg_i]
+    self._r_leg_pos[:] = pos[r_leg_i]
+    self._r_leg_vel[:] = vel[r_leg_i]
+    self._r_leg_eff[:] = eff[r_leg_i]
+    self._l_arm_pos[:] = pos[l_arm_i]
+    self._l_arm_vel[:] = vel[l_arm_i]
+    self._l_arm_eff[:] = eff[l_arm_i]
+    self._r_arm_pos[:] = pos[r_arm_i]
+    self._r_arm_vel[:] = vel[r_arm_i]
+    self._r_arm_eff[:] = eff[r_arm_i]
+
+    self._l_wheel_vel = vel[0]
+    self._r_wheel_vel = vel[1]
+
+    for i in range(2):
+      self._l_leg_grid.SetCellValue(0, i, str(self._l_leg_pos[i]))
+      self._l_leg_grid.SetCellValue(1, i, str(self._l_leg_vel[i]))
+      self._l_leg_grid.SetCellValue(2, i, str(self._l_leg_eff[i]))
+
+      self._r_leg_grid.SetCellValue(0, i, str(self._r_leg_pos[i]))
+      self._r_leg_grid.SetCellValue(1, i, str(self._r_leg_vel[i]))
+      self._r_leg_grid.SetCellValue(2, i, str(self._r_leg_eff[i]))
+
+      self._l_arm_grid.SetCellValue(0, i, str(self._l_arm_pos[i]))
+      self._l_arm_grid.SetCellValue(1, i, str(self._l_arm_vel[i]))
+      self._l_arm_grid.SetCellValue(2, i, str(self._l_arm_eff[i]))
+
+      self._r_arm_grid.SetCellValue(0, i, str(self._r_arm_pos[i]))
+      self._r_arm_grid.SetCellValue(1, i, str(self._r_arm_vel[i]))
+      self._r_arm_grid.SetCellValue(2, i, str(self._r_arm_eff[i]))
+
+    for i in range(2, 4):
+      self._l_arm_grid.SetCellValue(0, i, str(self._l_arm_pos[i]))
+      self._l_arm_grid.SetCellValue(1, i, str(self._l_arm_vel[i]))
+      self._l_arm_grid.SetCellValue(2, i, str(self._l_arm_eff[i]))
+
+      self._r_arm_grid.SetCellValue(0, i, str(self._r_arm_pos[i]))
+      self._r_arm_grid.SetCellValue(1, i, str(self._r_arm_vel[i]))
+      self._r_arm_grid.SetCellValue(2, i, str(self._r_arm_eff[i]))
+
+    self._wheel_grid.SetCellValue(0, 0, str(self._l_wheel_vel))
+    self._wheel_grid.SetCellValue(0, 1, str(self._r_wheel_vel))
+
+  def request_update(self):
+    self._group_command.position = self._igor._group_command.position
+    self._group_command.velocity = self._igor._group_command.velocity
+    self._group_command.effort = self._igor._group_command.effort
+    wx.CallAfter(pub.sendMessage, "update")
+
+
+global _gui_frame
+
+def _start_gui(igor):
+  app = wx.App()
+  frame = Form(igor)
+  frame.Show()
+
+  global _gui_frame
+  _gui_frame = frame
+
+  app.MainLoop()
 
 
 # ------------------------------------------------------------------------------
@@ -883,6 +1197,7 @@ class Igor(object):
     group_feedback = self._group_feedback
     group_command = self._group_command
 
+    soft_start = min(time()-self._start_time, 1.0)
     rx_time = group_feedback.receive_time
     #dt = np.mean(rx_time-self._time_last)
     # TEMP: using this for imitation group since the time is always 0 in an imitation group
@@ -892,6 +1207,7 @@ class Igor(object):
     positions = group_feedback.position
     commanded_positions = group_feedback.position_command
     velocities = group_feedback.velocity
+    commanded_velocities = group_feedback.velocity_command
     effort = group_feedback.effort
     gyro = group_feedback.gyro
     orientation = group_feedback.orientation
@@ -914,7 +1230,9 @@ class Igor(object):
     self._chassis.update_trajectory(knee_velocity, arm_velocity)
     self._chassis.integrate_step(dt)
     self._left_leg.integrate_step(dt, self._chassis.hip_pitch)
+    self._right_leg.integrate_step(dt, self._chassis.hip_pitch)
     self._left_arm.integrate_step(dt, positions)
+    self._right_arm.integrate_step(dt, positions)
 
     self._chassis.update_velocity_controller(dt, velocities, self._wheel_radius,
                                              self._height_com, self._lean_angle_velocity,
@@ -929,8 +1247,8 @@ class Igor(object):
       r_wheel = group_command[1]
 
       p_effort = (leanP*self._chassis.lean_angle_error)+(leanI*self._chassis.lean_angle_error_cum)+(leanD*self._lean_angle_velocity)
-      l_wheel.effort = p_effort
-      r_wheel.effort = -p_effort
+      l_wheel.effort = p_effort*soft_start
+      r_wheel.effort = -p_effort*soft_start
 
     # --------------------------------
     # This doesn't seem right to me...
@@ -944,12 +1262,30 @@ class Igor(object):
     # ------------
     # Leg Commands
 
+    roll_angle = self._roll_angle
+    self._left_leg.update_command(group_command, commanded_velocities, velocities, roll_angle, soft_start)
+    self._right_leg.update_command(group_command, commanded_velocities, velocities, roll_angle, soft_start)
+
     # ------------
     # Arm Commands
+
+    self._left_arm.update_command(group_command, positions, velocities, self._pose_transform, soft_start)
+    self._right_arm.update_command(group_command, positions, velocities, self._pose_transform, soft_start)
 
     self._value_lock.release()
     # --------------------------
     # Value Critical section end
+
+    ####
+    # Debugging
+    global _gui_frame
+    if _gui_frame != None:
+      _gui_frame.request_update()
+    ####
+    self._group.send_command(group_command)
+    group_command.position = None
+    group_command.velocity = None
+    group_command.effort = None
 
 # ------------------------------------------------
 # Lifecycle functions
@@ -982,6 +1318,7 @@ class Igor(object):
     # all of the joystick event handlers registered
     register_igor_event_handlers(self, self._joy)
 
+    self._start_time = time()
     self._state_lock.acquire()
     while self._continue():
       # We have `_state_lock` at this point. Access fields here before releasing lock
@@ -1076,6 +1413,7 @@ class Igor(object):
     self._time_last = np.empty(num_dofs, dtype=np.float64)
     value_lock = Lock()
     self._value_lock = value_lock
+    self._start_time = -1.0
 
     # ---------------------
     # Kinematic body fields
