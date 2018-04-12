@@ -1,5 +1,5 @@
 from functools import partial as funpart
-
+from ..util import math_func
 
 # ------------------------------------------------------------------------------
 # Arm Event Handlers
@@ -62,7 +62,7 @@ def arm_z_vel_event_l(arm, ts, axis_value):
   """
   # Left Trigger
   # map [-1,1] to [0,1]
-  axis_value = -0.2*(axis_value*0.5 + 0.5)
+  axis_value = -0.2*(axis_value*0.5+0.5)
   set_arm_vel_z(arm, axis_value)
 
 
@@ -77,7 +77,7 @@ def arm_z_vel_event_r(arm, ts, axis_value):
   """
   # Right Trigger
   # map [-1,1] to [0,1]
-  axis_value = 0.2*(axis_value*0.5 + 0.5)
+  axis_value = 0.2*(axis_value*0.5+0.5)
   set_arm_vel_z(arm, axis_value)
 
 
@@ -103,28 +103,46 @@ def zero_arm_z_event(igor, both_triggers_released, ts, pressed):
 # ------------------------------------------------------------------------------
 
 
-def chassis_velocity_event(chassis, ts, axis_value):
+def chassis_velocity_event(igor, in_deadzone_func, ts, axis_value):
   """
   Event handler when right stick Y-Axis motion occurs.
   TODO: document
 
-  :param chassis:      (bound parameter)
-  :param ts:           (ignored)
-  :param axis_value:   [-1,1] value of the axis
+  :param igor:             (bound parameter)
+  :param in_deadzone_func: (bound parameter)
+  :param ts:               (ignored)
+  :param axis_value:       [-1,1] value of the axis
   """
-  pass
+  chassis = igor.chassis
+  if in_deadzone_func(axis_value):
+    chassis.set_directional_velocity(0.0)
+  else:
+    joy_scale = -0.5
+    dead_zone = igor.joystick_dead_zone
+    value = joy_scale*(axis_value-(dead_zone*math_func.sign(axis_value)))
+    chassis.set_directional_velocity(value)
 
 
-def chassis_yaw_event(chassis, ts, axis_value):
+def chassis_yaw_event(igor, in_deadzone_func, ts, axis_value):
   """
   Event handler when right stick X-Axis motion occurs.
   TODO: document
 
-  :param chassis:      (bound parameter)
-  :param ts:           (ignored)
-  :param axis_value:   [-1,1] value of the axis
+  :param igor:             (bound parameter)
+  :param in_deadzone_func: (bound parameter)
+  :param ts:               (ignored)
+  :param axis_value:       [-1,1] value of the axis
   """
-  pass
+  chassis = igor.chassis
+  if in_deadzone_func(axis_value):
+    scale = 25.0
+    dead_zone = igor.joystick_dead_zone
+    wheel_radius = igor.wheel_radius
+    wheel_base = igor.wheel_base
+    value = (scale*wheel_radius/wheel_base)*(axis_value-dead_zone*math_func.sign(axis_value))
+    chassis.set_yaw_velocity(value)
+  else:
+    chassis.set_yaw_velocity(0.0)
 
 
 # ------------------------------------------------------------------------------
@@ -132,21 +150,25 @@ def chassis_yaw_event(chassis, ts, axis_value):
 # ------------------------------------------------------------------------------
 
 
-def stance_height_event(igor, ts, pressed):
+def stance_height_event(igor, vel_calc, ts, pressed):
   """
   Event handler when `OPTIONS` button is pressed or released.
   TODO: Finish documenting
 
-  :param igor:    (bound parameter)
+  :param igor:     (bound parameter)
+  :param vel_calc: (bound parameter)
   :param ts:
   :param pressed:
   """
   if pressed:
-    # TODO: Soft shutdown procedure
-    pass
+    igor.left_leg.set_knee_velocity(1.0)
+    igor.right_leg.set_knee_velocity(1.0)
+    if igor.left_leg.knee_angle > 2.5:
+      igor.request_restart()
   else:
-    # TODO: Normal stance height control
-    pass
+    val = vel_calc()
+    igor.left_leg.set_knee_velocity(val)
+    igor.right_leg.set_knee_velocity(val)
 
 
 def balance_controller_event(igor, ts, pressed):
@@ -219,6 +241,12 @@ def register_igor_event_handlers(igor, joystick):
   arm_x_deadzone = lambda val: abs(val) <= igor.joystick_dead_zone*3.0
   arm_y_deadzone = lambda val: abs(val) <= igor.joystick_dead_zone
 
+  def stance_height_calc():
+    d_ax = joystick.get_axis('LEFT_TRIGGER')-joystick.get_axis('RIGHT_TRIGGER')
+    if abs(d_ax) > igor.joystick_dead_zone:
+      return 0.5*d_ax
+    return 0.0
+
   # The current joystick used is not a global state, so we need to wrap it here
   both_triggers = lambda: both_triggers_released(joystick)
 
@@ -276,17 +304,17 @@ def register_igor_event_handlers(igor, joystick):
   # Chassis event handlers
 
   # Reacts to right stick Y-axis
-  chassis_velocity = funpart(chassis_velocity_event, igor.chassis)
+  chassis_velocity = funpart(chassis_velocity_event, igor, arm_y_deadzone)
   joystick.add_axis_event_handler('RIGHT_STICK_Y', chassis_velocity)
 
   # Reacts to right stick X-axis
-  chassis_yaw = funpart(chassis_yaw_event, igor.chassis)
-  joystick.add_axis_event_handler('RIGHT_STICK_X', chassis_yawz)
+  chassis_yaw = funpart(chassis_yaw_event, igor, arm_y_deadzone)
+  joystick.add_axis_event_handler('RIGHT_STICK_X', chassis_yaw)
 
   # -------------
   # Stance height
 
-  stance_height = funpart(stance_height_event, igor)
+  stance_height = funpart(stance_height_event, igor, stance_height_calc)
   joystick.add_button_event_handler('OPTIONS', stance_height)
 
   # ---------------
