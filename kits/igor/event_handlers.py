@@ -5,7 +5,7 @@ from ..util import math_func
 # Arm Event Handlers
 # ------------------------------------------------------------------------------
 
-def arm_x_vel_event(arm, in_deadzone_func, ts, axis_value):
+def arm_x_vel_event(igor, in_deadzone_func, ts, axis_value):
   """
   Event handler when left stick Y-Axis motion occurs.
   This event handler will set the given arm's velocity in the X axis to
@@ -15,20 +15,22 @@ def arm_x_vel_event(arm, in_deadzone_func, ts, axis_value):
 
   (Left Stick Y-Axis event handler)
 
-  :param arm:              (bound parameter)
+  :param igor:             (bound parameter)
   :param in_deadzone_func: (bound parameter)
   :param ts:               (ignored)
   :param axis_value:       [-1,1] value of the axis
   """
   if in_deadzone_func(axis_value):
-    arm.set_x_velocity(0.0)
+    igor.left_arm.set_x_velocity(0.0)
+    igor.right_arm.set_x_velocity(0.0)
   else:
     scale = -0.4 # TODO: make into customizable parameter
     axis_value = scale*axis_value
-    arm.set_x_velocity(scale*axis_value)
+    igor.left_arm.set_x_velocity(scale*axis_value)
+    igor.right_arm.set_x_velocity(scale*axis_value)
 
 
-def arm_y_vel_event(arm, in_deadzone_func, ts, axis_value):
+def arm_y_vel_event(igor, in_deadzone_func, ts, axis_value):
   """
   Event handler when left stick X-Axis motion occurs.
   This event handler will set the given arm's velocity in the Y axis to
@@ -38,47 +40,51 @@ def arm_y_vel_event(arm, in_deadzone_func, ts, axis_value):
 
   (Left Stick X-Axis event handler)
 
-  :param arm:              (bound parameter)
+  :param igor:             (bound parameter)
   :param in_deadzone_func: (bound parameter)
   :param ts:               (ignored)
   :param axis_value:       [-1,1] value of the axis
   """
   if in_deadzone_func(axis_value):
-    arm.set_y_velocity(0.0)
+    igor.left_arm.set_y_velocity(0.0)
+    igor.right_arm.set_y_velocity(0.0)
   else:
     scale = -0.4 # TODO: make into customizable parameter
     axis_value = scale*axis_value
-    arm.set_y_velocity(axis_value)
+    igor.left_arm.set_y_velocity(axis_value)
+    igor.right_arm.set_y_velocity(axis_value)
 
 
-def arm_z_vel_event_l(arm, ts, axis_value):
+def arm_z_vel_event_l(igor, ts, axis_value):
   """
   Event handler when left trigger of joystick has its axis value changed
   (Left Trigger Axis event handler)
 
-  :param arm:        (bound parameter)
+  :param igor:       (bound parameter)
   :param ts:         (ignored)
   :param axis_value: [-1,1] value of the axis
   """
   # Left Trigger
   # map [-1,1] to [0,1]
   axis_value = -0.2*(axis_value*0.5+0.5)
-  set_arm_vel_z(arm, axis_value)
+  set_arm_vel_z(igor.left_arm, axis_value)
+  set_arm_vel_z(igor.right_arm, axis_value)
 
 
-def arm_z_vel_event_r(arm, ts, axis_value):
+def arm_z_vel_event_r(igor, ts, axis_value):
   """
   Event handler when right trigger of joystick has its axis value changed
   (Right Trigger Axis event handler)
 
-  :param arm:        (bound parameter)
+  :param igor:       (bound parameter)
   :param ts:         (ignored)
   :param axis_value: [-1,1] value of the axis
   """
   # Right Trigger
   # map [-1,1] to [0,1]
   axis_value = 0.2*(axis_value*0.5+0.5)
-  set_arm_vel_z(arm, axis_value)
+  set_arm_vel_z(igor.left_arm, axis_value)
+  set_arm_vel_z(igor.right_arm, axis_value)
 
 
 def zero_arm_z_event(igor, both_triggers_released, ts, pressed):
@@ -117,7 +123,7 @@ def wrist_vel_event(igor, ts, hx, hy):
     r_arm.set_wrist_velocity(0.0)
   else:
     joy_low_pass = 0.95
-    vel = (joy_low_pass*(l_arm.wrist_velocity+r_arm.wrist_velocity)*0.5)+hy*(1.0-joy_low_pass)*0.25
+    vel = (joy_low_pass*l_arm.wrist_velocity)+hy*(1.0-joy_low_pass)*0.25
     l_arm.set_wrist_velocity(vel)
     r_arm.set_wrist_velocity(vel)
 
@@ -284,39 +290,20 @@ def register_igor_event_handlers(igor, joystick):
   # Left Arm event handlers
 
   # Reacts to left stick Y-axis
-  l_arm_x_vel = funpart(arm_x_vel_event, igor.left_arm, arm_x_deadzone)
-  joystick.add_axis_event_handler('LEFT_STICK_Y', l_arm_x_vel)
+  arm_x_vel = funpart(arm_x_vel_event, igor, arm_x_deadzone)
+  joystick.add_axis_event_handler('LEFT_STICK_Y', arm_x_vel)
 
   # Reacts to left stick X-axis
-  l_arm_y_vel = funpart(arm_y_vel_event, igor.left_arm, arm_y_deadzone)
-  joystick.add_axis_event_handler('LEFT_STICK_X', l_arm_y_vel)
+  arm_y_vel = funpart(arm_y_vel_event, igor, arm_y_deadzone)
+  joystick.add_axis_event_handler('LEFT_STICK_X', arm_y_vel)
 
   # Reacts to left trigger axis
-  l_arm_z_vel_lt = funpart(arm_z_vel_event_l, igor.left_arm)
-  joystick.add_axis_event_handler('LEFT_TRIGGER', l_arm_z_vel_lt)
+  arm_z_vel_lt = funpart(arm_z_vel_event_l, igor)
+  joystick.add_axis_event_handler('LEFT_TRIGGER', arm_z_vel_lt)
 
   # Reacts to right trigger axis
-  l_arm_z_vel_rt = funpart(arm_z_vel_event_r, igor.left_arm)
-  joystick.add_axis_event_handler('RIGHT_TRIGGER', l_arm_z_vel_rt)
-
-  # ------------------------
-  # Right Arm event handlers
-
-  # Reacts to left stick Y-axis
-  r_arm_x_vel = funpart(arm_x_vel_event, igor.right_arm, arm_x_deadzone)
-  joystick.add_axis_event_handler('LEFT_STICK_Y', r_arm_x_vel)
-
-  # Reacts to left stick X-axis
-  r_arm_y_vel = funpart(arm_y_vel_event, igor.right_arm, arm_y_deadzone)
-  joystick.add_axis_event_handler('LEFT_STICK_X', r_arm_y_vel)
-
-  # Reacts to left trigger axis
-  r_arm_z_vel_lt = funpart(arm_z_vel_event_l, igor.right_arm)
-  joystick.add_axis_event_handler('LEFT_TRIGGER', r_arm_z_vel_lt)
-
-  # Reacts to right trigger axis
-  r_arm_z_vel_rt = funpart(arm_z_vel_event_r, igor.right_arm)
-  joystick.add_axis_event_handler('RIGHT_TRIGGER', r_arm_z_vel_rt)
+  arm_z_vel_rt = funpart(arm_z_vel_event_r, igor)
+  joystick.add_axis_event_handler('RIGHT_TRIGGER', arm_z_vel_rt)
 
   # ------------------------
   # Both Arms event handlers
@@ -328,7 +315,7 @@ def register_igor_event_handlers(igor, joystick):
 
   # Reacts to D-Pad pressed/released
   wrist_vel = funpart(wrist_vel_event, igor)
-  joystick.add_dpad_event_handler(wrist_vel)
+  #joystick.add_dpad_event_handler(wrist_vel)
 
   # ----------------------
   # Chassis event handlers

@@ -22,7 +22,7 @@ class JoystickEvent(object):
   """
 
   def __init__(self):
-    self.__callbacks = set()
+    self.__callbacks = list()
     self.__cv = Condition(Lock())
 
   def __call__(self, *args):
@@ -34,7 +34,7 @@ class JoystickEvent(object):
     Add an event handler to the given event
     """
     # May need to ensure that the input is hashable/has __eq__ & __cmp__
-    self.__callbacks.add(callback)
+    self.__callbacks.append(callback)
 
   def notify_all(self):
     self.__cv.notify_all()
