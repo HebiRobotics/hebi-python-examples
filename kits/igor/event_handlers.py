@@ -180,6 +180,26 @@ def chassis_yaw_event(igor, in_deadzone_func, ts, axis_value):
 # ------------------------------------------------------------------------------
 
 
+def stance_height_triggers_event(igor, joy, vel_calc, ts, axis_value):
+  """
+  TODO: Document
+
+  :param igor:
+  :param joy:
+  :param vel_calc:
+  :param ts:
+  :param axis_value:
+  :return:
+  """
+  # Ignore this if `OPTIONS` is pressed
+  if joy.get_button('OPTIONS'):
+    return
+
+  val = vel_calc()
+  igor.left_leg.set_knee_velocity(val)
+  igor.right_leg.set_knee_velocity(val)
+
+
 def stance_height_event(igor, vel_calc, ts, pressed):
   """
   Event handler when `OPTIONS` button is pressed or released.
@@ -274,7 +294,12 @@ def register_igor_event_handlers(igor, joystick):
   arm_y_deadzone = lambda val: abs(val) <= igor.joystick_dead_zone
 
   def stance_height_calc():
-    d_ax = joystick.get_axis('LEFT_TRIGGER')-joystick.get_axis('RIGHT_TRIGGER')
+    # map [-1,1] to [0,1]
+    #l_val = 0.2*(joystick.get_axis('LEFT_TRIGGER')*0.5+0.5)
+    #r_val = 0.2*(joystick.get_axis('RIGHT_TRIGGER')*0.5+0.5)
+    l_val = joystick.get_axis('LEFT_TRIGGER')
+    r_val = joystick.get_axis('RIGHT_TRIGGER')
+    d_ax = l_val-r_val
     if abs(d_ax) > igor.joystick_dead_zone:
       return 0.5*d_ax
     return 0.0
@@ -330,6 +355,10 @@ def register_igor_event_handlers(igor, joystick):
 
   # -------------
   # Stance height
+
+  stance_height_trigger = funpart(stance_height_triggers_event, igor, joystick, stance_height_calc)
+  joystick.add_axis_event_handler('LEFT_TRIGGER', stance_height_trigger)
+  joystick.add_axis_event_handler('RIGHT_TRIGGER', stance_height_trigger)
 
   stance_height = funpart(stance_height_event, igor, stance_height_calc)
   joystick.add_button_event_handler('OPTIONS', stance_height)

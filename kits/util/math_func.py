@@ -1,5 +1,5 @@
 import numpy as np
-from math import atan2, cos, sin, sqrt
+from math import atan2, cos, degrees, isnan, sin, sqrt
 
 
 def sign(val):
@@ -16,6 +16,22 @@ def sign(val):
     return -1
 
 
+def zero_on_nan(val):
+  if isnan(val):
+    return 0.0
+  else:
+    return val
+
+
+def any_nan(mat):
+  return np.any(np.isnan(mat))
+
+
+def assert_not_nan(val, msg):
+  if isnan(val):
+    raise ValueError('{0} is nan'.format(msg))
+
+
 def rotate_x(angle, dtype=np.float64, output=None):
   """
 
@@ -30,7 +46,7 @@ def rotate_x(angle, dtype=np.float64, output=None):
   """
   c = cos(angle)
   s = sin(angle)
-  if isinstance(output, type(None)):
+  if output is None:
     output = np.empty((3, 3), dtype=dtype)
   output[1, 1] = c
   output[2, 1] = s
@@ -55,7 +71,7 @@ def rotate_y(angle, dtype=np.float64, output=None):
   """
   c = cos(angle)
   s = sin(angle)
-  if isinstance(output, type(None)):
+  if output is None:
     output = np.empty((3, 3), dtype=dtype)
   output[0, 0] = c
   output[0, 2] = s
@@ -80,7 +96,7 @@ def rotate_z(angle, dtype=np.float64, output=None):
   """
   c = cos(angle)
   s = sin(angle)
-  if isinstance(output, type(None)):
+  if output is None:
     output = np.empty((3, 3), dtype=dtype)
   output[0, 0] = c
   output[0, 1] = s
@@ -92,7 +108,7 @@ def rotate_z(angle, dtype=np.float64, output=None):
 
 
 def quat2rot(quaternion, output=None):
-  if isinstance(output, type(None)):
+  if output is None:
     output = np.empty((3, 3), dtype=np.float64)
   X = quaternion[1]
   Y = quaternion[2]
@@ -127,28 +143,30 @@ def quat2rot(quaternion, output=None):
 
 
 def rot2ea(R, output=None):
-  if isinstance(output, type(None)):
+  if output is None:
     output = np.empty(3, dtype=np.float64)
 
   sy = np.linalg.norm(R[0:2, 0])
-  singular = sy < 1e-9
+  singular = sy < 1e-6
 
   if not singular:
     x = atan2(R[2, 1], R[2, 2])
     y = atan2(-R[2, 0], sy)
     z = atan2(R[1, 0], R[0, 0])
   else:
-    x = atan2(-R[1, 2], R[1, 1])
-    y = atan2(-R[2, 0], sy)
-    z = 0
+    output[0:3] = np.nan
+    return output
+    #x = atan2(-R[1, 2], R[1, 1])
+    #y = atan2(-R[2, 0], sy)
+    #z = 0
 
-  pi_2 = np.pi*0.5
-  if x > pi_2:
-    x = x - np.pi
-  if y > pi_2:
-    y = y - np.pi
-  if z > pi_2:
-    z = z - np.pi
+  pi = np.pi
+  if x > pi:
+    x = x-2*pi
+  if y > pi:
+    y = y-2*pi
+  if z > pi:
+    z = z-2*pi
 
   output[0] = -x
   output[1] = -y

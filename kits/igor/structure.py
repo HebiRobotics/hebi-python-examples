@@ -208,6 +208,8 @@ class Chassis(BaseBody):
     self._cmd_chassis_vel_last = 0.0
     self._fbk_chassis_vel_last = 0.0
 
+    self._calculated_lean_angle = 0.0
+
     # ---------------
     # Trajectory data
     num_cmds = 6
@@ -278,42 +280,81 @@ class Chassis(BaseBody):
     """
     self._hip_pitch = self._hip_pitch+self._hip_pitch_velocity*dt
 
-  def update_velocity_controller(self, dt, velocities, wheel_radius, height_com, lean_angle_vel, robot_mass, fbk_lean_angle):
+  def update_velocity_controller(self, dt, velocities, wheel_radius,
+                                 height_com, fbk_lean_angle_vel,
+                                 robot_mass, fbk_lean_angle):
     velP = 15.0 # 5 / .33
     velI = 0.1  # 3 / 30
     velD = .3   # .3 / 1
 
-    inv_dt = 1/dt
-    l_wheel_vel = velocities[0]
-    r_wheel_vel = velocities[1]
+    inv_dt = 1.0/dt
+    l_wheel_vel = math_func.zero_on_nan(velocities[0])
+    r_wheel_vel = math_func.zero_on_nan(velocities[1])
 
-    fbk_chassis_vel = wheel_radius*(l_wheel_vel-r_wheel_vel)*0.5+(height_com*lean_angle_vel)
+    # fbkChassisVel = wheelRadius * mean(direction.*fbk.velocity(1:2)) + heightCoM*leanAngleVel
+    fbk_chassis_vel = wheel_radius*(l_wheel_vel-r_wheel_vel)*0.5+(height_com*fbk_lean_angle_vel)
+    # cmdChassisVel = cmdVel
     cmd_chassis_vel = self._velocities[0, 0]
+    # chassisVelError = cmdChassisVel - fbkChassisVel
+    chassis_vel_error = cmd_chassis_vel-fbk_chassis_vel
+    # chassisVelErrorCum = chassisVelErrorCum + chassisVelError*dt
+    chassis_vel_error_cumulative = self._velocity_error_cumulative+(chassis_vel_error*dt)
+    # chassisVelErrorCum = min(abs(chassisVelErrorCum),5/velI) * sign(chassisVelErrorCum)
+    chassis_vel_error_cumulative = np.clip(chassis_vel_error_cumulative, -50.0, 50.0)
 
+    # cmdChassisAccel = (cmdChassisVel - cmdChassisVelLast) / dt
     cmd_chassis_accel = (cmd_chassis_vel-self._cmd_chassis_vel_last)*inv_dt
-    chassis_accel = (fbk_chassis_vel-self._fbk_chassis_vel_last)*inv_dt
+    # cmdChassisVelLast = cmdChassisVel
     self._cmd_chassis_vel_last = cmd_chassis_vel
+    # chassisAccel = (fbkChassisVel - fbkChassisVelLast) / dt
+    chassis_accel = (fbk_chassis_vel-self._fbk_chassis_vel_last)*inv_dt
+    # fbkChassisVelLast = fbkChassisVel
     self._fbk_chassis_vel_last = fbk_chassis_vel
-
+    # leanFF = 0.1 * robotMass * cmdChassisAccel / heightCoM
     lean_feedforward = 0.1*robot_mass*cmd_chassis_accel/height_com
+    # velFF = direction * cmdChassisVel / wheelRadius
     velocity_feedforward = cmd_chassis_vel/wheel_radius
 
-    self._velocity_feedforward = velocity_feedforward
+    # cmdLeanAngle = velP * chassisVelError + velI * chassisVelErrorCum + velD * chassisAccel + leanFF
+    cmd_lean_angle = (velP * chassis_vel_error) + (velI * chassis_vel_error_cumulative) + (
+          velD * chassis_accel) + lean_feedforward
 
-    vel_error = cmd_chassis_vel-fbk_chassis_vel
-    self._velocity_error = vel_error
-    vel_error_cumulative = self._velocity_error_cumulative+(vel_error*dt)
-    self._velocity_error_cumulative = np.clip(vel_error_cumulative, -50.0, 50.0)
-
-    cmd_lean_angle = (velP*vel_error)+(velI*self._velocity_error_cumulative)+(velD*chassis_accel)+lean_feedforward
+    # leanAngleError = fbkLeanAngle - cmdLeanAngle
     lean_angle_error = fbk_lean_angle-cmd_lean_angle
-    self._lean_angle_error = lean_angle_error
+    # leanAngleErrorCum = leanAngleErrorCum + leanAngleError * dt
     lean_angle_error_cumulative = self._lean_angle_error_cumulative+(lean_angle_error*dt)
-    self._lean_angle_error_cumulative = np.clip(lean_angle_error_cumulative, -0.2, 0.2)
+    # leanAngleErrorCum = min(abs(leanAngleErrorCum),.2) * sign(leanAngleErrorCum)
+    lean_angle_error_cumulative = np.clip(lean_angle_error_cumulative, -0.2, 0.2)
+
+    self._velocity_feedforward = velocity_feedforward
+    self._lean_feedforward = lean_feedforward
+    self._velocity_error = chassis_vel_error
+    self._velocity_error_cumulative = chassis_vel_error_cumulative
+    self._lean_angle_error = lean_angle_error
+    self._lean_angle_error_cumulative = lean_angle_error_cumulative
+
+    # TEMP
+    self._calculated_lean_angle = cmd_lean_angle
 
   @property
   def velocity_feedforward(self):
     return self._velocity_feedforward
+
+  @property
+  def lean_feedforward(self):
+    return self._lean_feedforward
+
+# ------------------------------------------------------------------------------
+# Calculated Errors
+# ------------------------------------------------------------------------------
+
+  @property
+  def velocity_error(self):
+    return self._velocity_error
+
+  @property
+  def velocity_error_cumulative(self):
+    return self._velocity_error_cumulative
 
   @property
   def lean_angle_error(self):
@@ -322,6 +363,10 @@ class Chassis(BaseBody):
   @property
   def lean_angle_error_cumulative(self):
     return self._lean_angle_error_cumulative
+
+# ------------------------------------------------------------------------------
+# User Commanded Properties
+# ------------------------------------------------------------------------------
 
   @property
   def user_commanded_directional_velocity(self):
@@ -334,6 +379,14 @@ class Chassis(BaseBody):
   @property
   def user_commanded_knee_velocity(self):
     return self._velocities[2, 1]
+
+# ------------------------------------------------------------------------------
+# Calculated Properties
+# ------------------------------------------------------------------------------
+
+  @property
+  def calculated_lean_angle(self):
+    return self._calculated_lean_angle
 
   @property
   def calculated_directional_velocity(self):
@@ -350,6 +403,10 @@ class Chassis(BaseBody):
   @property
   def calculated_grip_velocity(self):
     return self._velocities[3:6, 0]
+
+# ------------------------------------------------------------------------------
+# User Commanded mutators
+# ------------------------------------------------------------------------------
 
   def set_directional_velocity(self, velocity):
     """
@@ -583,8 +640,8 @@ class Leg(PeripheralBody):
     self._set_mass(np.sum(masses))
     self._set_masses_t(masses.T)
 
-    self._hip_angle = home_knee_angle
-    self._knee_angle = home_hip_angle
+    self._hip_angle = home_hip_angle
+    self._knee_angle = home_knee_angle
     self._knee_velocity = 0.0
     self._user_commanded_knee_velocity = 0.0
     self._knee_angle_max = 2.65
@@ -608,7 +665,7 @@ class Leg(PeripheralBody):
 
     self._knee_velocity = knee_velocity
     self._knee_angle = self._knee_angle+knee_velocity*dt
-    self._hip_angle = (np.pi+self._knee_angle)*0.5
+    self._hip_angle = np.pi/2.0+self._knee_angle/2.0
 
   def update_position(self, positions, commanded_positions):
     super(Leg, self).update_position(positions, commanded_positions)
@@ -704,7 +761,8 @@ def set_command_subgroup_pve(group_command, pos, vel, effort, indices):
     cmd = group_command[i]
     cmd.position = pos[idx]
     cmd.velocity = vel[idx]
-    cmd.effort = effort[idx]
+    if effort is not None: # TODO: clean up
+      cmd.effort = effort[idx]
     idx = idx + 1
 
 
@@ -769,6 +827,38 @@ from . import demo_gui
 class Igor(object):
 
 # ------------------------------------------------
+# Temp Props
+# ------------------------------------------------
+
+# chassis.velocity_feedforward
+# chassis.lean_angle_error
+# chassis.lean_angle_error_cumulative
+# chassis.calculated_directional_velocity
+# chassis.calculated_yaw_velocity
+# chassis.calculated_knee_velocity
+# chassis.calculated_grip_velocity
+
+  @property
+  def roll_angle(self):
+    return self._roll_angle
+
+  @property
+  def pitch_angle(self):
+    return self._pitch_angle
+
+  @property
+  def height_com(self):
+    return self._height_com
+
+  @property
+  def feedback_lean_angle(self):
+    return self._feedback_lean_angle
+
+  @property
+  def feedback_lean_angle_velocity(self):
+    return self._feedback_lean_angle_velocity
+
+# ------------------------------------------------
 # Helper functions
 # ------------------------------------------------
 
@@ -831,27 +921,30 @@ class Igor(object):
     :param orientation: [numModules x 4] matrix of orientation
     """
     imu_frames = self._imu_frames
-    l_arm = self._left_arm
-    r_arm = self._right_arm
     l_leg = self._left_leg
     r_leg = self._right_leg
+    l_arm = self._left_arm
+    r_arm = self._right_arm
 
     # Update gyro values from current modules feedback
+    # Transposing allows us to do calculations a bit easier below
     self._pose_gyros[:, :] = gyro.T
-    pose_gyros = self._pose_gyros
 
-    imu_frames[0] = l_leg.current_fk[3]
-    imu_frames[1] = r_leg.current_fk[3]
-
+    # Update imu frames
+    # Leg end effectors
+    imu_frames[0] = l_leg.current_tip_fk
+    imu_frames[1] = r_leg.current_tip_fk
+    # Hip link output frames
     imu_frames[3] = l_leg.current_fk[1]
     imu_frames[5] = r_leg.current_fk[1]
-
+    # Arm base bracket
     imu_frames[7] = l_arm.current_fk[1]
-    imu_frames[8] = l_arm.current_fk[3]
-    imu_frames[9] = l_arm.current_fk[5]
-
     imu_frames[11] = r_arm.current_fk[1]
+    # Arm shoulder link
+    imu_frames[8] = l_arm.current_fk[3]
     imu_frames[12] = r_arm.current_fk[3]
+    # Arm elbow link
+    imu_frames[9] = l_arm.current_fk[5]
     imu_frames[13] = r_arm.current_fk[5]
 
     q_rot = np.empty((3, 3), dtype=np.float64)
@@ -859,19 +952,22 @@ class Igor(object):
     rpy_modules = self._rpy
 
     for i in range(14):
-      rot = imu_frames[i][0:3, 0:3]
+      imu_frame = imu_frames[i][0:3, 0:3]
       # numpy arrays and matrices are different types, and you can't simply do
       # np_matrix * np_array
       # `np.inner` supports exactly what we are trying to do, though
-      pose_gyros[0:3, i] = np.inner(rot, pose_gyros[0:3, i])
+      self._pose_gyros[0:3, i] = np.inner(imu_frame, self._pose_gyros[0:3, i])
       quaternion = orientation[i, 0:4]
-      # rotation matrix transpose is same as inverse since `rot` is in SO(3)
-      q_rot = math_func.quat2rot(quaternion, q_rot)*rot.T
-      math_func.rot2ea(q_rot, rpy)
-      rpy_modules[0:3, i] = rpy[0:3]
+      if math_func.any_nan(quaternion):
+        rpy_modules[0:3, i] = np.nan
+      else:
+        # rotation matrix transpose is same as inverse since `rot` is in SO(3)
+        q_rot = math_func.quat2rot(quaternion, q_rot)
+        q_rot = q_rot*imu_frame.T
+        rpy = math_func.rot2ea(q_rot, rpy)
+        rpy_modules[0:3, i] = rpy
 
-    # NOTE(rLinks234): Unlike MATLAB, we will not have NaNs here. This should be revisited for coherency though.
-    self._pose_gyros_mean = np.mean(rpy_modules[:, self._imu_modules], axis=1)
+    self._pose_gyros_mean = np.nanmean(self._pose_gyros[:, self._imu_modules], axis=1)
 
   def _calculate_lean_angle(self):
     """
@@ -882,36 +978,36 @@ class Igor(object):
     rpy_module = self._rpy
     imu_modules = self._imu_modules
 
-    roll_angle = np.mean(rpy_module[0, imu_modules])
-    pitch_angle = np.mean(rpy_module[1, imu_modules])
-    roll_rot = self._roll_rot
-    pitch_rot = self._pitch_rot
+    # {roll,pitch}_angle are in radians here
+    roll_angle = np.nanmean(rpy_module[0, imu_modules])
+    pitch_angle = np.nanmean(rpy_module[1, imu_modules])
 
     # Update roll (rotation matrix)
-    math_func.rotate_x(roll_angle, output=roll_rot)
+    math_func.rotate_x(roll_angle, output=self._roll_rot)
     # Update pitch (rotation matrix)
-    math_func.rotate_y(pitch_angle, output=pitch_rot)
+    math_func.rotate_y(pitch_angle, output=self._pitch_rot)
 
-    self._roll_angle = roll_angle
-    self._pitch_angle = pitch_angle
+    self._roll_angle = math.degrees(roll_angle)
+    self._pitch_angle = math.degrees(pitch_angle)
 
     T_pose = self._pose_transform
-    T_pose[0:3, 0:3] = pitch_rot * roll_rot
+    T_pose[0:3, 0:3] = self._pitch_rot * self._roll_rot
 
-    self._lean_angle = pitch_angle
-    self._lean_angle_velocity = self._pose_gyros_mean[1]
+    # rad/s
+    self._feedback_lean_angle_velocity = self._pose_gyros_mean[1]
 
-    # NOTE(rLinks234): MATLAB `leanR` is `pitch_rot` here
+    # NOTE(rLinks234): MATLAB `leanR` is `self._pitch_rot` here
 
     # Gets the translation vector of the Legs' current end effectors
-    legs_ef_xyz = np.concatenate((self._left_leg.current_tip_fk[0:3, 3], self._right_leg.current_tip_fk[0:3, 3])).T
-    ground_point = np.mean(legs_ef_xyz, axis=1)
-    line_com = np.inner(pitch_rot, self._com-ground_point)
+    l_leg_t = self._left_leg.current_tip_fk[0:3, 3]
+    r_leg_t = self._right_leg.current_tip_fk[0:3, 3]
+    ground_point = (l_leg_t+r_leg_t)*0.5
+    line_com = np.inner(self._pitch_rot, self._com-ground_point.A1)
     self._height_com = np.linalg.norm(line_com)
-    self._feedback_lean_angle = math.atan2(line_com[0], line_com[2])
+    self._feedback_lean_angle = math.degrees(math.atan2(line_com[0], line_com[2]))
 
     # Update Igor center of mass
-    self._com = T_pose[0:3, 0:3]*self._com
+    self._com = np.inner(T_pose[0:3, 0:3], self._com)
 
     l_leg_coms = self._left_leg.current_coms
     r_leg_coms = self._right_leg.current_coms
@@ -961,6 +1057,9 @@ class Igor(object):
     # Update time for chassis
     self._chassis.update_time()
 
+    left_knee = 0.0
+    right_knee = 0.0
+
     while t < 3.0:
       # Limit commands initially
       soft_start = min(t/3.0, 1.0)
@@ -973,13 +1072,13 @@ class Igor(object):
       pos, vel, accel = r_arm_t.get_state(t)
       set_command_subgroup_pve(group_command, pos, vel, grav_comp_efforts, r_arm_i)
 
-      grav_comp_efforts = l_leg.get_grav_comp_efforts(positions, gravity)
       pos, vel, accel = l_leg_t.get_state(t)
-      set_command_subgroup_pve(group_command, pos, vel, grav_comp_efforts, l_leg_i)
+      set_command_subgroup_pve(group_command, pos, vel, None, l_leg_i)
+      left_knee = pos[1]
 
-      grav_comp_efforts = r_leg.get_grav_comp_efforts(positions, gravity)
       pos, vel, accel = r_leg_t.get_state(t)
-      set_command_subgroup_pve(group_command, pos, vel, grav_comp_efforts, r_leg_i)
+      set_command_subgroup_pve(group_command, pos, vel, None, r_leg_i)
+      right_knee = pos[1]
 
       # Scale effort
       group_command.effort = soft_start*group_command.effort
@@ -989,6 +1088,11 @@ class Igor(object):
       group_feedback = group.get_next_feedback(reuse_fbk=group_feedback)
       positions = group_feedback.position
       t = time()-start_time
+
+    self._time_last[:] = group_feedback.receive_time
+    self._left_leg._knee_angle = left_knee
+    self._right_leg._knee_angle = -right_knee
+
 
   def _spin_once(self, bc):
     """
@@ -1001,7 +1105,8 @@ class Igor(object):
     group_feedback = self._group_feedback
     group_command = self._group_command
 
-    soft_start = min(time()-self._start_time, 1.0)
+    rel_time = time()-self._start_time
+    soft_start = min(rel_time, 1.0)
     rx_time = group_feedback.receive_time
 
     if self._config.is_imitation:
@@ -1053,10 +1158,10 @@ class Igor(object):
     self._right_arm.integrate_step(dt, positions, calculated_grip_velocity)
 
     self._chassis.update_velocity_controller(dt, velocities, self._wheel_radius,
-                                             self._height_com, self._lean_angle_velocity,
+                                             self._height_com, self._feedback_lean_angle_velocity,
                                              self._mass, self._feedback_lean_angle)
 
-    if bc:
+    if bc: # bc
       leanP = 1.0
       leanI = 20.0
       leanD = 10.0
@@ -1064,12 +1169,11 @@ class Igor(object):
       l_wheel = group_command[0]
       r_wheel = group_command[1]
 
-      p_effort = (leanP*self._chassis.lean_angle_error)+(leanI*self._chassis.lean_angle_error_cumulative)+(leanD*self._lean_angle_velocity)
+      p_effort = (leanP*self._chassis.lean_angle_error)+(leanI*self._chassis.lean_angle_error_cumulative)+(leanD*self._feedback_lean_angle_velocity)
       l_wheel.effort = p_effort*soft_start
       r_wheel.effort = -p_effort*soft_start
 
     # --------------------------------
-    # This doesn't seem right to me...
     # Wheel Commands
     max_velocity = 10.0
     l_wheel_vel = min(max(self._chassis.calculated_yaw_velocity+self._chassis.velocity_feedforward, -max_velocity), max_velocity)
@@ -1080,7 +1184,9 @@ class Igor(object):
     # ------------
     # Leg Commands
 
-    roll_angle = self._roll_angle
+    # Roll Angle is in degrees, but Leg needs it to be in radians
+    roll_angle = math.radians(self._roll_angle)
+
     self._left_leg.update_command(group_command, velocity_error, roll_angle, soft_start)
     self._right_leg.update_command(group_command, velocity_error, roll_angle, soft_start)
 
@@ -1141,7 +1247,7 @@ class Igor(object):
       # We have `_state_lock` at this point. Access fields here before releasing lock
       bc = self._balance_controller_enabled
       self._state_lock.release()
-      self._spin_once(bc)
+      self._spin_once(not bc) # Swap for now
       self._state_lock.acquire()
 
     self._stop()
@@ -1288,8 +1394,7 @@ class Igor(object):
     self._roll_rot = np.empty((3, 3), dtype=np.float64)
     self._pitch_angle = 0.0
     self._pitch_rot = np.empty((3, 3), dtype=np.float64)
-    self._lean_angle = 0.0
-    self._lean_angle_velocity = 0.0
+    self._feedback_lean_angle_velocity = 0.0
     # These are used for chassis velocity controller
     self._height_com = 0.0
     self._feedback_lean_angle = 0.0
@@ -1315,7 +1420,7 @@ class Igor(object):
       return
     
     group = create_group(self._config, self._has_camera)
-    group.command_lifetime = 100
+    group.command_lifetime = 500
     group.feedback_frequency = 100.0
 
     self._group = group
