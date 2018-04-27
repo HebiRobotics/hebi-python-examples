@@ -168,9 +168,9 @@ def rot2ea(R, output=None):
   if z > pi:
     z = z-2*pi
 
-  output[0] = -x
-  output[1] = -y
-  output[2] = -z
+  output[0] = x
+  output[1] = y
+  output[2] = z
   return output
 
 
