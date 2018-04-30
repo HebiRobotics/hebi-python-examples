@@ -1064,15 +1064,17 @@ class Igor(object):
 
   Lean_P = 1.0
   """
-  The 
+  TODO: Document
   """
 
   Lean_I = 20.0
   """
+  TODO: Document
   """
 
   Lean_D = 10.0
   """
+  TODO: Document
   """
 
   @property
@@ -1233,7 +1235,7 @@ class Igor(object):
     # rad/s
     self._feedback_lean_angle_velocity = self._pose_gyros_mean[1]
 
-    # NOTE(rLinks234): MATLAB `leanR` is `self._pitch_rot` here
+    # NOTE: MATLAB `leanR` is `self._pitch_rot` here
 
     # Gets the translation vector of the Legs' current end effectors
     l_leg_t = self._left_leg.current_tip_fk[0:3, 3]
@@ -1356,10 +1358,21 @@ class Igor(object):
 
     self._time_last[:] = rx_time
 
-    positions = group_feedback.position
-    commanded_positions = group_feedback.position_command
-    velocities = group_feedback.velocity
-    velocity_error = group_feedback.velocity_command-velocities
+    # ------------------------------------------------------
+    # These fields are cached to avoid instantiating objects
+    positions = self._current_position
+    commanded_positions = self._current_position_command
+    velocities = self._current_velocity
+    velocity_commands = self._current_velocity_command
+    velocity_error = self._current_velocity_error
+
+    group_feedback.get_position(positions)
+    group_feedback.get_position_command(commanded_positions)
+    group_feedback.get_velocity(velocities)
+    group_feedback.get_velocity_command(velocity_commands)
+    np.subtract(velocity_commands, velocities, out=velocity_error)
+
+    # TODO: cache these too
     gyro = group_feedback.gyro
     orientation = group_feedback.orientation
 
@@ -1602,6 +1615,14 @@ class Igor(object):
     # These are used for chassis velocity controller
     self._height_com = 0.0
     self._feedback_lean_angle = 0.0
+
+    # --------------------------
+    # Cached fields for feedback
+    self._current_position = np.empty(num_dofs, dtype=np.float64)
+    self._current_position_command = np.empty(num_dofs, dtype=np.float64)
+    self._current_velocity = np.empty(num_dofs, dtype=np.float32)
+    self._current_velocity_command = np.empty(num_dofs, dtype=np.float32)
+    self._current_velocity_error = np.empty(num_dofs, dtype=np.float32)
 
 # ------------------------------------------------
 # Public Interface
