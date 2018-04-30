@@ -2,6 +2,8 @@ from sdl2 import *
 import sdl2.ext
 import threading
 
+from time import sleep, time
+
 class EventQueue(object):
 
   __sdl_event_attr_dict = {
@@ -25,6 +27,10 @@ class EventQueue(object):
 
     self.__event_hooks = hooks
     self.__loop_mutex = threading.Lock()
+    self.__last_event_loop_time = 0.0
+
+    self.__event_loop_frequency = 250.0 # Limit event loop to 250 Hz
+    self.__event_loop_period = 1.0/self.__event_loop_frequency
 
   def __on_event(self, event, data):
     data = getattr(data, EventQueue.__sdl_event_attr_dict[event])
@@ -36,6 +42,14 @@ class EventQueue(object):
 
   def __run(self):
     while True:
+      last_time = self.__last_event_loop_time
+      now_time = time()
+      dt = now_time - last_time
+      loop_period = self.__event_loop_period
+      if dt < loop_period:
+        sleep(loop_period-dt)
+
+      self.__last_event_loop_time = now_time
       for entry in sdl2.ext.get_events():
         self.__loop_mutex.acquire()
         try:

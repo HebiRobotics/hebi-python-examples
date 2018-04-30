@@ -186,6 +186,10 @@ class PeripheralBody(BaseBody):
 
 class Chassis(BaseBody):
 
+  Velocity_P = 15.0
+  Velocity_I = 0.1
+  Velocity_D = .3
+
   def _create_trajectory(self):
     return hebi.trajectory.create_trajectory(self._traj_times,
                                              self._velocities,
@@ -283,9 +287,9 @@ class Chassis(BaseBody):
   def update_velocity_controller(self, dt, velocities, wheel_radius,
                                  height_com, fbk_lean_angle_vel,
                                  robot_mass, fbk_lean_angle):
-    velP = 15.0 # 5 / .33
-    velI = 0.1  # 3 / 30
-    velD = .3   # .3 / 1
+    velP = Chassis.Velocity_P
+    velI = Chassis.Velocity_I
+    velD = Chassis.Velocity_D
 
     inv_dt = 1.0/dt
     l_wheel_vel = math_func.zero_on_nan(velocities[0])
@@ -757,13 +761,19 @@ def set_command_subgroup_pve(group_command, pos, vel, effort, indices):
   :return:
   """
   idx = 0
-  for i in indices:
-    cmd = group_command[i]
-    cmd.position = pos[idx]
-    cmd.velocity = vel[idx]
-    if effort is not None: # TODO: clean up
+  if effort is None:
+    for i in indices:
+      cmd = group_command[i]
+      cmd.position = pos[idx]
+      cmd.velocity = vel[idx]
+      idx = idx + 1
+  else:
+    for i in indices:
+      cmd = group_command[i]
+      cmd.position = pos[idx]
+      cmd.velocity = vel[idx]
       cmd.effort = effort[idx]
-    idx = idx + 1
+      idx = idx + 1
 
 
 def create_group(config, has_camera):
@@ -825,6 +835,10 @@ from . import demo_gui
 
 
 class Igor(object):
+
+  Lean_P = 1.0
+  Lean_I = 20.0
+  Lean_D = 10.0
 
 # ------------------------------------------------
 # Temp Props
@@ -1162,9 +1176,9 @@ class Igor(object):
                                              self._mass, self._feedback_lean_angle)
 
     if bc: # bc
-      leanP = 1.0
-      leanI = 20.0
-      leanD = 10.0
+      leanP = Igor.Lean_P
+      leanI = Igor.Lean_I
+      leanD = Igor.Lean_D
 
       l_wheel = group_command[0]
       r_wheel = group_command[1]
