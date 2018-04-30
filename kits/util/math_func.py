@@ -1,22 +1,30 @@
 import numpy as np
-from math import atan2, cos, degrees, isnan, sin, sqrt
+from math import atan2, cos, isnan, sin
 
 
 def sign(val):
   """
   Mimics MATLAB's sign function
-  :param val:
-  :return:
+  :param val: Input value
+  :type val:  float
+  :return:    The sign of ``val``
+  :rtype:     float
   """
   if val > 0.0:
-    return 1
+    return 1.0
   elif val == 0.0:
     return 0.0
   else:
-    return -1
+    return -1.0
 
 
 def zero_on_nan(val):
+  """
+  :param val: Input value
+  :type val:  float
+  :return: 0.0 if ``val`` is nan, otherwise ``val``
+  :rtype:  float
+  """
   if isnan(val):
     return 0.0
   else:
@@ -24,16 +32,31 @@ def zero_on_nan(val):
 
 
 def any_nan(mat):
+  """
+  TODO: Document
+
+  :param mat:
+  :return: TODO
+  :rtype:  TODO
+  """
   return np.any(np.isnan(mat))
 
 
 def assert_not_nan(val, msg):
+  """
+  TODO: Document
+
+  :param val:
+  :param msg:
+  :type msg:  str
+  """
   if isnan(val):
     raise ValueError('{0} is nan'.format(msg))
 
 
 def rotate_x(angle, dtype=np.float64, output=None):
   """
+  TODO: Document
 
   :param angle:
   :param dtype:
@@ -59,6 +82,7 @@ def rotate_x(angle, dtype=np.float64, output=None):
 
 def rotate_y(angle, dtype=np.float64, output=None):
   """
+  TODO: Document
 
   :param angle:
   :param dtype:
@@ -84,6 +108,7 @@ def rotate_y(angle, dtype=np.float64, output=None):
 
 def rotate_z(angle, dtype=np.float64, output=None):
   """
+  TODO: Document
 
   :param angle:
   :param dtype:
@@ -108,6 +133,14 @@ def rotate_z(angle, dtype=np.float64, output=None):
 
 
 def quat2rot(quaternion, output=None):
+  """
+  TODO: Document
+
+  :param quaternion:
+  :param output:
+  :return:
+  """
+
   if output is None:
     output = np.empty((3, 3), dtype=np.float64)
   X = quaternion[1]
@@ -143,6 +176,13 @@ def quat2rot(quaternion, output=None):
 
 
 def rot2ea(R, output=None):
+  """
+  TODO: Document
+
+  :param R:
+  :param output:
+  :return:
+  """
   if output is None:
     output = np.empty(3, dtype=np.float64)
 
@@ -175,6 +215,16 @@ def rot2ea(R, output=None):
 
 
 def get_grav_comp_efforts(robot, positions, gravity):
+  """
+  TODO: Document
+
+  :param robot:
+  :param positions:
+  :param gravity:
+
+  :return:
+  :rtype:
+  """
   g_norm = np.linalg.norm(gravity)
   if g_norm > 0.0:
     gravity = gravity/g_norm*9.81
@@ -195,6 +245,17 @@ def get_grav_comp_efforts(robot, positions, gravity):
 
 
 def get_dynamic_comp_efforts(fbk_positions, cmd_positions, cmd_velocities, cmd_accels, robot, dt=1e-3):
+  """
+  TODO: Document
+
+  :param fbk_positions:
+  :param cmd_positions:
+  :param cmd_velocities:
+  :param cmd_accels:
+  :param robot:
+  :param dt:
+  :return:
+  """
   dt_s = dt*dt
   dt_s_inv = 1/dt_s
   cmd_v_dt = cmd_velocities*dt

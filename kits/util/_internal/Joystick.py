@@ -22,7 +22,7 @@ class JoystickEvent(object):
   """
 
   def __init__(self):
-    self.__callbacks = list()
+    self.__callbacks = set()
     self.__cv = Condition(Lock())
 
   def __call__(self, *args):
@@ -34,18 +34,35 @@ class JoystickEvent(object):
     Add an event handler to the given event
     """
     # May need to ensure that the input is hashable/has __eq__ & __cmp__
-    self.__callbacks.append(callback)
+    self.__callbacks.add(callback)
 
   def notify_all(self):
+    """
+    TODO: Document
+    :return:
+    """
     self.__cv.notify_all()
 
   def wait(self, timeout=None):
+    """
+    TODO: Document
+    :param timeout:
+    :return:
+    """
     self.__cv.wait(timeout)
 
   def acquire(self):
+    """
+    TODO: Document
+    :return:
+    """
     self.__cv.acquire()
 
   def release(self):
+    """
+    TODO: Document
+    :return:
+    """
     self.__cv.release()
 
 
@@ -136,8 +153,8 @@ BUTTON = 4
 
 _joysticks = dict()
 _val_mapper = {
-  AXIS : lambda value: value*0.0000305185, # value/32767.0
-  BALL : lambda xrel,yrel: (xrel,yrel),
+  AXIS : lambda value: value*0.0000305185,
+  BALL : lambda xrel, yrel: (xrel, yrel),
   HAT : hat_get_val,
   BUTTON : lambda value: value == SDL_PRESSED }
 
@@ -179,6 +196,11 @@ class Joystick(object):
       SDL_JoystickClose(self.__joystick)
 
   def __getattr__(self, item):
+    """
+    TODO: Document
+    :param item:
+    :return:
+    """
     if item == '__joystick_mapping':
       raise RuntimeError
     elif self.__joystick_mapping == None:
@@ -348,10 +370,10 @@ class Joystick(object):
 
   def add_axis_event_handler(self, axis, handler):
     """
-    TODO
+    TODO: Document
 
-    :param axis: TODO
-    :type axis:  int, str
+    :param axis:    TODO
+    :type axis:     int, str
     :param handler: TODO
 
     :raises GameControllerException: If the joystick does not have a mapping
@@ -368,10 +390,10 @@ class Joystick(object):
 
   def add_button_event_handler(self, button, handler):
     """
-    TODO
+    TODO: Document
 
-    :param button: TODO
-    :type button:  int, str
+    :param button:  TODO
+    :type button:   int, str
     :param handler: TODO
 
     :raises GameControllerException: If the joystick does not have a mapping

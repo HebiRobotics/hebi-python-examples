@@ -4,6 +4,7 @@ import threading
 
 from time import sleep, time
 
+
 class EventQueue(object):
 
   __sdl_event_attr_dict = {
@@ -60,6 +61,13 @@ class EventQueue(object):
           self.__loop_mutex.release()
 
   def register_event(self, event, callback):
+    """
+    TODO: Document
+    :param event:
+    :param callback:
+
+    :raises TypeError: If ``callback`` is not callable
+    """
     if not hasattr(callback, '__call__'):
       raise TypeError('{0} is not callable'.format(callback))
     if event in self.__event_hooks:
@@ -68,6 +76,9 @@ class EventQueue(object):
       self.__loop_mutex.release()
 
   def start(self):
+    """
+    TODO: Document
+    """
     self.__thread = threading.Thread(target=self.__run, name="SDL Event Processor")
     self.__thread.daemon = True
     self.__thread.start()
@@ -80,6 +91,7 @@ class EventQueue(object):
 
 from . import Joystick as JoystickModule
 from .Joystick import Joystick, GameControllerException
+import sdl2.ext.compat
 
 
 def _joystick_added(sdl_event):
@@ -87,8 +99,6 @@ def _joystick_added(sdl_event):
   try:
     joystick = Joystick(joystick_id)
     JoystickModule._joysticks[joystick_id] = joystick
-  except GameControllerException as game:
-    import sdl2.ext.compat
   except Exception as e:
     import sdl2.ext.compat
     print('WARNING: Caught Exception\n{0}'.format(e))

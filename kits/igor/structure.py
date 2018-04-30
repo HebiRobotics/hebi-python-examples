@@ -1,18 +1,18 @@
-import math, sys, threading
+import math
 import numpy as np
 import numpy.matlib as matlib
 
-from . import DemoUtils, Joystick
 from .config import Igor2Config
 from .event_handlers import register_igor_event_handlers
+from .igor_utils import (create_group, find_joystick, is_main_thread_active,
+                         load_gains, set_command_subgroup_pve)
 
 # kits.util._internal.type_utils
-from ..util._internal.type_utils import assert_instance, assert_type
+from ..util._internal.type_utils import assert_instance, assert_length, assert_type
 from ..util import math_func
 import hebi
 
 from time import sleep, time
-from functools import partial as funpart
 
 
 # ------------------------------------------------------------------------------
@@ -21,6 +21,9 @@ from functools import partial as funpart
 
 
 class BaseBody(object):
+  """
+  Base class for all body components of Igor
+  """
 
   def __init__(self, val_lock, mass=0.0, com=[0.0, 0.0, 0.0]):
     self.__val_lock = val_lock
@@ -34,21 +37,38 @@ class BaseBody(object):
     self._com = np.asarray(com, dtype=np.float64)
 
   def acquire_value_lock(self):
+    """
+    Used to acquire mutex for the parameters of this body component
+    """
     self.__val_lock.acquire()
 
   def release_value_lock(self):
+    """
+    Used to release mutex for the parameters of this body component
+    """
     self.__val_lock.release()
 
   @property
   def mass(self):
+    """
+    :return: The mass (in kilograms) of this body component
+    :rtype:  float
+    """
     return self._mass
 
   @property
   def com(self):
+    """
+    :return: The center of mass (in meters) of this body component in 3D Euclidean space
+    :rtype:  np.array
+    """
     return self._com
 
 
 class PeripheralBody(BaseBody):
+  """
+  Base class for all peripheral body components of Igor (e.g., legs and arms)
+  """
 
   def __init__(self, val_lock, group_indices, name, mass=None, com=None):
     if mass != None and com != None:
@@ -69,21 +89,34 @@ class PeripheralBody(BaseBody):
     self._current_j_expected = None
     self._current_xyz = None
 
+  def _set_masses_t(self, masses):
+    self._masses_t = masses
+
   @property
   def _robot(self):
     return self._kin
 
   @property
   def name(self):
+    """
+    :return: The human readable name of this body component
+    :rtype:  str
+    """
     return self._name
 
   @property
   def home_angles(self):
+    """
+    :return: The home angle (in radians) positions of this body component
+    :rtype:  np.array
+    """
     return self._home_angles
 
   @home_angles.setter
   def home_angles(self, value):
-    self._home_angles = value
+    home_angles = np.asarray(value, dtype=np.float64)
+    assert_length(home_angles, len(self._group_indices), 'home_angles')
+    self._home_angles = home_angles
 
   @property
   def group_indices(self):
@@ -96,28 +129,61 @@ class PeripheralBody(BaseBody):
 
   @property
   def current_coms(self):
+    """
+    TODO: Document
+    :return:
+    :rtype:
+    """
     return self._current_coms
 
   @property
   def current_fk(self):
+    """
+    TODO: Document
+    :return:
+    :rtype:
+    """
     return self._current_fk
 
   @property
   def current_tip_fk(self):
+    """
+    TODO: Document
+    :return:
+    :rtype:
+    """
     return self._current_tip_fk
 
   @property
   def current_j_actual(self):
+    """
+    TODO: Document
+    :return:
+    :rtype:
+    """
     return self._current_j_actual
 
   @property
   def current_j_expected(self):
+    """
+    TODO: Document
+    :return:
+    :rtype:
+    """
     return self._current_j_expected
 
-  def _set_masses_t(self, masses):
-    self._masses_t = masses
-
   def get_grav_comp_efforts(self, positions, gravity):
+    """
+    TODO: Document
+
+    :param positions: TODO
+    :type positions:  np.array
+    :param gravity:   TODO
+    :type gravity:    np.array
+
+    :return: TODO
+    :rtype:  np.array
+    """
     kin = self._kin
     positions = positions[self._group_indices]
     return math_func.get_grav_comp_efforts(kin, positions, gravity)
@@ -127,7 +193,16 @@ class PeripheralBody(BaseBody):
     Create a trajectory from the current pose to the home pose.
     This is used on soft startup
     ^^^ Is this the correct usage of "pose" ???
-    :return:
+
+    :param positions: TODO
+    :type positions:  np.array
+    :param duration:  The total time of the calculated trajectory (in seconds)
+    :type duration:   float
+
+    :rtype: hebi._internal.trajectory.Trajectory
+
+    :raises ValueError: If ``duration`` is less than 1.0
+    :raises TypeError:  If ``duration`` is not of type float
     """
     assert_type(duration, float, 'duration')
     if duration < 1.0:
@@ -153,8 +228,11 @@ class PeripheralBody(BaseBody):
     """
     Upate kinematics from feedback
     TODO: document and CLEAN UP
-    :param positions:
-    :param commanded_positions:
+
+    :param positions:           TODO
+    :type positions:            np.array
+    :param commanded_positions: TODO
+    :type commanded_positions:  np.array
     """
     positions = positions[self._group_indices]
     commanded_positions = commanded_positions[self._group_indices]
@@ -185,10 +263,24 @@ class PeripheralBody(BaseBody):
 
 
 class Chassis(BaseBody):
+  """
+  Class representing the chassis of Igor
+  """
 
   Velocity_P = 15.0
+  """
+  The proportional term of the chassis velocity controller
+  """
+
   Velocity_I = 0.1
+  """
+  The integral term of the chassis velocity controller
+  """
+
   Velocity_D = .3
+  """
+  The derivative term of the chassis velocity controller
+  """
 
   def _create_trajectory(self):
     return hebi.trajectory.create_trajectory(self._traj_times,
@@ -240,14 +332,19 @@ class Chassis(BaseBody):
     self._time_s = None
 
   def update_time(self):
+    """
+    TODO: Document
+    """
     self._time_s = time()
 
   def update_trajectory(self, user_commanded_knee_velocity, user_commanded_grip_velocity):
     """
     TODO: Document
 
-    :param user_commanded_knee_velocity:
-    :param user_commanded_grip_velocity:
+    :param user_commanded_knee_velocity: The knee velocity calculated from joystick or user input
+    :type user_commanded_knee_velocity:  float
+    :param user_commanded_grip_velocity: The grip velocity (x,y,z) calculated from joystick or user input
+    :type user_commanded_grip_velocity:  np.array
     """
     time_now = time()
     t = time_now - self._time_s
@@ -279,14 +376,28 @@ class Chassis(BaseBody):
 
   def integrate_step(self, dt):
     """
+    TODO: Document
     Called by Igor. User should not call this directly.
-    :param dt: integral timestep
+
+    :param dt: timestep used in integrating
+    :type dt:  float
     """
     self._hip_pitch = self._hip_pitch+self._hip_pitch_velocity*dt
 
   def update_velocity_controller(self, dt, velocities, wheel_radius,
                                  height_com, fbk_lean_angle_vel,
                                  robot_mass, fbk_lean_angle):
+    """
+    TODO: Document
+
+    :param dt:
+    :param velocities:
+    :param wheel_radius:
+    :param height_com:
+    :param fbk_lean_angle_vel:
+    :param robot_mass:
+    :param fbk_lean_angle:
+    """
     velP = Chassis.Velocity_P
     velI = Chassis.Velocity_I
     velD = Chassis.Velocity_D
@@ -342,10 +453,18 @@ class Chassis(BaseBody):
 
   @property
   def velocity_feedforward(self):
+    """
+    :return: The current velocity feedforward term
+    :rtype:  float
+    """
     return self._velocity_feedforward
 
   @property
   def lean_feedforward(self):
+    """
+    :return: The current lean feedforward term
+    :rtype:  float
+    """
     return self._lean_feedforward
 
 # ------------------------------------------------------------------------------
@@ -354,18 +473,34 @@ class Chassis(BaseBody):
 
   @property
   def velocity_error(self):
+    """
+    :return: The current velocity error of the velocity controller
+    :rtype:  float
+    """
     return self._velocity_error
 
   @property
   def velocity_error_cumulative(self):
+    """
+    :return: The current cumulative velocity error of the velocity controller
+    :rtype:  float
+    """
     return self._velocity_error_cumulative
 
   @property
   def lean_angle_error(self):
+    """
+    :return: The current lean angle error of the velocity controller
+    :rtype:  float
+    """
     return self._lean_angle_error
 
   @property
   def lean_angle_error_cumulative(self):
+    """
+    :return: The current cumulative lean angle error of the velocity controller
+    :rtype:  float
+    """
     return self._lean_angle_error_cumulative
 
 # ------------------------------------------------------------------------------
@@ -374,14 +509,26 @@ class Chassis(BaseBody):
 
   @property
   def user_commanded_directional_velocity(self):
+    """
+    :return: TODO
+    :rtype:  float
+    """
     return self._velocities[0, 1]
 
   @property
   def user_commanded_yaw_velocity(self):
+    """
+    :return: TODO
+    :rtype:  float
+    """
     return self._velocities[1, 1]
 
   @property
   def user_commanded_knee_velocity(self):
+    """
+    :return: TODO
+    :rtype:  float
+    """
     return self._velocities[2, 1]
 
 # ------------------------------------------------------------------------------
@@ -390,22 +537,59 @@ class Chassis(BaseBody):
 
   @property
   def calculated_lean_angle(self):
+    """
+    The calculated lean angle of the chassis. This is calculated by the
+    velocity PID controller and is dependent on the velocity error
+    and the lean feedforward term
+
+    TODO: check if this is actually in degrees
+    :return: The calculated lean angle (in degrees)
+    :rtype:  float
+    """
     return self._calculated_lean_angle
 
   @property
   def calculated_directional_velocity(self):
+    """
+    TODO: Document
+    TODO: What are the units here? m/s?
+
+    :return: the calculated directional velocity
+    :float:  float
+    """
     return self._velocities[0, 0]
 
   @property
   def calculated_yaw_velocity(self):
+    """
+    TODO: Document
+    TODO: What are the units here? m/s?
+
+    :return: the calculated yaw velocity
+    :float:  float
+    """
     return self._velocities[1, 0]
 
   @property
   def calculated_knee_velocity(self):
+    """
+    TODO: Document
+    TODO: What are the units here? m/s?
+
+    :return: the calculated knee velocity (in rad/s)
+    :float:  float
+    """
     return self._velocities[2, 0]
 
   @property
   def calculated_grip_velocity(self):
+    """
+    TODO: Document
+    TODO: What are the units here? m/s?
+
+    :return:
+    :float:  np.array
+    """
     return self._velocities[3:6, 0]
 
 # ------------------------------------------------------------------------------
@@ -415,6 +599,7 @@ class Chassis(BaseBody):
   def set_directional_velocity(self, velocity):
     """
     TODO: document
+
     :param velocity:
     :return:
     """
@@ -425,6 +610,7 @@ class Chassis(BaseBody):
   def set_yaw_velocity(self, velocity):
     """
     TODO: document
+
     :param velocity:
     :return:
     """
@@ -436,7 +622,20 @@ class Chassis(BaseBody):
 class Arm(PeripheralBody):
 
   damper_gains = np.matrix([1.0, 1.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float64).T
+  """
+  TODO: Document
+  """
+
   spring_gains = np.matrix([100.0, 10.0, 100.0, 0.0, 0.0, 0.0], dtype=np.float64).T
+  """
+  TODO: Document
+  """
+
+  Jacobian_Determinant_Threshold = 0.010
+  """
+  The lower threshold allowed for the determinant calculation of the jacobians.
+  Anything below this will be considered at or near a singularity.
+  """
 
   def __init__(self, val_lock, name, group_indices):
     assert name == 'Left' or name == 'Right'
@@ -487,7 +686,13 @@ class Arm(PeripheralBody):
   def integrate_step(self, dt, positions, calculated_grip_velocity):
     """
     Called by Igor. User should not call this directly.
+
     :param dt:
+    :type dt:                        float
+    :param positions:
+    :type positions:                 np.array
+    :param calculated_grip_velocity:
+    :type calculated_grip_velocity:  np.array
     """
 
     # Make end effector velocities mirrored in Y
@@ -503,7 +708,7 @@ class Arm(PeripheralBody):
     jacobian_new = robot.get_jacobian_end_effector(new_arm_joint_angs)[0:3, 0:3]
     det_J_new = abs(np.linalg.det(jacobian_new))
 
-    if (self._current_det_expected < 0.010) and (det_J_new < self._current_det_expected):
+    if (self._current_det_expected < Arm.Jacobian_Determinant_Threshold) and (det_J_new < self._current_det_expected):
       # Near singularity - don't command arm towards it
       self._joint_velocities[0:3] = 0.0
     else:
@@ -521,30 +726,77 @@ class Arm(PeripheralBody):
 
   @property
   def current_det_actual(self):
+    """
+    TODO: Document
+
+    :return:
+    :rtype:  float
+    """
     return self._current_det_actual
 
   @property
   def current_det_expected(self):
+    """
+    TODO: Document
+
+    :return:
+    :rtype:  float
+    """
     return self._current_det_expected
 
   @property
   def user_commanded_grip_velocity(self):
+    """
+    TODO: Document
+
+    :return:
+    :rtype:  float
+    """
     return self._user_commanded_grip_velocity
 
   @property
   def user_commanded_wrist_velocity(self):
+    """
+    TODO: Document
+
+    :return:
+    :rtype:  float
+    """
     return self._user_commanded_wrist_velocity
 
   @property
   def grip_position(self):
+    """
+    TODO: Document
+
+    :return:
+    :rtype:  np.array
+    """
     return self._grip_pos
 
   def update_position(self, positions, commanded_positions):
+    """
+    TODO: Document
+
+    :param positions:
+    :param commanded_positions:
+    :return:
+    """
     super(Arm, self).update_position(positions, commanded_positions)
     self._current_det_actual = np.linalg.det(self._current_j_actual[0:4, 0:4])
     self._current_det_expected = np.linalg.det(self._current_j_expected[0:4, 0:4])
 
   def update_command(self, group_command, positions, velocities, pose, soft_start):
+    """
+    TODO: Document
+
+    :param group_command:
+    :param positions:
+    :param velocities:
+    :param pose:
+    :param soft_start:
+    """
+
     commanded_positions = self._joint_angles
     commanded_velocities = self._joint_velocities
     indices = self.group_indices
@@ -577,21 +829,48 @@ class Arm(PeripheralBody):
       idx = idx + 1
 
   def set_x_velocity(self, value):
+    """
+    TODO: Document
+    TODO: What units are velocity in here? rad/s or m/s?
+
+    :param value: the x velocity of the arm
+    :type value:  float
+    """
     self.acquire_value_lock()
     self._user_commanded_grip_velocity[0] = value
     self.release_value_lock()
 
   def set_y_velocity(self, value):
+    """
+    TODO: Document
+    TODO: What units are velocity in here? rad/s or m/s?
+
+    :param value: the y velocity of the arm
+    :type value:  float
+    """
     self.acquire_value_lock()
     self._user_commanded_grip_velocity[1] = value
     self.release_value_lock()
 
   def set_z_velocity(self, value):
+    """
+    TODO: Document
+    TODO: What units are velocity in here? rad/s or m/s?
+
+    :param value: the z velocity of the arm
+    :type value:  float
+    """
     self.acquire_value_lock()
     self._user_commanded_grip_velocity[2] = value
     self.release_value_lock()
 
   def set_wrist_velocity(self, value):
+    """
+    TODO: Document
+
+    :param value: the velocity of the wrist (in rad/s)
+    :type value:  float
+    """
     self.acquire_value_lock()
     self._user_commanded_wrist_velocity = value
     self.release_value_lock()
@@ -603,8 +882,19 @@ class Leg(PeripheralBody):
   """
 
   damper_gains = np.matrix([2.0, 0.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float64).T
+  """
+  TODO: Document
+  """
+
   spring_gains = np.matrix([400.0, 0.0, 100.0, 0.0, 0.0, 0.0], dtype=np.float64).T
+  """
+  TODO: Document
+  """
+
   roll_gains = np.matrix([0.0, 0.0, 10.0, 0.0, 0.0, 0.0], dtype=np.float64).T
+  """
+  TODO: Document
+  """
 
   def __init__(self, val_lock, name, group_indices):
     assert name == 'Left' or name == 'Right'
@@ -669,13 +959,25 @@ class Leg(PeripheralBody):
 
     self._knee_velocity = knee_velocity
     self._knee_angle = self._knee_angle+knee_velocity*dt
-    self._hip_angle = np.pi/2.0+self._knee_angle/2.0
+    self._hip_angle = (np.pi+self._knee_angle)*0.5
 
   def update_position(self, positions, commanded_positions):
+    """
+    TODO: Document
+    """
     super(Leg, self).update_position(positions, commanded_positions)
     self._current_cmd_tip_fk = self._robot.get_forward_kinematics('endeffector', commanded_positions[self.group_indices])[0]
 
   def update_command(self, group_command, vel_error, roll_angle, soft_start):
+    """
+    TODO: Document
+
+    :param group_command:
+    :param vel_error:
+    :param roll_angle:
+    :param soft_start:
+    :return:
+    """
     indices = self.group_indices
     hip_idx = indices[0]
     knee_idx = indices[1]
@@ -711,116 +1013,40 @@ class Leg(PeripheralBody):
 
   @property
   def hip_angle(self):
+    """
+    TODO: Document
+    :return: The current hip position (in radians)
+    :rtype:  float
+    """
     return self._hip_angle
 
   @property
   def knee_angle(self):
+    """
+    TODO: Document
+    :return: The current knee angle (in radians)
+    :rtype:  float
+    """
     return self._knee_angle
 
   @property
   def user_commanded_knee_velocity(self):
+    """
+    TODO: Document
+    :return: (in rad/s)
+    :rtype:  float
+    """
     return self._user_commanded_knee_velocity
 
   def set_knee_velocity(self, vel):
+    """
+    TODO: Document
+    :param vel: (in rad/s)
+    :type vel:  float
+    """
     self.acquire_value_lock()
     self._user_commanded_knee_velocity = vel
     self.release_value_lock()
-
-
-# ------------------------------------------------------------------------------
-# Helper Functions for Igor class
-# ------------------------------------------------------------------------------
-
-
-def on_error_find_joystick(group, command):
-  command.led.color = 'white'
-  group.send_command(command)
-  sleep(0.1)
-  command.led.color = 'magenta'
-  group.send_command(command)
-  sleep(0.1)
-
-
-def get_first_joystick():
-  for i in range(Joystick.joystick_count()):
-    try:
-      return Joystick.at_index(i)
-    except:
-      pass
-
-
-def set_command_subgroup_pve(group_command, pos, vel, effort, indices):
-  """
-  Set position, velocity, and effort for certain modules in a group
-
-  :param group_command:
-  :param pos:
-  :param vel:
-  :param effort:
-  :param indices:
-  :return:
-  """
-  idx = 0
-  if effort is None:
-    for i in indices:
-      cmd = group_command[i]
-      cmd.position = pos[idx]
-      cmd.velocity = vel[idx]
-      idx = idx + 1
-  else:
-    for i in indices:
-      cmd = group_command[i]
-      cmd.position = pos[idx]
-      cmd.velocity = vel[idx]
-      cmd.effort = effort[idx]
-      idx = idx + 1
-
-
-def create_group(config, has_camera):
-  """
-  Used by :class:`Igor` to create the group to interface with modules
-
-  :param config: The runtime configuration
-  :type config:  Igor2Config
-  :param has_camera: 
-  :type has_camera:  bool
-  """
-  imitation = config.is_imitation
-
-  if imitation:
-    if has_camera:
-      num_modules = len(config.module_names)
-    else:
-      num_modules = len(config.module_names_no_cam)
-
-    from hebi.util import create_imitation_group
-    return create_imitation_group(num_modules)
-  else:
-    if has_camera:
-      names = config.module_names
-    else:
-      names = config.module_names_no_cam
-    families = [config.family]
-    lookup = hebi.Lookup()
-
-    def connect():
-      group = lookup.get_group_from_names(families, names)
-      if group == None:
-        raise RuntimeError()
-      elif group.size != len(names):
-        raise RuntimeError()
-      return group
-
-    # Let the lookup object discover modules, before trying to connect
-    sleep(2.0)
-    return DemoUtils.retry_on_error(connect)
-
-
-# Used for Igor background controller thread
-if sys.version_info[0] == 3:
-  is_main_thread_active = lambda: threading.main_thread().is_alive()
-else:
-  is_main_thread_active = lambda: any((i.name == "MainThread") and i.is_alive() for i in threading.enumerate())
 
 
 # ------------------------------------------------------------------------------
@@ -837,20 +1063,17 @@ from . import demo_gui
 class Igor(object):
 
   Lean_P = 1.0
+  """
+  The 
+  """
+
   Lean_I = 20.0
+  """
+  """
+
   Lean_D = 10.0
-
-# ------------------------------------------------
-# Temp Props
-# ------------------------------------------------
-
-# chassis.velocity_feedforward
-# chassis.lean_angle_error
-# chassis.lean_angle_error_cumulative
-# chassis.calculated_directional_velocity
-# chassis.calculated_yaw_velocity
-# chassis.calculated_knee_velocity
-# chassis.calculated_grip_velocity
+  """
+  """
 
   @property
   def roll_angle(self):
@@ -1036,6 +1259,9 @@ class Igor(object):
 # ------------------------------------------------
 
   def _soft_startup(self):
+    """
+    TODO: Document
+    """
     l_arm = self._left_arm
     r_arm = self._right_arm
     l_leg = self._left_leg
@@ -1110,10 +1336,10 @@ class Igor(object):
 
   def _spin_once(self, bc):
     """
+    TODO: Document
 
-    :param bc:
+    :param bc: Denotes whether the balance controller is enabled at this time
     :type bc:  bool
-    :return:
     """
     self._group_feedback = self._group.get_next_feedback(reuse_fbk=self._group_feedback)
     group_feedback = self._group_feedback
@@ -1261,7 +1487,7 @@ class Igor(object):
       # We have `_state_lock` at this point. Access fields here before releasing lock
       bc = self._balance_controller_enabled
       self._state_lock.release()
-      self._spin_once(not bc) # Swap for now
+      self._spin_once(bc)
       self._state_lock.acquire()
 
     self._stop()
@@ -1269,42 +1495,6 @@ class Igor(object):
 # ------------------------------------------------
 # Initialization functions
 # ------------------------------------------------
-
-  def _find_joystick(self):
-    group = self._group
-    group_command = hebi.GroupCommand(group.size)
-
-    if self._config.is_imitation:
-      joy = DemoUtils.retry_on_error(get_first_joystick)
-    else:
-      on_error = funpart(on_error_find_joystick, group, group_command)
-      joy = DemoUtils.retry_on_error(get_first_joystick, on_error)
-
-    self._joy = joy
-
-  def _load_gains(self):
-    group = self._group
-
-    # Bail out if group is imitation
-    if self._config.is_imitation:
-      return
-
-    gains_command = hebi.GroupCommand(group.size)
-    sleep(0.1)
-
-    try:
-      if self._has_camera:
-        gains_command.read_gains(self._config.gains_xml)
-      else:
-        gains_command.read_gains(self._config.gains_no_camera_xml)
-    except Exception as e:
-      print('Warning: Could not load gains\nException: {0}'.format(e))
-      return
-
-    # Send gains multiple times
-    for i in range(3):
-      group.send_command(gains_command)
-      sleep(0.1)
 
   def __init__(self, has_camera=False, config=None):
     if config == None:
@@ -1432,7 +1622,7 @@ class Igor(object):
     if self._started:
       self._state_lock.release()
       return
-    
+
     group = create_group(self._config, self._has_camera)
     group.command_lifetime = 500
     group.feedback_frequency = 100.0
@@ -1442,8 +1632,8 @@ class Igor(object):
     self._group_feedback = hebi.GroupFeedback(group.size)
     self._group_info = hebi.GroupInfo(group.size)
 
-    self._find_joystick()
-    self._load_gains()
+    self._joy = find_joystick(self)
+    load_gains(self)
 
     from threading import Condition, Lock, Thread
     start_condition = Condition(Lock())
@@ -1467,7 +1657,7 @@ class Igor(object):
     
     # We will have started the thread before returning,
     # but make sure the function has begun running before
-    # we release the `__state_lock` and return
+    # we release the `_state_lock` and return
     start_condition.acquire()
     self._proc_thread.start()
     start_condition.wait()
@@ -1522,19 +1712,43 @@ class Igor(object):
 # ------------------------------------------------
 
   @property
+  def config(self):
+    """
+    The configuration of this Igor instance
+    :rtype: Igor2Config
+    """
+    return self._config
+
+  @property
   def group(self):
+    """
+    The HEBI group containing the Igor modules
+    """
     return self._group
 
   @property
   def joystick_dead_zone(self):
+    """
+    The deadzone of the joystick used to control Igor
+    TODO: Document
+    :rtype: float
+    """
     return self._joy_dead_zone
 
   @property
   def has_camera(self):
+    """
+    TODO: Document
+    :rtype: bool
+    """
     return self._has_camera
 
   @property
   def started(self):
+    """
+    TODO: Document
+    :rtype: bool
+    """
     self._state_lock.acquire()
     val = self._started
     self._state_lock.release()
@@ -1542,33 +1756,65 @@ class Igor(object):
 
   @property
   def wheel_radius(self):
+    """
+    The radius (in meters) of the wheels on this Igor instance
+    :rtype: float
+    """
     return self._wheel_radius
 
   @property
   def wheel_base(self):
+    """
+    TODO: Document
+    :rtype: float
+    """
     return self._wheel_base
 
   @property
   def mass(self):
+    """
+    The total weight (in kilograms) of this Igor instance
+    :rtype: float
+    """
     return self._mass
 
   @property
   def left_arm(self):
+    """
+    TODO: Document
+    :rtype: Arm
+    """
     return self._left_arm
 
   @property
   def right_arm(self):
+    """
+    TODO: Document
+    :rtype: Arm
+    """
     return self._right_arm
 
   @property
   def left_leg(self):
+    """
+    TODO: Document
+    :rtype: Leg
+    """
     return self._left_leg
 
   @property
   def right_leg(self):
+    """
+    TODO: Document
+    :rtype: Leg
+    """
     return self._right_leg
 
   @property
   def chassis(self):
+    """
+    TODO: Document
+    :rtype: Chassis
+    """
     return self._chassis
 

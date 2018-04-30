@@ -1,7 +1,8 @@
+from hebi import GroupCommand
+from time import sleep
 
 
 def retry_on_error(func, on_error_func=None, sleep_time=0.1):
-  from time import sleep
   while True:
     try:
       ret = func()
@@ -13,7 +14,6 @@ def retry_on_error(func, on_error_func=None, sleep_time=0.1):
 
 
 def send_gains(group, gains_file):
-  from hebi import GroupCommand
   command = GroupCommand(group.size)
   command.read_gains(gains_file)
 
@@ -21,9 +21,7 @@ def send_gains(group, gains_file):
   prev_freq = group.feedback_frequency
   group.feedback_frequency = 0
 
-  from time import sleep
   sleep(0.25)
-
   for i in range(5):
     group.send_command(command)
     sleep(0.1)

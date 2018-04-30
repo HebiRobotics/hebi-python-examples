@@ -379,15 +379,15 @@ def register_igor_event_handlers(igor, joystick):
   # Camera specific event handlers
 
   if igor.has_camera:
-    # TODO
+    # TODO: implement
     def c_set_cam(ts, pressed):
-      print('camera position ---> 1.4')
+      pass
     def sq_set_cam(ts, pressed):
-      print('camera position ---> 0.0')
+      pass
     def t_set_cam(ts, pressed):
-      print('camera velocity ---> -0.6')
+      pass
     def x_set_cam(ts, pressed):
-      print('camera velocity ---> 0.6')
+      pass
 
     joystick.add_button_event_handler('CIRCLE', c_set_cam)
     joystick.add_button_event_handler('SQUARE', sq_set_cam)
