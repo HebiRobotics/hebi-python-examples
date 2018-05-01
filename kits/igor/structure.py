@@ -1053,7 +1053,7 @@ class Leg(PeripheralBody):
 # Debugging stuff
 # ------------------------------------------------------------------------------
 
-from . import demo_gui
+#from . import demo_gui
 
 # ------------------------------------------------------------------------------
 # Igor Class
@@ -1455,7 +1455,7 @@ class Igor(object):
 
     ####
     # Debugging
-    demo_gui.request_update()
+    #demo_gui.request_update()
     ####
 
     self._group.send_command(group_command)
@@ -1481,6 +1481,11 @@ class Igor(object):
     else:
       # TODO
       print('Shutting down Igor...')
+      duration = self._stop_time - self._start_time
+      tics = float(self._num_spins)
+      avg_frequency = tics/duration
+      print('Ran for: {0} seconds.'.format(duration))
+      print('Average processing frequency: {0} Hz'.format(avg_frequency))
 
   def _start(self):
     """
@@ -1501,8 +1506,10 @@ class Igor(object):
       bc = self._balance_controller_enabled
       self._state_lock.release()
       self._spin_once(bc)
+      self._num_spins = self._num_spins + 1
       self._state_lock.acquire()
 
+    self._stop_time = time()
     self._stop()
 
 # ------------------------------------------------
@@ -1554,6 +1561,8 @@ class Igor(object):
     value_lock = Lock()
     self._value_lock = value_lock
     self._start_time = -1.0
+    self._stop_time = -1.0
+    self._num_spins = 0
 
     # ---------------------
     # Kinematic body fields
