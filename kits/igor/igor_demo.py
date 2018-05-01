@@ -1,4 +1,20 @@
-from .structure import Igor
+if __name__ == "__main__":
+  # Load parent modules
+  import os, sys
+  here = os.path.dirname(os.path.abspath(__file__))
+  parent = os.path.join(here, '..', '..')
+  sys.path = [parent] + sys.path
+
+  from importlib import import_module
+  import_module('kits')
+
+  from kits.util import Joystick
+  from kits.igor.structure import Igor
+
+else:
+  from .structure import Igor
+  from ..util import Joystick
+
 
 igor = Igor()
 global keep_running
@@ -11,7 +27,7 @@ def stop_running_callback(*args):
 
 igor.start()
 
-from ..util import Joystick
+
 
 joy = None
 for i in range(Joystick.joystick_count()):
