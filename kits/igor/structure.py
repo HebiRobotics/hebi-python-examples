@@ -239,14 +239,14 @@ class PeripheralBody(BaseBody):
 
     robot = self._robot
     #coms = robot.get_forward_kinematics('com', positions)
-    coms = [np.identity(4, np.float64)] * robot.get_frame_count('com')
+    coms = [np.asmatrix(np.identity(4, np.float64))] * robot.get_frame_count('com')
     #fk = robot.get_forward_kinematics('output', positions)
-    fk = [np.identity(4, np.float64)] * robot.get_frame_count('output')
+    fk = [np.asmatrix(np.identity(4, np.float64))] * robot.get_frame_count('output')
     tip_fk = fk[-1]
     #jacobian_actual = robot.get_jacobian_end_effector(positions)
-    jacobian_actual = np.zeros((6, robot.dof_count))
+    jacobian_actual = np.asmatrix(np.zeros((6, robot.dof_count)))
     #jacobian_expected = robot.get_jacobian_end_effector(commanded_positions)
-    jacobian_expected = np.zeros((6, robot.dof_count))
+    jacobian_expected = np.asmatrix(np.zeros((6, robot.dof_count)))
 
     masses_t = self._masses_t
     xyz = np.squeeze([entry[0:3, 3] for entry in coms]).T
