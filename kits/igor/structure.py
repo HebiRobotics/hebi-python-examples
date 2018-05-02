@@ -77,6 +77,10 @@ class PeripheralBody(BaseBody):
       super(PeripheralBody, self).__init__(val_lock)
 
     self._group_indices = group_indices
+    self._fbk_position = np.empty(len(group_indices), dtype=np.float64)
+    self._fbk_position_cmd = np.empty(len(group_indices), dtype=np.float64)
+    self._fbk_velocity = np.empty(len(group_indices), dtype=np.float32)
+
     self._name = name
     self._kin = hebi.robot_model.RobotModel()
     self._home_angles = None
@@ -172,6 +176,11 @@ class PeripheralBody(BaseBody):
     """
     return self._current_j_expected
 
+  def on_feedback_received(self, position, position_command, velocity):
+    np.copyto(self._fbk_position, position[self._group_indices])
+    np.copyto(self._fbk_position_cmd, position_command[self._group_indices])
+    np.copyto(self._fbk_velocity, velocity[self._group_indices])
+
   def get_grav_comp_efforts(self, positions, gravity):
     """
     TODO: Document
@@ -217,14 +226,14 @@ class PeripheralBody(BaseBody):
     times = np.array([0.0, duration], dtype=np.float64)
     pos = np.empty(dim, dtype=np.float64)
     vel = np.zeros(dim, dtype=np.float64)
-    accel = np.zeros(dim, dtype=np.float64)
+    accel = vel
 
     pos[:, 0] = current_positions
     pos[:, 1] = home_angles
 
     return hebi.trajectory.create_trajectory(times, pos, vel, accel)
 
-  def update_position(self, positions, commanded_positions):
+  def update_position(self):
     """
     Upate kinematics from feedback
     TODO: document and CLEAN UP
@@ -234,19 +243,15 @@ class PeripheralBody(BaseBody):
     :param commanded_positions: TODO
     :type commanded_positions:  np.array
     """
-    positions = positions[self._group_indices]
-    commanded_positions = commanded_positions[self._group_indices]
+    positions = self._fbk_position
+    commanded_positions = self._fbk_position_cmd
 
     robot = self._robot
-    #coms = robot.get_forward_kinematics('com', positions)
-    coms = [np.asmatrix(np.identity(4, np.float64))] * robot.get_frame_count('com')
-    #fk = robot.get_forward_kinematics('output', positions)
-    fk = [np.asmatrix(np.identity(4, np.float64))] * robot.get_frame_count('output')
+    coms = robot.get_forward_kinematics('com', positions)
+    fk = robot.get_forward_kinematics('output', positions)
     tip_fk = fk[-1]
-    #jacobian_actual = robot.get_jacobian_end_effector(positions)
-    jacobian_actual = np.asmatrix(np.zeros((6, robot.dof_count)))
-    #jacobian_expected = robot.get_jacobian_end_effector(commanded_positions)
-    jacobian_expected = np.asmatrix(np.zeros((6, robot.dof_count)))
+    jacobian_actual = robot.get_jacobian_end_effector(positions)
+    jacobian_expected = robot.get_jacobian_end_effector(commanded_positions)
 
     masses_t = self._masses_t
     xyz = np.squeeze([entry[0:3, 3] for entry in coms]).T
@@ -778,7 +783,7 @@ class Arm(PeripheralBody):
     """
     return self._grip_pos
 
-  def update_position(self, positions, commanded_positions):
+  def update_position(self):
     """
     TODO: Document
 
@@ -786,7 +791,7 @@ class Arm(PeripheralBody):
     :param commanded_positions:
     :return:
     """
-    super(Arm, self).update_position(positions, commanded_positions)
+    super(Arm, self).update_position()
     self._current_det_actual = np.linalg.det(self._current_j_actual[0:4, 0:4])
     self._current_det_expected = np.linalg.det(self._current_j_expected[0:4, 0:4])
 
@@ -965,12 +970,12 @@ class Leg(PeripheralBody):
     self._knee_angle = self._knee_angle+knee_velocity*dt
     self._hip_angle = (np.pi+self._knee_angle)*0.5
 
-  def update_position(self, positions, commanded_positions):
+  def update_position(self):
     """
     TODO: Document
     """
-    super(Leg, self).update_position(positions, commanded_positions)
-    self._current_cmd_tip_fk = self._robot.get_forward_kinematics('endeffector', commanded_positions[self.group_indices])[0]
+    super(Leg, self).update_position()
+    self._current_cmd_tip_fk = self._robot.get_forward_kinematics('endeffector', self._fbk_position_cmd)[0]
 
   def update_command(self, group_command, vel_error, roll_angle, soft_start):
     """
@@ -1151,10 +1156,10 @@ class Igor(object):
     l_leg = self._left_leg
     r_leg = self._right_leg
 
-    l_arm.update_position(positions, commanded_positions)
-    r_arm.update_position(positions, commanded_positions)
-    l_leg.update_position(positions, commanded_positions)
-    r_leg.update_position(positions, commanded_positions)
+    l_arm.update_position()
+    r_arm.update_position()
+    l_leg.update_position()
+    r_leg.update_position()
 
     coms = self._coms
     coms[0:3, 0] = l_leg.com
@@ -1202,24 +1207,25 @@ class Igor(object):
     imu_frames[13] = r_arm.current_fk[5]
 
     q_rot = np.empty((3, 3), dtype=np.float64)
-    rpy = np.empty(3, dtype=np.float64)
     rpy_modules = self._rpy
+    pose_tmp = self._pose_tmp
+    quaternion_tmp = self._quaternion_tmp
 
     for i in range(14):
       imu_frame = imu_frames[i][0:3, 0:3]
       # numpy arrays and matrices are different types, and you can't simply do
       # np_matrix * np_array
       # `np.inner` supports exactly what we are trying to do, though
-      self._pose_gyros[0:3, i] = np.inner(imu_frame, self._pose_gyros[0:3, i])
-      quaternion = orientation[i, 0:4]
-      if math_func.any_nan(quaternion):
+      np.dot(imu_frame, self._pose_gyros[0:3, i], out=pose_tmp)
+      self._pose_gyros[0:3, i] = pose_tmp
+      np.copyto(quaternion_tmp, orientation[i, 0:4])
+      if math_func.any_nan(quaternion_tmp):
         rpy_modules[0:3, i] = np.nan
       else:
         # rotation matrix transpose is same as inverse since `rot` is in SO(3)
-        q_rot = math_func.quat2rot(quaternion, q_rot)
-        q_rot = q_rot*imu_frame.T
-        rpy = math_func.rot2ea(q_rot, rpy)
-        rpy_modules[0:3, i] = rpy
+        math_func.quat2rot(quaternion_tmp, q_rot)
+        np.matmul(q_rot, imu_frame.T, out=q_rot)
+        math_func.rot2ea(q_rot, rpy_modules[0:3, i])
 
     self._pose_gyros_mean = np.nanmean(self._pose_gyros[:, self._imu_modules], axis=1)
 
@@ -1245,7 +1251,7 @@ class Igor(object):
     self._pitch_angle = math.degrees(pitch_angle)
 
     T_pose = self._pose_transform
-    T_pose[0:3, 0:3] = self._pitch_rot * self._roll_rot
+    np.matmul(self._pitch_rot, self._roll_rot, out=self._T_pose_rot)
 
     # rad/s
     self._feedback_lean_angle_velocity = self._pose_gyros_mean[1]
@@ -1253,23 +1259,27 @@ class Igor(object):
     # NOTE: MATLAB `leanR` is `self._pitch_rot` here
 
     # Gets the translation vector of the Legs' current end effectors
-    l_leg_t = self._left_leg.current_tip_fk[0:3, 3]
-    r_leg_t = self._right_leg.current_tip_fk[0:3, 3]
-    ground_point = (l_leg_t+r_leg_t)*0.5
-    line_com = np.inner(self._pitch_rot, self._com-ground_point.A1)
-    self._height_com = np.linalg.norm(line_com)
-    self._feedback_lean_angle = math.degrees(math.atan2(line_com[0], line_com[2]))
+    np.add(self._left_leg.current_tip_fk[0:3, 3].A1,
+           self._left_leg.current_tip_fk[0:3, 3].A1,
+           out=self._ground_point)
+    np.multiply(self._ground_point, 0.5, out=self._ground_point)
+    np.dot(self._pitch_rot,
+             np.subtract(self._com, self._ground_point),
+             out=self._line_com)
+    self._height_com = np.linalg.norm(self._line_com)
+    self._feedback_lean_angle = math.degrees(math.atan2(self._line_com[0], self._line_com[2]))
 
     # Update Igor center of mass
-    self._com = np.inner(T_pose[0:3, 0:3], self._com)
+    np.dot(self._T_pose_rot, self._com, out=self._com)
 
+    T_pose[0:3, 0:3] = self._T_pose_rot
     l_leg_coms = self._left_leg.current_coms
     r_leg_coms = self._right_leg.current_coms
     # Update CoM of legs based on current pose estimate from calculated lean angle
     for i in range(len(l_leg_coms)):
-      l_leg_coms[i] = T_pose*l_leg_coms[i]
+      np.matmul(T_pose, l_leg_coms[i], out=l_leg_coms[i])
     for i in range(len(r_leg_coms)):
-      r_leg_coms[i] = T_pose*r_leg_coms[i]
+      np.matmul(T_pose, r_leg_coms[i], out=r_leg_coms[i])
 
 # ------------------------------------------------
 # Actions
@@ -1293,12 +1303,14 @@ class Igor(object):
     group_feedback = self._group_feedback
     group_command = self._group_command
 
+    positions = self._current_position
+
     group.send_feedback_request()
     group_feedback = group.get_next_feedback(reuse_fbk=group_feedback)
     self._group_feedback = group_feedback
 
     self._time_last[:] = group_feedback.receive_time
-    positions = group_feedback.position
+    group_feedback.get_position(positions)
 
     l_arm_t = l_arm.create_home_trajectory(positions)
     r_arm_t = r_arm.create_home_trajectory(positions)
@@ -1339,11 +1351,9 @@ class Igor(object):
 
       # Scale effort
       group_command.effort = soft_start*group_command.effort
-      #show_command(group_cmd, t)
       group.send_command(group_command)
-      #group.send_feedback_request()
       group_feedback = group.get_next_feedback(reuse_fbk=group_feedback)
-      positions = group_feedback.position
+      group_feedback.get_position(positions)
       t = time()-start_time
 
     self._time_last[:] = group_feedback.receive_time
@@ -1386,6 +1396,11 @@ class Igor(object):
     group_feedback.get_velocity(velocities)
     group_feedback.get_velocity_command(velocity_commands)
     np.subtract(velocity_commands, velocities, out=velocity_error)
+
+    self._left_leg.on_feedback_received(positions, commanded_positions, velocities)
+    self._right_leg.on_feedback_received(positions, commanded_positions, velocities)
+    self._left_arm.on_feedback_received(positions, commanded_positions, velocities)
+    self._right_arm.on_feedback_received(positions, commanded_positions, velocities)
 
     # TODO: cache these too
     gyro = group_feedback.gyro
@@ -1638,7 +1653,13 @@ class Igor(object):
     self._feedback_lean_angle_velocity = 0.0
     # These are used for chassis velocity controller
     self._height_com = 0.0
+    self._line_com = np.empty(3, dtype=np.float64)
+    self._ground_point = np.empty(3, dtype=np.float64)
     self._feedback_lean_angle = 0.0
+
+    self._pose_tmp = np.empty(3, dtype=np.float64)
+    self._quaternion_tmp = np.empty(4, dtype=np.float64)
+    self._T_pose_rot = np.empty((3, 3), dtype=np.float64)
 
     # --------------------------
     # Cached fields for feedback
