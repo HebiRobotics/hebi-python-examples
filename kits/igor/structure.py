@@ -702,7 +702,7 @@ class Arm(PeripheralBody):
     self._joint_efforts = np.zeros(4, np.float32)
     self._user_commanded_wrist_velocity = 0.0
 
-    self._grav_comp_torque = np.zeros((len(group_indices), 1))
+    self._grav_comp_torque = np.zeros((len(group_indices), 1), np.float64)
 
     # Additionally, calculate determinant of jacobians
     self._current_det_actual = None
@@ -1226,6 +1226,7 @@ class Igor(object):
     np.copyto(imu_frames[13], r_arm.current_fk[5])
 
     q_rot = np.empty((3, 3), dtype=np.float64)
+    rpy = np.empty(3, dtype=np.float64)
     rpy_modules = self._rpy
     pose_tmp = self._pose_tmp
     quaternion_tmp = self._quaternion_tmp
