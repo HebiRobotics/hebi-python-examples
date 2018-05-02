@@ -196,17 +196,15 @@ def rot2ea(R, output=None):
   else:
     output[0:3] = np.nan
     return output
-    #x = atan2(-R[1, 2], R[1, 1])
-    #y = atan2(-R[2, 0], sy)
-    #z = 0
 
   pi = np.pi
+  n_pi2 = pi*-2.0
   if x > pi:
-    x = x-2*pi
+    x = x+n_pi2
   if y > pi:
-    y = y-2*pi
+    y = y+n_pi2
   if z > pi:
-    z = z-2*pi
+    z = z+n_pi2
 
   output[0] = x
   output[1] = y
@@ -214,7 +212,7 @@ def rot2ea(R, output=None):
   return output
 
 
-def get_grav_comp_efforts(robot, positions, gravity):
+def get_grav_comp_efforts(robot, positions, gravity, output=None):
   """
   TODO: Document
 
@@ -230,7 +228,10 @@ def get_grav_comp_efforts(robot, positions, gravity):
     gravity = gravity/g_norm*9.81
 
   jacobians = robot.get_jacobians('CoM', positions)
-  comp_torque = np.zeros((robot.dof_count, 1))
+  if output is None:
+    comp_torque = np.zeros((robot.dof_count, 1))
+  else:
+    comp_torque = output
   wrench = np.zeros(6)
   num_frames = robot.get_frame_count('CoM')
 
@@ -241,7 +242,8 @@ def get_grav_comp_efforts(robot, positions, gravity):
     wrench[0:3] = gravity*masses[i]
     comp_torque += jacobians[i].T*np.reshape(wrench, (6, 1))
 
-  return np.squeeze(comp_torque)
+  ret = np.squeeze(comp_torque)
+  return ret
 
 
 def get_dynamic_comp_efforts(fbk_positions, cmd_positions, cmd_velocities, cmd_accels, robot, dt=1e-3):
