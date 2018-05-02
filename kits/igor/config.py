@@ -7,7 +7,7 @@ class Igor2Config(object):
   TODO: Add ability to select Joystick
   """
 
-  def __init__(self, imitation=False):
+  def __init__(self, imitation=True):
     self.__module_names = ['wheel1', 'wheel2',
                            'hip1', 'knee1',
                            'hip2', 'knee2',
