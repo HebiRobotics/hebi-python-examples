@@ -841,7 +841,6 @@ class Arm(PeripheralBody):
     np.multiply(Arm.damper_gains, self._vel_error, out=self._vel_error)
     np.add(self._pos_error, self._vel_error, out=self._impedance_err)
     np.dot(self.current_j_actual.T, self._impedance_err, out=self._impedance_torque)
-    #math_func.get_grav_comp_efforts(self._robot, positions, -pose[2, 0:3], self._grav_comp_torque)
     np.copyto(self._grav_comp_torque.ravel(), math_func.get_grav_comp_efforts(self._robot, positions, -pose[2, 0:3]))
 
     np.multiply(soft_start, self._impedance_torque.ravel(), out=self._joint_efforts)
@@ -1280,7 +1279,7 @@ class Igor(object):
 
     # Gets the translation vector of the Legs' current end effectors
     np.add(self._left_leg.current_tip_fk[0:3, 3].A1,
-           self._left_leg.current_tip_fk[0:3, 3].A1,
+           self._right_leg.current_tip_fk[0:3, 3].A1,
            out=self._ground_point)
     np.multiply(self._ground_point, 0.5, out=self._ground_point)
     np.dot(self._pitch_rot,
