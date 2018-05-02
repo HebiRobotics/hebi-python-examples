@@ -1060,6 +1060,17 @@ class Leg(PeripheralBody):
 # ------------------------------------------------------------------------------
 
 
+import threading
+import cProfile
+class ProfiledThread(threading.Thread):
+  def run(self):
+    profiler = cProfile.Profile()
+    try:
+      return profiler.runcall(threading.Thread.run, self)
+    finally:
+      profiler.dump_stats('igor-procthread-%d.profile' % (self.ident,))
+
+
 class Igor(object):
 
   Lean_P = 1.0
@@ -1682,7 +1693,7 @@ class Igor(object):
 
       self._start()
 
-    self._proc_thread = Thread(target=start_routine, name='Igor II Controller',
+    self._proc_thread = ProfiledThread(target=start_routine, name='Igor II Controller',
                                 args = (start_condition,))
     
     # We will have started the thread before returning,
