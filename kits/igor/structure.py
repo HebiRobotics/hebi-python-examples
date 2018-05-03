@@ -9,6 +9,7 @@ from .igor_utils import (create_group, find_joystick, is_main_thread_active,
 
 # kits.util._internal.type_utils
 from ..util._internal.type_utils import assert_instance, assert_length, assert_type
+from ..util._internal.Analytics import ProfiledThread
 from ..util import math_func
 import hebi
 
@@ -850,9 +851,10 @@ class Arm(PeripheralBody):
     # Send commands
     idx = 0
     for i in self.group_indices:
-      group_command[i].position = commanded_positions[idx]
-      group_command[i].velocity = commanded_velocities[idx]
-      group_command[i].effort = effort[idx]
+      cmd = group_command[i]
+      cmd.position = commanded_positions[idx]
+      cmd.velocity = commanded_velocities[idx]
+      cmd.effort = effort[idx]
       idx = idx + 1
 
   def set_x_velocity(self, value):
@@ -1088,17 +1090,6 @@ class Leg(PeripheralBody):
 # ------------------------------------------------------------------------------
 
 
-import threading
-import cProfile
-class ProfiledThread(threading.Thread):
-  def run(self):
-    profiler = cProfile.Profile()
-    try:
-      return profiler.runcall(threading.Thread.run, self)
-    finally:
-      profiler.dump_stats('igor-procthread-%d.profile' % (self.ident,))
-
-
 class Igor(object):
 
   Lean_P = 1.0
@@ -1211,7 +1202,7 @@ class Igor(object):
     # Update imu frames
     # Leg end effectors
     np.copyto(imu_frames[0], l_leg.current_tip_fk)
-    np.copyto(imu_frames[1] , r_leg.current_tip_fk)
+    np.copyto(imu_frames[1], r_leg.current_tip_fk)
     # Hip link output frames
     np.copyto(imu_frames[3], l_leg.current_fk[1])
     np.copyto(imu_frames[5], r_leg.current_fk[1])
@@ -1346,17 +1337,20 @@ class Igor(object):
 
     left_knee = 0.0
     right_knee = 0.0
+    soft_start_scale = 1.0/3.0
 
     while t < 3.0:
       # Limit commands initially
-      soft_start = min(t/3.0, 1.0)
+      soft_start = min(t*soft_start_scale, 1.0)
 
       grav_comp_efforts = l_arm.get_grav_comp_efforts(positions, gravity)
       pos, vel, accel = l_arm_t.get_state(t)
+      np.multiply(grav_comp_efforts, soft_start, out=grav_comp_efforts)
       set_command_subgroup_pve(group_command, pos, vel, grav_comp_efforts, l_arm_i)
 
       grav_comp_efforts = r_arm.get_grav_comp_efforts(positions, gravity)
       pos, vel, accel = r_arm_t.get_state(t)
+      np.multiply(grav_comp_efforts, soft_start, out=grav_comp_efforts)
       set_command_subgroup_pve(group_command, pos, vel, grav_comp_efforts, r_arm_i)
 
       pos, vel, accel = l_leg_t.get_state(t)
@@ -1368,7 +1362,6 @@ class Igor(object):
       right_knee = pos[1]
 
       # Scale effort
-      group_command.effort = soft_start*group_command.effort
       group.send_command(group_command)
       group_feedback = group.get_next_feedback(reuse_fbk=group_feedback)
       group_feedback.get_position(positions)
@@ -1475,6 +1468,9 @@ class Igor(object):
       effort = p_effort*soft_start
       l_wheel.effort = effort
       r_wheel.effort = -effort
+    else:
+      group_command[0].effort = None
+      group_command[1].effort = None
 
     # --------------------------------
     # Wheel Commands
@@ -1509,9 +1505,9 @@ class Igor(object):
     ####
 
     self._group.send_command(group_command)
-    group_command.position = None
-    group_command.velocity = None
-    group_command.effort = None
+    #group_command.position = None
+    #group_command.velocity = None
+    #group_command.effort = None
 
 # ------------------------------------------------
 # Lifecycle functions
@@ -1739,8 +1735,15 @@ class Igor(object):
 
       self._start()
 
-    self._proc_thread = ProfiledThread(target=start_routine, name='Igor II Controller',
-                                args = (start_condition,))
+    import os
+    if 'HEBI_PROFILE' in os.environ:
+      self._proc_thread = ProfiledThread(target=start_routine,
+                                         name='Igor II Controller',
+                                         args = (start_condition,))
+    else:
+      self._proc_thread = Thread(target=start_routine,
+                                 name='Igor II Controller',
+                                 args=(start_condition,))
     
     # We will have started the thread before returning,
     # but make sure the function has begun running before
