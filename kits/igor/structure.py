@@ -1270,7 +1270,6 @@ class Igor(object):
     self._roll_angle = math.degrees(roll_angle)
     self._pitch_angle = math.degrees(pitch_angle)
 
-    T_pose = self._pose_transform
     np.matmul(self._pitch_rot, self._roll_rot, out=self._T_pose_rot)
 
     # rad/s
@@ -1282,24 +1281,23 @@ class Igor(object):
     np.add(self._left_leg.current_tip_fk[0:3, 3].A1,
            self._right_leg.current_tip_fk[0:3, 3].A1,
            out=self._ground_point)
-    np.multiply(self._ground_point, 0.5, out=self._ground_point)
-    np.dot(self._pitch_rot,
-             np.subtract(self._com, self._ground_point),
-             out=self._line_com)
+    self._ground_point *= 0.5
+    np.subtract(self._com, self._ground_point, out=self._line_com)
+    np.dot(self._pitch_rot, self._line_com, out=self._line_com)
     self._height_com = np.linalg.norm(self._line_com)
     self._feedback_lean_angle = math.degrees(math.atan2(self._line_com[0], self._line_com[2]))
 
     # Update Igor center of mass
     np.dot(self._T_pose_rot, self._com, out=self._com)
 
-    T_pose[0:3, 0:3] = self._T_pose_rot
+    self._pose_transform[0:3, 0:3] = self._T_pose_rot
     l_leg_coms = self._left_leg.current_coms
     r_leg_coms = self._right_leg.current_coms
     # Update CoM of legs based on current pose estimate from calculated lean angle
     for i in range(len(l_leg_coms)):
-      np.matmul(T_pose, l_leg_coms[i], out=l_leg_coms[i])
+      np.matmul(self._pose_transform, l_leg_coms[i], out=l_leg_coms[i])
     for i in range(len(r_leg_coms)):
-      np.matmul(T_pose, r_leg_coms[i], out=r_leg_coms[i])
+      np.matmul(self._pose_transform, r_leg_coms[i], out=r_leg_coms[i])
 
 # ------------------------------------------------
 # Actions
@@ -1399,7 +1397,8 @@ class Igor(object):
     if self._config.is_imitation:
       dt = 0.01
     else:
-      dt = np.mean(rx_time-self._time_last)
+      np.subtract(rx_time, self._time_last, out=self._diff_time)
+      dt = np.mean(self._diff_time)
 
     np.copyto(self._time_last, rx_time)
 
@@ -1609,6 +1608,7 @@ class Igor(object):
     self._quit_flag = False
     self._restart_flag = False
     self._time_last = np.empty(num_dofs, dtype=np.float64)
+    self._diff_time = np.empty(num_dofs, dtype=np.float64)
     value_lock = Lock()
     self._value_lock = value_lock
     self._start_time = -1.0
