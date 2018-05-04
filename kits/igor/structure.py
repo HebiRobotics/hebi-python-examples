@@ -1644,10 +1644,10 @@ class Igor(object):
     # Cached fields for pose estimation
     imu_frames = [np.identity(4,dtype=np.float64)]*15
     # These frames are constant
-    imu_frames[2] = l_leg._robot.base_frame
-    imu_frames[4] = r_leg._robot.base_frame
-    imu_frames[6] = l_arm._robot.base_frame
-    imu_frames[10] = r_arm._robot.base_frame
+    imu_frames[2] = l_leg._robot.base_frame.A
+    imu_frames[4] = r_leg._robot.base_frame.A
+    imu_frames[6] = l_arm._robot.base_frame.A
+    imu_frames[10] = r_arm._robot.base_frame.A
     self._imu_frames = imu_frames
 
     # All of the leg modules, plus the wheel modules
