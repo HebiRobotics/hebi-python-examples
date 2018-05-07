@@ -78,17 +78,18 @@ class PeripheralBody(BaseBody):
       super(PeripheralBody, self).__init__(val_lock)
 
     self._group_indices = group_indices
-    # TODO: Maybe have these be matrices instead of arrays?
-    self._fbk_position = np.zeros(len(group_indices), dtype=np.float64)
-    self._fbk_position_cmd = np.zeros(len(group_indices), dtype=np.float64)
-    self._fbk_velocity = np.zeros(len(group_indices), dtype=np.float32)
-    self._fbk_velocity_err = np.zeros(len(group_indices), dtype=np.float32)
 
-    self._xyz_error = np.zeros((3, 1), dtype=np.float64)
-    self._pos_error = np.zeros((6, 1), dtype=np.float64)
-    self._vel_error = np.zeros((6, 1), dtype=np.float32)
-    self._impedance_err = np.zeros((6, 1), dtype=np.float64)
-    self._impedance_torque = np.zeros((len(group_indices), 1), dtype=np.float64)
+    num_modules = len(group_indices)
+    # Everything is a column vector
+    self._fbk_position = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float64))
+    self._fbk_position_cmd = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float64))
+    self._fbk_velocity = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float32))
+    self._fbk_velocity_err = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float32))
+    self._xyz_error = np.asmatrix(np.zeros((3, 1), dtype=np.float64))
+    self._pos_error = np.asmatrix(np.zeros((6, 1), dtype=np.float64))
+    self._vel_error = np.asmatrix(np.zeros((6, 1), dtype=np.float32))
+    self._impedance_err = np.asmatrix(np.zeros((6, 1), dtype=np.float64))
+    self._impedance_torque = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float64))
 
     self._name = name
     self._kin = hebi.robot_model.RobotModel()
@@ -836,12 +837,12 @@ class Arm(PeripheralBody):
     np.subtract(np.asmatrix(self._grip_pos).T, self.current_tip_fk[0:3, 3], out=self._xyz_error)
     np.copyto(self._pos_error[0:3], self._xyz_error)
     np.subtract(commanded_velocities, velocities, out=self._vel_error[0:4].ravel())
-    np.dot(self._current_j_actual_f, self._vel_error[0:4], out=self._vel_error)
+    np.dot(self._current_j_actual_f, np.asmatrix(self._vel_error[0:4]), out=np.asmatrix(self._vel_error))
 
     np.multiply(Arm.spring_gains, self._pos_error, out=self._pos_error)
     np.multiply(Arm.damper_gains, self._vel_error, out=self._vel_error)
     np.add(self._pos_error, self._vel_error, out=self._impedance_err)
-    np.dot(self.current_j_actual.T, self._impedance_err, out=self._impedance_torque)
+    np.dot(self.current_j_actual.T, np.asmatrix(self._impedance_err), out=np.asmatrix(self._impedance_torque))
     np.copyto(self._grav_comp_torque.ravel(), math_func.get_grav_comp_efforts(self._robot, positions, -pose[2, 0:3]))
 
     np.multiply(soft_start, self._impedance_torque.ravel(), out=self._joint_efforts)
@@ -1027,7 +1028,7 @@ class Leg(PeripheralBody):
     # Calculate effort
     np.subtract(self._current_cmd_tip_fk[0:3, 3], self.current_tip_fk[0:3, 3], out=self._xyz_error)
     np.copyto(self._pos_error[0:3], self._xyz_error)
-    np.dot(self._current_j_actual_f, np.asmatrix(self._fbk_velocity_err).T, out=self._vel_error)
+    np.dot(self._current_j_actual_f, np.asmatrix(self._fbk_velocity_err).T, out=np.asmatrix(self._vel_error))
     roll_sign = self._direction
 
     np.multiply(Leg.spring_gains, self._pos_error, out=self._pos_error)
@@ -1035,7 +1036,7 @@ class Leg(PeripheralBody):
     np.multiply(Leg.roll_gains, roll_sign*roll_angle, out=self._e_term)
     np.add(self._pos_error, self._vel_error, out=self._impedance_err)
     np.add(self._impedance_err, self._e_term, out=self._impedance_err)
-    np.dot(self.current_j_actual.T, self._impedance_err, out=self._impedance_torque)
+    np.dot(self.current_j_actual.T, np.asmatrix(self._impedance_err), out=np.asmatrix(self._impedance_torque))
     np.multiply(self._impedance_torque, soft_start, out=self._impedance_torque)
 
     hip_cmd.effort = self._impedance_torque[0, 0]
