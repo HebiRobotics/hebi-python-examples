@@ -29,13 +29,22 @@ class BaseBody(object):
   def __init__(self, val_lock, mass=0.0, com=[0.0, 0.0, 0.0]):
     self.__val_lock = val_lock
     self._mass = mass
-    self._com = np.asarray(com, dtype=np.float64)
+    self._com = np.matrix(np.zeros((3, 1), dtype=np.float64))
+    self._com[0, 0] = com[0]
+    self._com[1, 0] = com[1]
+    self._com[2, 0] = com[2]
 
   def _set_mass(self, mass):
+    """
+    Called by subclasses to update mass
+    """
     self._mass = mass
 
   def _set_com(self, com):
-    self._com = np.asarray(com, dtype=np.float64)
+    """
+    Called by subclasses to update the center of mass
+    """
+    self._com[0:3, 0] = com
 
   def acquire_value_lock(self):
     """
@@ -61,7 +70,7 @@ class BaseBody(object):
   def com(self):
     """
     :return: The center of mass (in meters) of this body component in 3D Euclidean space
-    :rtype:  np.array
+    :rtype:  np.matrix
     """
     return self._com
 
@@ -72,15 +81,18 @@ class PeripheralBody(BaseBody):
   """
 
   def __init__(self, val_lock, group_indices, name, mass=None, com=None):
-    if mass != None and com != None:
+    if mass is not None and com is not None:
       super(PeripheralBody, self).__init__(val_lock, mass, com)
     else:
       super(PeripheralBody, self).__init__(val_lock)
 
+    self._kin = hebi.robot_model.RobotModel()
     self._group_indices = group_indices
+    self._name = name
 
     num_modules = len(group_indices)
-    # Everything is a column vector
+    # ----------------------------------
+    # Everything here is a column vector
     self._fbk_position = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float64))
     self._fbk_position_cmd = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float64))
     self._fbk_velocity = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float32))
@@ -90,23 +102,34 @@ class PeripheralBody(BaseBody):
     self._vel_error = np.asmatrix(np.zeros((6, 1), dtype=np.float32))
     self._impedance_err = np.asmatrix(np.zeros((6, 1), dtype=np.float64))
     self._impedance_torque = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float64))
+    self._home_angles = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float64))
+    self._masses = None
 
-    self._name = name
-    self._kin = hebi.robot_model.RobotModel()
-    self._home_angles = None
-    self._masses_t = None
-
-    self._current_coms = None
-    self._current_fk = None
-    self._current_tip_fk = None
-    self._current_j_actual = None
-    self._current_j_actual_f = None
-    self._current_j_expected = None
-    self._current_j_expected_f = None
+    # Subclass populates these two empty list fields
+    self._current_coms = list()
+    self._current_fk = list()
+    self._current_tip_fk = np.asmatrix(np.zeros((4, 4), dtype=np.float64))
+    self._current_j_actual = np.asmatrix(np.zeros((6, num_modules), dtype=np.float64))
+    self._current_j_actual_f = np.asmatrix(np.zeros((6, num_modules), dtype=np.float32))
+    self._current_j_expected = np.asmatrix(np.zeros((6, num_modules), dtype=np.float64))
+    self._current_j_expected_f = np.asmatrix(np.zeros((6, num_modules), dtype=np.float32))
+    # Subclass populates this as size of (3, numOfCoMFrames)
     self._current_xyz = None
 
-  def _set_masses_t(self, masses):
-    self._masses_t = masses
+    # Because a `numpy.matrix` and `numpy.ndarray` are different types,
+    # calling `A1` on a `numpy.matrix` incurs a surprising amount of overhead.
+    # Due to this, we cache the `ndarray` views into certain numpy matrices.
+    self._home_angles__flat = self._home_angles.A1
+    self._fbk_position__flat = self._fbk_position.A1
+    self._fbk_position_cmd__flat = self._fbk_position_cmd.A1
+    self._fbk_velocity__flat = self._fbk_velocity.A1
+    self._fbk_velocity_err__flat = self._fbk_velocity_err.A1
+
+  def _set_masses(self, masses):
+    length = len(masses)
+    self._masses = np.asmatrix(np.empty((length, 1), dtype=np.float64))
+    masses__flat = self._masses.A1
+    np.copyto(masses__flat, masses)
 
   @property
   def _robot(self):
@@ -130,9 +153,7 @@ class PeripheralBody(BaseBody):
 
   @home_angles.setter
   def home_angles(self, value):
-    home_angles = np.asarray(value, dtype=np.float64)
-    assert_length(home_angles, len(self._group_indices), 'home_angles')
-    self._home_angles = home_angles
+    np.copyto(self._home_angles__flat, value)
 
   @property
   def group_indices(self):
@@ -189,10 +210,12 @@ class PeripheralBody(BaseBody):
     return self._current_j_expected
 
   def on_feedback_received(self, position, position_command, velocity, velocity_error):
-    np.copyto(self._fbk_position, position[self._group_indices])
-    np.copyto(self._fbk_position_cmd, position_command[self._group_indices])
-    np.copyto(self._fbk_velocity, velocity[self._group_indices])
-    np.copyto(self._fbk_velocity_err, velocity_error[self._group_indices])
+    indices = self._group_indices
+    np.copyto(self._fbk_position__flat, position[indices])
+    np.copyto(self._fbk_position_cmd__flat, position_command[indices])
+    np.copyto(self._fbk_velocity__flat, velocity[indices])
+    np.copyto(self._fbk_velocity_err__flat, velocity_error[indices])
+
 
   def get_grav_comp_efforts(self, positions, gravity):
     """
@@ -229,11 +252,12 @@ class PeripheralBody(BaseBody):
     assert_type(duration, float, 'duration')
     if duration < 1.0:
       raise ValueError('duration must be greater than 1.0 second')
-    num_joints = len(self._group_indices)
+    indices = self._group_indices
+    num_joints = len(indices)
     num_waypoints = 2
     dim = (num_joints, num_waypoints)
 
-    current_positions = positions[self._group_indices]
+    current_positions = positions[indices]
     home_angles = self._home_angles
 
     times = np.array([0.0, duration], dtype=np.float64)
@@ -242,7 +266,7 @@ class PeripheralBody(BaseBody):
     accel = vel
 
     pos[:, 0] = current_positions
-    pos[:, 1] = home_angles
+    pos[:, 1] = home_angles.A1
 
     return hebi.trajectory.create_trajectory(times, pos, vel, accel)
 
@@ -256,30 +280,25 @@ class PeripheralBody(BaseBody):
     :param commanded_positions: TODO
     :type commanded_positions:  np.array
     """
-    positions = self._fbk_position
-    commanded_positions = self._fbk_position_cmd
+    positions = self._fbk_position__flat
+    commanded_positions = self._fbk_position_cmd__flat
 
     robot = self._robot
-    coms = robot.get_forward_kinematics('com', positions)
-    fk = robot.get_forward_kinematics('output', positions)
-    tip_fk = fk[-1]
-    jacobian_actual = robot.get_jacobian_end_effector(positions)
-    jacobian_expected = robot.get_jacobian_end_effector(commanded_positions)
+    robot.get_forward_kinematics('com', positions, output=self._current_coms)
+    robot.get_forward_kinematics('output', positions, output=self._current_fk)
+    np.copyto(self._current_tip_fk, self._current_fk[-1])
+    robot.get_jacobian_end_effector(positions, output=self._current_j_actual)
+    robot.get_jacobian_end_effector(commanded_positions, output=self._current_j_expected)
 
-    masses_t = self._masses_t
-    xyz = np.squeeze([entry[0:3, 3] for entry in coms]).T
-    com = np.sum(np.multiply(xyz, matlib.repmat(masses_t, 3, 1)), axis=1) / self.mass
+    np.copyto(self._current_j_actual_f, self._current_j_actual)
+    np.copyto(self._current_j_expected_f, self._current_j_expected)
 
-    self._current_coms = coms
-    self._current_fk = fk
-    self._current_tip_fk = tip_fk
-    self._current_j_actual = jacobian_actual
-    self._current_j_actual_f = np.matrix(jacobian_actual, np.float32)
-    self._current_j_expected = jacobian_expected
-    self._current_j_expected_f = np.matrix(jacobian_expected, np.float32)
-    self._current_xyz = xyz
-    self._set_com(com)
+    for i, entry in enumerate(self._current_coms):
+      self._current_xyz[0:3, i] = entry[0:3, 3]
 
+    masses = self._masses
+    np.sum(np.multiply(self._current_xyz, matlib.repmat(masses.T, 3, 1)), axis=1, out=self._com)
+    self._com *= 1.0/self.mass
 
 # ------------------------------------------------------------------------------
 # Kinematics Classes
@@ -690,25 +709,40 @@ class Arm(PeripheralBody):
     kin.add_actuator('X5-4')
     kin.base_frame = base_frame
 
+    # ----------------------
+    # Populate cached fields
+    output_frame_count = kin.get_frame_count('output')
+    com_frame_count = kin.get_frame_count('CoM')
+
+    self._current_xyz = np.asmatrix(np.zeros((3, com_frame_count), dtype=np.float64))
+
+    for i in range(output_frame_count):
+      self._current_fk.append(np.asmatrix(np.zeros((4, 4), dtype=np.float64)))
+
+    for i in range(com_frame_count):
+      self._current_coms.append(np.asmatrix(np.zeros((4, 4), dtype=np.float64)))
+
+    # Calculate home FK
     home_angles = np.deg2rad(home_angles)
     self.home_angles = home_angles
     self._home_fk = kin.get_forward_kinematics('output', home_angles)
     self._home_ef = self._home_fk[-1]
     self._set_mass(np.sum(kin.masses))
-    self._set_masses_t(kin.masses.T)
+    self._set_masses(kin.masses)
 
-    self._grip_pos = np.array(self._home_ef[0:3, 3])[:, 0]
+    self._grip_pos = np.matrix(self._home_ef[0:3, 3])
     self._new_grip_pos = self._grip_pos.copy()
-    self._joint_angles = home_angles.copy()
-    self._joint_velocities = np.zeros(4, np.float32)
-    self._joint_efforts = np.zeros(4, np.float32)
+    self._joint_angles = np.matrix(home_angles.reshape((4, 1)))
+    self._joint_velocities = np.asmatrix(np.zeros((4, 1), np.float32))
+    self._joint_efforts = np.asmatrix(np.zeros((4, 1), np.float32))
     self._user_commanded_wrist_velocity = 0.0
 
-    self._grav_comp_torque = np.zeros((len(group_indices), 1), np.float64)
+    self._grav_comp_torque = np.asmatrix(np.zeros((len(group_indices), 1), np.float64))
+    self._grav_comp_torque__flat = self._grav_comp_torque.A1
 
     # Additionally, calculate determinant of jacobians
-    self._current_det_actual = None
-    self._current_det_expected = None
+    self._current_det_actual = 0.0
+    self._current_det_expected = 0.0
 
   def integrate_step(self, dt, calculated_grip_velocity):
     """
@@ -721,35 +755,43 @@ class Arm(PeripheralBody):
     :param calculated_grip_velocity:
     :type calculated_grip_velocity:  np.array
     """
-    positions = self._fbk_position
-    # Make end effector velocities mirrored in Y
-    adjusted_grip_velocity = calculated_grip_velocity.copy()
-    adjusted_grip_velocity[1] = self._direction*adjusted_grip_velocity[1]
+    positions = self._fbk_position__flat
 
-    np.multiply(adjusted_grip_velocity, dt, out=adjusted_grip_velocity)
-    np.add(self._grip_pos, adjusted_grip_velocity, out=self._new_grip_pos)
+    # Make endeffector velocities mirrored in Y
+    adjusted_grip_v_term = calculated_grip_velocity.reshape((3, 1)).copy()
+    adjusted_grip_v_term[1, 0] = self._direction*adjusted_grip_v_term[1, 0]
+
+    # Integrate the adjusted grip velocity term to find the new grip position
+    np.multiply(adjusted_grip_v_term, dt, out=adjusted_grip_v_term)
+
+    np.add(self._grip_pos, adjusted_grip_v_term, out=self._new_grip_pos)
+
+
     robot = self._robot
     xyz_objective = hebi.robot_model.endeffector_position_objective(self._new_grip_pos)
     new_arm_joint_angs = robot.solve_inverse_kinematics(positions, xyz_objective)
 
+    # Find the determinant of the jacobian at the endeffector of the solution
+    # to the IK. If below a set threshold, set the joint velocities to zero
+    # in an attempt to avoid nearing the kinematic singularity. 
     jacobian_new = robot.get_jacobian_end_effector(new_arm_joint_angs)[0:3, 0:3]
     det_J_new = abs(np.linalg.det(jacobian_new))
 
     if (self._current_det_expected < Arm.Jacobian_Determinant_Threshold) and (det_J_new < self._current_det_expected):
       # Near singularity - don't command arm towards it
-      self._joint_velocities[0:3] = 0.0
+      self._joint_velocities[0:3, 0] = 0.0
     else:
       try:
-        self._joint_velocities[0:3] = np.linalg.solve(self.current_j_actual[0:3, 0:3], self._user_commanded_grip_velocity)
-        self._joint_angles[0:3] = new_arm_joint_angs[0:3]
+        self._joint_velocities[0:3, 0] = np.linalg.solve(self._current_j_actual_f[0:3, 0:3], self._user_commanded_grip_velocity).reshape((3, 1))
+        self._joint_angles[0:3, 0] = new_arm_joint_angs[0:3].reshape((3, 1))
         np.copyto(self._grip_pos, self._new_grip_pos)
       except np.linalg.LinAlgError as lin:
         # This may happen still sometimes
         self._joint_velocities[0:3] = 0.0
 
     wrist_vel = self._direction*self._user_commanded_wrist_velocity
-    self._joint_velocities[3] = self._joint_velocities[1]+self._joint_velocities[2]+wrist_vel
-    self._joint_angles[3] = self._joint_angles[3]+(self._joint_velocities[3]*dt)
+    self._joint_velocities[3, 0] = self._joint_velocities[1, 0]+self._joint_velocities[2, 0]+wrist_vel
+    self._joint_angles[3, 0] = self._joint_angles[3, 0]+(self._joint_velocities[3, 0]*dt)
 
   @property
   def current_det_actual(self):
@@ -830,23 +872,21 @@ class Arm(PeripheralBody):
     positions = self._fbk_position
     velocities = self._fbk_velocity
 
-    # Positions and velocities are already known at this point - don't need to calculate them
-
     # ----------------
     # Calculate effort
-    np.subtract(np.asmatrix(self._grip_pos).T, self.current_tip_fk[0:3, 3], out=self._xyz_error)
+    np.subtract(self._grip_pos, self.current_tip_fk[0:3, 3], out=self._xyz_error)
     np.copyto(self._pos_error[0:3], self._xyz_error)
-    np.subtract(commanded_velocities, velocities, out=self._vel_error[0:4].ravel())
-    np.dot(self._current_j_actual_f, np.asmatrix(self._vel_error[0:4]), out=np.asmatrix(self._vel_error))
+    np.subtract(commanded_velocities, velocities, out=self._vel_error[0:4])
+    np.dot(self._current_j_actual_f, np.asmatrix(self._vel_error[0:4]), out=self._vel_error)
 
     np.multiply(Arm.spring_gains, self._pos_error, out=self._pos_error)
     np.multiply(Arm.damper_gains, self._vel_error, out=self._vel_error)
     np.add(self._pos_error, self._vel_error, out=self._impedance_err)
-    np.dot(self.current_j_actual.T, np.asmatrix(self._impedance_err), out=np.asmatrix(self._impedance_torque))
+    np.dot(self.current_j_actual.T, np.asmatrix(self._impedance_err), out=self._impedance_torque)
     np.copyto(self._grav_comp_torque.ravel(), math_func.get_grav_comp_efforts(self._robot, positions, -pose[2, 0:3]))
 
-    np.multiply(soft_start, self._impedance_torque.ravel(), out=self._joint_efforts)
-    np.add(self._joint_efforts, self._grav_comp_torque.ravel(), out=self._joint_efforts)
+    np.multiply(soft_start, self._impedance_torque, out=self._joint_efforts)
+    np.add(self._joint_efforts, self._grav_comp_torque, out=self._joint_efforts)
     effort = self._joint_efforts
 
     # Send commands
@@ -962,18 +1002,32 @@ class Leg(PeripheralBody):
     self.home_angles = home_angles
     masses = kin.masses
     self._set_mass(np.sum(masses))
-    self._set_masses_t(masses.T)
+    self._set_masses(masses)
 
+    # ----------------------
+    # Populate cached fields
+    output_frame_count = kin.get_frame_count('output')
+    com_frame_count = kin.get_frame_count('CoM')
+
+    self._current_xyz = np.asmatrix(np.zeros((3, com_frame_count), dtype=np.float64))
+
+    for i in range(output_frame_count):
+      self._current_fk.append(np.asmatrix(np.zeros((4, 4), dtype=np.float64)))
+
+    for i in range(com_frame_count):
+      self._current_coms.append(np.asmatrix(np.zeros((4, 4), dtype=np.float64)))
+
+    # Calculate home FK
     self._hip_angle = home_hip_angle
     self._knee_angle = home_knee_angle
     self._knee_velocity = 0.0
     self._user_commanded_knee_velocity = 0.0
     self._knee_angle_max = 2.65
     self._knee_angle_min = 0.65
-    self._e_term = np.empty((6, 1), dtype=np.float64)
+    self._e_term = np.asmatrix(np.empty((6, 1), dtype=np.float64))
 
-    # Additionally calculate commanded end effector position
-    self._current_cmd_tip_fk = None
+    # Additionally calculate commanded endeffector position
+    self._current_cmd_tip_fk = np.asmatrix(np.zeros((4, 4), dtype=np.float64))
 
   def integrate_step(self, dt, knee_velocity):
     """
@@ -997,7 +1051,7 @@ class Leg(PeripheralBody):
     TODO: Document
     """
     super(Leg, self).update_position()
-    self._current_cmd_tip_fk = self._robot.get_forward_kinematics('endeffector', self._fbk_position_cmd)[0]
+    self._robot.get_forward_kinematics('endeffector', self._fbk_position_cmd, output=[self._current_cmd_tip_fk])
 
   def update_command(self, group_command, roll_angle, soft_start):
     """
@@ -1026,17 +1080,30 @@ class Leg(PeripheralBody):
 
     # ----------------
     # Calculate effort
+
+    # Calculate the current positional error 
     np.subtract(self._current_cmd_tip_fk[0:3, 3], self.current_tip_fk[0:3, 3], out=self._xyz_error)
     np.copyto(self._pos_error[0:3], self._xyz_error)
-    np.dot(self._current_j_actual_f, np.asmatrix(self._fbk_velocity_err).T, out=np.asmatrix(self._vel_error))
+    # Calculate the current velocity error by:
+    #  multiplying the current jacobian at the endeffector frame
+    # by the:
+    #  difference of the commanded velocity feedfback and actual velocity feedfback
+    np.dot(self._current_j_actual_f, self._fbk_velocity_err, out=self._vel_error)
     roll_sign = self._direction
 
+    # piecewise multiply the error terms by the predefined gains
     np.multiply(Leg.spring_gains, self._pos_error, out=self._pos_error)
     np.multiply(Leg.damper_gains, self._vel_error, out=self._vel_error)
+    # `self._e_term` is an intermediate value used to calculate the impedance error
     np.multiply(Leg.roll_gains, roll_sign*roll_angle, out=self._e_term)
+
+    # add the 3 error terms (pos+vel+e) to find the impedance error
     np.add(self._pos_error, self._vel_error, out=self._impedance_err)
     np.add(self._impedance_err, self._e_term, out=self._impedance_err)
-    np.dot(self.current_j_actual.T, np.asmatrix(self._impedance_err), out=np.asmatrix(self._impedance_torque))
+    # Multiply the jacobian matrix at the endeffector 
+    # by the impedance error to find the impedance torque, and scale it
+    # by the soft startup scale
+    np.dot(self.current_j_actual.T, self._impedance_err, out=self._impedance_torque)
     np.multiply(self._impedance_torque, soft_start, out=self._impedance_torque)
 
     hip_cmd.effort = self._impedance_torque[0, 0]
@@ -1159,8 +1226,6 @@ class Igor(object):
   def _update_com(self):
     """
     TODO: Document
-    :param positions:
-    :param commanded_positions:
     """
     l_arm = self._left_arm
     r_arm = self._right_arm
@@ -1201,7 +1266,7 @@ class Igor(object):
     self._pose_gyros[:, :] = gyro.T
 
     # Update imu frames
-    # Leg end effectors
+    # Leg endeffectors
     np.copyto(imu_frames[0], l_leg.current_tip_fk)
     np.copyto(imu_frames[1], r_leg.current_tip_fk)
     # Hip link output frames
@@ -1217,28 +1282,46 @@ class Igor(object):
     np.copyto(imu_frames[9], l_arm.current_fk[5])
     np.copyto(imu_frames[13], r_arm.current_fk[5])
 
-    q_rot = np.empty((3, 3), dtype=np.float64)
-    rpy = np.empty(3, dtype=np.float64)
-    rpy_modules = self._rpy
+    q_rot = np.asmatrix(np.empty((3, 3), dtype=np.float64))
+    imu_rotation = np.asmatrix(np.empty((3, 3), dtype=np.float64))
     pose_tmp = self._pose_tmp
+    rpy_modules = self._rpy
     quaternion_tmp = self._quaternion_tmp
 
     for i in range(14):
-      imu_frame = imu_frames[i][0:3, 0:3]
-      # numpy arrays and matrices are different types, and you can't simply do
-      # np_matrix * np_array
-      # `np.inner` supports exactly what we are trying to do, though
-      np.dot(imu_frame, self._pose_gyros[0:3, i], out=pose_tmp)
+      # Copy the rotation transformation into our temporary 3x3 matrix
+      np.copyto(imu_rotation, imu_frames[i][0:3, 0:3])
+
+      # Apply the rotation transformation from the current imu frame to the
+      # pose calculated by the gyroscope from the module at the index `i`
+      # The imu frame is determined by the FK of the robot model at its
+      # current positional feedback. Some imu frames are its kinematic chain's
+      # base frame, which means that it remains constant regardless of its
+      # orientation in space. (TODO: Is this accurate and a useful comment?)
+      np.dot(imu_rotation, self._pose_gyros[0:3, i], out=pose_tmp)
       self._pose_gyros[0:3, i] = pose_tmp
+
+      # Get the orientation from the current module
+      # If any values are `NaN`, then the module is not capable of
+      # sending orientation data, or the module just did not send any data
+      # for some reason. If no data was received, write nans in the current
+      # column of the roll-pitch-yaw matrix
       np.copyto(quaternion_tmp, orientation[i, 0:4])
       if math_func.any_nan(quaternion_tmp):
         rpy_modules[0:3, i] = np.nan
       else:
-        # rotation matrix transpose is same as inverse since `rot` is in SO(3)
+        # `quat2rot` is a helper function which
+        # converts a quaternion vector into a 3x3 rotation matrix
         math_func.quat2rot(quaternion_tmp, q_rot)
-        np.matmul(q_rot, imu_frame.T, out=q_rot)
+        # Apply module's orientation (rotation transform) to the module's
+        # Rotation matrix transpose is same as inverse,
+        # since `q_rot` is an SO(3) matrix
+        np.matmul(q_rot, imu_rotation.T, out=q_rot)
+        # `rot2ea` is a helper function which
+        # converts a 3x3 rotation matrix into a roll-pitch-yaw Euler angle vector
         math_func.rot2ea(q_rot, rpy_modules[0:3, i])
 
+    # TODO: document this
     self._pose_gyros_mean = np.nanmean(self._pose_gyros[:, self._imu_modules], axis=1)
 
   def _calculate_lean_angle(self):
@@ -1247,49 +1330,70 @@ class Igor(object):
 
     The CoM of all individual bodies and pose estimate have been updated at this point
     """
-    rpy_module = self._rpy
+    rpy_modules = self._rpy
     imu_modules = self._imu_modules
 
     # {roll,pitch}_angle are in radians here
-    roll_angle = np.nanmean(rpy_module[0, imu_modules])
-    pitch_angle = np.nanmean(rpy_module[1, imu_modules])
+    roll_angle = np.nanmean(rpy_modules[0, imu_modules])
+    pitch_angle = np.nanmean(rpy_modules[1, imu_modules])
 
-    # Update roll (rotation matrix)
+    # Update roll transform (rotation matrix)
     math_func.rotate_x(roll_angle, output=self._roll_rot)
-    # Update pitch (rotation matrix)
+    # Update pitch transform (rotation matrix)
     math_func.rotate_y(pitch_angle, output=self._pitch_rot)
 
     self._roll_angle = math.degrees(roll_angle)
     self._pitch_angle = math.degrees(pitch_angle)
 
+    # Rotate by the pitch angle about the Y axis, followed by
+    # rotating by the roll angle about the X axis
     np.matmul(self._pitch_rot, self._roll_rot, out=self._T_pose_rot)
 
     # rad/s
+    # TODO: document this
     self._feedback_lean_angle_velocity = self._pose_gyros_mean[1]
 
     # NOTE: MATLAB `leanR` is `self._pitch_rot` here
 
-    # Gets the translation vector of the Legs' current end effectors
-    np.add(self._left_leg.current_tip_fk[0:3, 3].A1,
-           self._right_leg.current_tip_fk[0:3, 3].A1,
+    # Find the mean of the two legs' translation vectors at the endeffector
+    # and store it in `self._ground_point`
+    np.add(self._left_leg.current_tip_fk[0:3, 3],
+           self._right_leg.current_tip_fk[0:3, 3],
            out=self._ground_point)
     self._ground_point *= 0.5
+
+    # Get the vector starting from the "ground point" and ending at the
+    # position of the current center of mass, then rotate it according to
+    # the current pitch angle of Igor, storing the result in `self._line_com`
     np.subtract(self._com, self._ground_point, out=self._line_com)
     np.dot(self._pitch_rot, self._line_com, out=self._line_com)
-    self._height_com = np.linalg.norm(self._line_com)
-    self._feedback_lean_angle = math.degrees(math.atan2(self._line_com[0], self._line_com[2]))
 
-    # Update Igor center of mass
+    # Get the magnitude of the "line CoM" and store it for later use.
+    # This is used to scale parameters in the balance controller.
+    self._height_com = np.linalg.norm(self._line_com)
+
+    # Using the line center of mass, find the feedback lean angle
+    # TODO: explain better and explain why we use X and Z components of vector
+    self._feedback_lean_angle = math.degrees(math.atan2(self._line_com[0, 0], self._line_com[2, 0]))
+
+    # Update Igor's center of mass by applying the transforms in the following order:
+    #  1) pitch rotation
+    #  2) roll rotation
     np.dot(self._T_pose_rot, self._com, out=self._com)
 
+    # Copy the pose rotation matrix back into the pose transformation matrix
     self._pose_transform[0:3, 0:3] = self._T_pose_rot
+
+    # Update CoM of legs based on current pose estimate from calculated lean angle
     l_leg_coms = self._left_leg.current_coms
     r_leg_coms = self._right_leg.current_coms
-    # Update CoM of legs based on current pose estimate from calculated lean angle
+    # Both legs have the same amount of kinematic bodies, so
+    # do calculations for both legs in same loop
     for i in range(len(l_leg_coms)):
-      np.matmul(self._pose_transform, l_leg_coms[i], out=l_leg_coms[i])
-    for i in range(len(r_leg_coms)):
-      np.matmul(self._pose_transform, r_leg_coms[i], out=r_leg_coms[i])
+      leg_com = l_leg_coms[i]
+      np.matmul(self._pose_transform, leg_com, out=leg_com)
+      leg_com = r_leg_coms[i]
+      np.matmul(self._pose_transform, leg_com, out=leg_com)
 
 # ------------------------------------------------
 # Actions
@@ -1636,56 +1740,59 @@ class Igor(object):
 
     # --------------------------------------------
     # Cached fields for center of mass calculation
-    self._com = np.empty(3, dtype=np.float64)
-    self._coms = np.empty((3, 5), dtype=np.float64)
+    self._com = np.asmatrix(np.empty((3, 1), dtype=np.float64))
+    self._coms = np.asmatrix(np.zeros((3, 5), dtype=np.float64))
     # This CoM is constant
     self._coms[0:3, 4] = chassis.com
 
     # ----------------------------------
     # Cached fields for pose estimation
-    imu_frames = [np.identity(4,dtype=np.float64)]*15
+    imu_frames = list()
+    for i in range(0, 15):
+      imu_frames.append(np.asmatrix(np.identity(4, dtype=np.float64)))
+
     # These frames are constant
-    imu_frames[2] = l_leg._robot.base_frame.A
-    imu_frames[4] = r_leg._robot.base_frame.A
-    imu_frames[6] = l_arm._robot.base_frame.A
-    imu_frames[10] = r_arm._robot.base_frame.A
+    np.copyto(imu_frames[2], l_leg._robot.base_frame)
+    np.copyto(imu_frames[4], r_leg._robot.base_frame)
+    np.copyto(imu_frames[6], l_arm._robot.base_frame)
+    np.copyto(imu_frames[10], r_arm._robot.base_frame)
     self._imu_frames = imu_frames
 
     # All of the leg modules, plus the wheel modules
     self._imu_modules = [0, 1, 2, 3, 4, 5]
 
-    self._pose_gyros = np.empty((3, num_dofs), dtype=np.float64)
+    self._pose_gyros = np.asmatrix(np.zeros((3, num_dofs), dtype=np.float64))
     self._pose_gyros_mean = None
 
     # Roll-Pitch-Yaw
-    self._rpy = np.empty((3, num_dofs), dtype=np.float64)
+    self._rpy = np.asmatrix(np.zeros((3, num_dofs), dtype=np.float64))
 
-    self._pose_transform = np.identity(4, dtype=np.float64)
+    self._pose_transform = np.asmatrix(np.identity(4, dtype=np.float64))
 
     # ----------------------------------------
     # Cached fields for lean angle calculation
     self._roll_angle = 0.0
-    self._roll_rot = np.empty((3, 3), dtype=np.float64)
+    self._roll_rot = np.asmatrix(np.zeros((3, 3), dtype=np.float64))
     self._pitch_angle = 0.0
-    self._pitch_rot = np.empty((3, 3), dtype=np.float64)
+    self._pitch_rot = np.asmatrix(np.zeros((3, 3), dtype=np.float64))
     self._feedback_lean_angle_velocity = 0.0
     # These are used for chassis velocity controller
     self._height_com = 0.0
-    self._line_com = np.empty(3, dtype=np.float64)
-    self._ground_point = np.empty(3, dtype=np.float64)
+    self._line_com = np.asmatrix(np.zeros((3, 1), dtype=np.float64))
+    self._ground_point = np.asmatrix(np.zeros((3, 1), dtype=np.float64))
     self._feedback_lean_angle = 0.0
 
-    self._pose_tmp = np.empty(3, dtype=np.float64)
-    self._quaternion_tmp = np.empty(4, dtype=np.float64)
-    self._T_pose_rot = np.empty((3, 3), dtype=np.float64)
+    self._pose_tmp = np.asmatrix(np.zeros((3, 1), dtype=np.float64))
+    self._quaternion_tmp = np.zeros(4, dtype=np.float64)
+    self._T_pose_rot = np.asmatrix(np.zeros((3, 3), dtype=np.float64))
 
     # --------------------------
     # Cached fields for feedback
-    self._current_position = np.empty(num_dofs, dtype=np.float64)
-    self._current_position_command = np.empty(num_dofs, dtype=np.float64)
-    self._current_velocity = np.empty(num_dofs, dtype=np.float32)
-    self._current_velocity_command = np.empty(num_dofs, dtype=np.float32)
-    self._current_velocity_error = np.empty(num_dofs, dtype=np.float32)
+    self._current_position = np.zeros(num_dofs, dtype=np.float64)
+    self._current_position_command = np.zeros(num_dofs, dtype=np.float64)
+    self._current_velocity = np.zeros(num_dofs, dtype=np.float32)
+    self._current_velocity_command = np.zeros(num_dofs, dtype=np.float32)
+    self._current_velocity_error = np.zeros(num_dofs, dtype=np.float32)
 
 # ------------------------------------------------
 # Public Interface
