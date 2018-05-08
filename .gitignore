@@ -1,3 +1,6 @@
+# Virtual Env
+venv/
+
 # PyCharm/JetBrains folders
 .idea/
 
