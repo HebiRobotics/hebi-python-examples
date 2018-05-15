@@ -43,7 +43,9 @@ def setup():
   model.add_actuator('X5-4')
   model.add_bracket('X5-LightBracket','Right')
   model.add_actuator('X5-4')
-  model.add_rigid_body([0,0,0], [1,1,1,0,0,0], 0.6, numpy.matrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]), True)
+
+  payload_mass = 0.6
+  model.add_rigid_body([0,0,0], [1,1,1,0,0,0], payload_mass, numpy.matrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]), True)
   return [group, model]
 
 # Simple random number generator within given range
@@ -52,7 +54,7 @@ def r(low, high):
   
 
 def generate_waypoints(model, current_pos):
-  return [r(-.4, .4), r(0.25, 1.5), r(0.75, 2.0), r(-1.5, 1.5), r(-1.5, 1.5), r(-1.5, 1.5)]
+  return [r(-.4, .4), r(0.25, 1.2), r(0.75, 2.0), r(-1.5, 1.5), r(-1.5, 1.5), r(-0.75, 0.75)]
 """
   tip_down = hebi.robot_model.endeffector_tipaxis_objective([0.0, 0.0, -1.0])
 
@@ -67,7 +69,7 @@ def generate_waypoints(model, current_pos):
 def get_fbk(group):
   fbk = group.get_next_feedback()
   if fbk == None:
-    print "Couldn't get feedback"
+    print("Couldn't get feedback")
     raise hell
   return fbk
 
@@ -112,8 +114,13 @@ def run():
   acc = numpy.zeros((6, 3))
   vel[:,1] = acc[:,1] = numpy.nan
   time = numpy.linspace(0.0, 5.0, 3.0)
+
+  # Start Logging
+  group.start_log()
+
+  numMoves = 50
   i = 0
-  while (i < 10):
+  while (i < numMoves):
     # Update waypoints and regenerate trajectory
     next_waypoint = generate_waypoints(model, waypoint2)
     wp = numpy.matrix([waypoint1, waypoint2, next_waypoint])
@@ -151,6 +158,8 @@ def run():
     sleep(period)
     t = t + period
 
-  return;
+  group.stop_log()
+
+  return
 
 run()
