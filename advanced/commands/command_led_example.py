@@ -44,5 +44,3 @@ sleep(3)
 # Set the LED to module control.
 group_command.led.color = 'transparent'
 group.send_command(group_command)
-
-return 0;

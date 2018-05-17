@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import hebi
-from time import sleep
 
 lookup = hebi.Lookup()
 group = lookup.get_group_from_names(['family'], ['base', 'shoulder', 'elbow'])

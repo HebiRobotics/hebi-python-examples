@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import hebi
-from time import sleep
 
 lookup = hebi.Lookup()
 group = lookup.get_group_from_names(['X5-4'], ['X5-0000'])
@@ -10,7 +9,8 @@ if group == None:
   print('No group found!')
   exit(1)
 
-new_name = raw_input('Enter a new name for this module:')
+# replace with 'raw_input' for python 2.7
+new_name = input('Enter a new name for this module:')
 
 command = hebi.GroupCommand(group.size)
 

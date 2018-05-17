@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 
 import hebi
-import numpy as np
-from time import sleep
-from math import sin
 
 lookup = hebi.Lookup()
 group = lookup.get_group_from_names(['X5-4'], ['X5-0000'])

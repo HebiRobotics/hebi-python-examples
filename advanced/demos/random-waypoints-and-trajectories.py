@@ -1,7 +1,6 @@
 import hebi
 import numpy
 from time import sleep
-import gravcomp
 import random
 
 def get_grav_comp_efforts(robot_model, positions, gravityVec):
@@ -68,7 +67,7 @@ def generate_waypoints(model, current_pos):
 
 def get_fbk(group):
   fbk = group.get_next_feedback()
-  if fbk == None:
+  if fbk is None:
     print("Couldn't get feedback")
     raise hell
   return fbk
@@ -86,7 +85,7 @@ def play_trajectory(group, model, trajectory, fraction = 1.0):
     pos_cmd, vel_cmd, acc_cmd = trajectory.get_state(t)
     cmd.position = pos_cmd
     cmd.velocity = vel_cmd
-    cmd.effort = numpy.matrix(gravcomp.get_grav_comp_efforts(model, fbk.position, [0,0,1]) + spring_offset).A1
+    cmd.effort = numpy.matrix(get_grav_comp_efforts(model, fbk.position, [0,0,1]) + spring_offset).A1
     group.send_command(cmd)
     t = t + period # TODO: do this better!
 
@@ -153,7 +152,7 @@ def run():
     spring_offset = numpy.zeros((1, 6))
     spring_offset[0, 1] = -9
     cmd.position = start_pt
-    cmd.effort = numpy.matrix(gravcomp.get_grav_comp_efforts(model, fbk.position, [0,0,1]) + spring_offset).A1
+    cmd.effort = numpy.matrix(get_grav_comp_efforts(model, fbk.position, [0,0,1]) + spring_offset).A1
     group.send_command(cmd)
     sleep(period)
     t = t + period

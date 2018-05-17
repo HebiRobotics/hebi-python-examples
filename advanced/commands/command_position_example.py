@@ -23,7 +23,7 @@ t = 0.0
 positions = np.empty(group.size, dtype=np.float64)
 while t < 10.0:
   for module_index in range(0, group.size):
-    positions[i] = sin((t * 0.5) + (module_index * 0.25))
+    positions[module_index] = sin((t * 0.5) + (module_index * 0.25))
 
   command.position = positions
   group.send_command(command)
@@ -43,7 +43,7 @@ timeout_ms = 100
 
 while t < 10.0:
   for module_index in range(0, group.size):
-    positions[i] = sin((t * 0.5) + (module_index * 0.25))
+    positions[module_index] = sin((t * 0.5) + (module_index * 0.25))
 
   command.position = positions
   if group.send_command_with_acknowledgement(command):
