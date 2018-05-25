@@ -2,6 +2,8 @@ from .arm import Arm
 from .chassis import Chassis
 from .leg import Leg
 
+from util import math_utils
+
 class Igor(object):
 
   Lean_P = 1.0
@@ -119,19 +121,19 @@ class Igor(object):
       # for some reason. If no data was received, write nans in the current
       # column of the roll-pitch-yaw matrix
       np.copyto(quaternion_tmp, orientation[i, 0:4])
-      if math_func.any_nan(quaternion_tmp):
+      if math_utils.any_nan(quaternion_tmp):
         rpy_modules[0:3, i] = np.nan
       else:
         # `quat2rot` is a helper function which
         # converts a quaternion vector into a 3x3 rotation matrix
-        math_func.quat2rot(quaternion_tmp, q_rot)
+        math_utils.quat2rot(quaternion_tmp, q_rot)
         # Apply module's orientation (rotation transform) to the module's
         # Rotation matrix transpose is same as inverse,
         # since `q_rot` is an SO(3) matrix
         np.matmul(q_rot, imu_rotation.T, out=q_rot)
         # `rot2ea` is a helper function which
         # converts a 3x3 rotation matrix into a roll-pitch-yaw Euler angle vector
-        math_func.rot2ea(q_rot, rpy_modules[0:3, i])
+        math_utils.rot2ea(q_rot, rpy_modules[0:3, i])
 
     # TODO: document this
     self._pose_gyros_mean = np.nanmean(self._pose_gyros[:, self._imu_modules], axis=1)
@@ -148,9 +150,9 @@ class Igor(object):
     pitch_angle = np.nanmean(rpy_modules[1, imu_modules])
 
     # Update roll transform (rotation matrix)
-    math_func.rotate_x(roll_angle, output=self._roll_rot)
+    math_utils.rotate_x(roll_angle, output=self._roll_rot)
     # Update pitch transform (rotation matrix)
-    math_func.rotate_y(pitch_angle, output=self._pitch_rot)
+    math_utils.rotate_y(pitch_angle, output=self._pitch_rot)
 
     self._roll_angle = math.degrees(roll_angle)
     self._pitch_angle = math.degrees(pitch_angle)

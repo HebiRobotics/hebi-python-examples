@@ -82,6 +82,7 @@ class Arm(PeripheralBody):
   def integrate_step(self, dt, calculated_grip_velocity):
     """
     Called by Igor. User should not call this directly.
+
     :param dt:
     :type dt:                        float
     :param positions:
@@ -97,9 +98,7 @@ class Arm(PeripheralBody):
 
     # Integrate the adjusted grip velocity term to find the new grip position
     np.multiply(adjusted_grip_v_term, dt, out=adjusted_grip_v_term)
-
     np.add(self._grip_pos, adjusted_grip_v_term, out=self._new_grip_pos)
-
 
     robot = self._robot
     xyz_objective = hebi.robot_model.endeffector_position_objective(self._new_grip_pos)
@@ -130,7 +129,6 @@ class Arm(PeripheralBody):
   @property
   def current_det_actual(self):
     """
-    TODO: Document
     :return:
     :rtype:  float
     """
@@ -139,7 +137,6 @@ class Arm(PeripheralBody):
   @property
   def current_det_expected(self):
     """
-    TODO: Document
     :return:
     :rtype:  float
     """
