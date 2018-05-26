@@ -1,5 +1,5 @@
 from functools import partial as funpart
-from ..util import math_func
+from util import math_utils
 
 # ------------------------------------------------------------------------------
 # Arm Event Handlers
@@ -145,7 +145,7 @@ def chassis_velocity_event(igor, in_deadzone_func, ts, axis_value):
   else:
     joy_scale = -0.5
     dead_zone = igor.joystick_dead_zone
-    value = joy_scale*(axis_value-(dead_zone*math_func.sign(axis_value)))
+    value = joy_scale*(axis_value-(dead_zone*math_utils.sign(axis_value)))
     chassis.set_directional_velocity(value)
 
 
@@ -166,7 +166,7 @@ def chassis_yaw_event(igor, in_deadzone_func, ts, axis_value):
     dead_zone = igor.joystick_dead_zone
     wheel_radius = igor.wheel_radius
     wheel_base = igor.wheel_base
-    value = (scale * wheel_radius / wheel_base) * (axis_value - dead_zone * math_func.sign(axis_value))
+    value = (scale * wheel_radius / wheel_base) * (axis_value - dead_zone * math_utils.sign(axis_value))
     chassis.set_yaw_velocity(value)
 
 
