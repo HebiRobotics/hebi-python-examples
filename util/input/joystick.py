@@ -336,6 +336,24 @@ class Joystick(object):
       raise KeyError('Joystick {0} does not exist'.format(index))
     return _joysticks[index]
 
+  @staticmethod
+  def available_joysticks():
+    """
+    Retrieve all available joysticks. Each element in the returned list
+    is a pair of the index and name of the joystick.
+
+    :return: a list of (int, str) pairs
+    :rtype:  list
+    """
+    ret = list()
+    for i in range(Joystick.joystick_count()):
+      try:
+        joy = Joystick.at_index(i)
+        ret.append((i, joy.name))
+      except:
+        pass
+    return ret
+
   @property
   def index(self):
     """

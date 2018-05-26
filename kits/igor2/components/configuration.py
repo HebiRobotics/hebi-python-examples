@@ -1,5 +1,6 @@
 import os
 
+from util.input.joystick import Joystick
 
 # ------------------------------------------------------------------------------
 # Joystick selectors
@@ -143,5 +144,5 @@ class Igor2Config(object):
 
   @property
   def joystick_selector(self):
-    return self.__joystick_selector
+    return self.__find_joystick_strategy
   

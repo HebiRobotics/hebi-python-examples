@@ -88,8 +88,8 @@ class SDLEventHandler(object):
 # ------------------------------------------------------------------------------
 
 
-from . import Joystick as JoystickModule
-from .Joystick import Joystick, GameControllerException
+from . import joystick as JoystickModule
+from .joystick import Joystick, GameControllerException
 import sdl2.ext.compat
 
 

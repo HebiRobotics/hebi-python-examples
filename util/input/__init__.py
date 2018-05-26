@@ -7,9 +7,9 @@ def __inject_sdl2_win():
   lib_base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'lib'))
 
   if cpu == 'AMD64':
-    lib_path = os.path.join(lib_base_path, 'win_x64', 'SDL2.dll')
+    lib_path = os.path.join(lib_base_path, 'win_x64')
   elif cpu == 'x86':
-    lib_path = os.path.join(lib_base_path, 'win_x86', 'SDL2.dll')
+    lib_path = os.path.join(lib_base_path, 'win_x86')
   else:
     raise RuntimeError('Unsupported Platform {0}'.format(cpu))
   os.environ['PYSDL2_DLL_PATH'] = lib_path

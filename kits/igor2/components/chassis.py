@@ -4,6 +4,8 @@ import hebi
 from .body import BaseBody
 from util import math_utils
 
+from time import time
+
 class Chassis(BaseBody):
   """
   Class representing the chassis of Igor

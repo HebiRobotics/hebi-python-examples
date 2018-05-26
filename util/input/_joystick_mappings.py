@@ -267,6 +267,7 @@ def __map_ps4_cuh_zct2u(joystick):
 
 
 __mappings = {
+  '030000004c0500006802000000000000' : __map_ps3_cechzc2u,
   '030000004c0500006802000011810000' : __map_ps3_cechzc2u,
   '030000004c050000cc09000011010000' : __map_ps4_cuh_zct2u,
   '030000004c050000cc09000011810000' : __map_ps4_cuh_zct2u,

@@ -274,10 +274,12 @@ def both_triggers_released(joy):
 # ------------------------------------------------------------------------------
 
 
-def register_igor_event_handlers(igor, joystick):
+def register_igor_event_handlers(igor):
   """
   Registers all Igor joystick event handlers
   """
+
+  joystick = igor.joystick
 
   # ----------------------------------------------
   # Functions to be passed to event handlers below
