@@ -61,7 +61,7 @@ class Igor2Config(object):
   one of the select_joystick_by_* methods.
   """
 
-  def __init__(self, imitation=True):
+  def __init__(self, imitation=False):
     self.__module_names = ['wheel1', 'wheel2',
                            'hip1', 'knee1',
                            'hip2', 'knee2',
