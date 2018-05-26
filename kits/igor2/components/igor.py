@@ -594,7 +594,10 @@ class Igor(object):
     # can start up without being interrupted by user commands.
     # View this function in `event_handlers.py` to see
     # all of the joystick event handlers registered
-    register_igor_event_handlers(self)
+    try:
+      register_igor_event_handlers(self)
+    except:
+      pass
 
     self._start_time = time()
     self._state_lock.acquire()

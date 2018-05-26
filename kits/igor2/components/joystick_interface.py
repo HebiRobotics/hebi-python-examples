@@ -303,6 +303,18 @@ def register_igor_event_handlers(igor):
   # Functions which have bound parameters, in order to have right function
   # signature for event handlers
 
+  # ------------
+  # Quit Session
+
+  quit_session = funpart(quit_session_event, igor)
+  joystick.add_button_event_handler('SHARE', quit_session)
+
+  # ---------------
+  # Toggle Balancer
+
+  balance_controller = funpart(balance_controller_event, igor)
+  joystick.add_button_event_handler('TOUCHPAD', balance_controller)
+
   # -----------------------
   # Left Arm event handlers
 
@@ -354,18 +366,6 @@ def register_igor_event_handlers(igor):
 
   stance_height = funpart(stance_height_event, igor, stance_height_calc)
   joystick.add_button_event_handler('OPTIONS', stance_height)
-
-  # ---------------
-  # Toggle Balancer
-
-  balance_controller = funpart(balance_controller_event, igor)
-  joystick.add_button_event_handler('TOUCHPAD', balance_controller)
-
-  # ------------
-  # Quit Session
-
-  quit_session = funpart(quit_session_event, igor)
-  joystick.add_button_event_handler('SHARE', quit_session)
 
   # ------------------------------
   # Camera specific event handlers
