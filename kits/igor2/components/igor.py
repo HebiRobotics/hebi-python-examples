@@ -1,4 +1,5 @@
 import numpy as np
+from numpy import matlib
 
 from .arm import Arm
 from .chassis import Chassis
@@ -6,13 +7,25 @@ from .leg import Leg
 from .joystick_interface import register_igor_event_handlers
 from .configuration import Igor2Config
 
-from util import math_utils
+from math import atan2, degrees, radians
 from time import sleep, time
+from util import math_utils
+
 import hebi
+import sys
+import threading
+
 
 # ------------------------------------------------------------------------------
-#
+# Helper Functions
 # ------------------------------------------------------------------------------
+
+
+# Used for Igor background controller thread
+if sys.version_info[0] == 3:
+  is_main_thread_active = lambda: threading.main_thread().is_alive()
+else:
+  is_main_thread_active = lambda: any((i.name == "MainThread") and i.is_alive() for i in threading.enumerate())
 
 
 def retry_on_error(func, on_error_func=None, sleep_time=0.1):
@@ -26,8 +39,8 @@ def retry_on_error(func, on_error_func=None, sleep_time=0.1):
     try:
       ret = func()
       return ret
-    except Exception as e:
-      if on_error_func != None:
+    except:
+      if on_error_func is not None:
         on_error_func()
       sleep(sleep_time)
 
@@ -86,7 +99,7 @@ def create_group(config, has_camera):
 
     def connect():
       group = lookup.get_group_from_names(families, names)
-      if group == None:
+      if group is None:
         raise RuntimeError()
       elif group.size != len(names):
         raise RuntimeError()
@@ -286,8 +299,8 @@ class Igor(object):
     # Update pitch transform (rotation matrix)
     math_utils.rotate_y(pitch_angle, output=self._pitch_rot)
 
-    self._roll_angle = math.degrees(roll_angle)
-    self._pitch_angle = math.degrees(pitch_angle)
+    self._roll_angle = degrees(roll_angle)
+    self._pitch_angle = degrees(pitch_angle)
 
     # Rotate by the pitch angle about the Y axis, followed by
     # rotating by the roll angle about the X axis
@@ -314,7 +327,7 @@ class Igor(object):
     self._height_com = np.linalg.norm(self._line_com)
 
     # Using the line center of mass, find the feedback lean angle
-    self._feedback_lean_angle = math.degrees(math.atan2(self._line_com[0, 0], self._line_com[2, 0]))
+    self._feedback_lean_angle = degrees(atan2(self._line_com[0, 0], self._line_com[2, 0]))
 
     # Update Igor's center of mass by applying the transforms in the following order:
     #  1) pitch rotation
@@ -416,7 +429,6 @@ class Igor(object):
     self._left_leg._knee_angle = left_knee
     self._right_leg._knee_angle = -right_knee
 
-
   def _spin_once(self, bc):
     """
     :param bc: Denotes whether the balance controller is enabled at this time
@@ -499,7 +511,7 @@ class Igor(object):
                                              self._height_com, self._feedback_lean_angle_velocity,
                                              self._mass, self._feedback_lean_angle)
 
-    if bc: # bc
+    if bc:  # bc
       leanP = Igor.Lean_P
       leanI = Igor.Lean_I
       leanD = Igor.Lean_D
@@ -532,7 +544,7 @@ class Igor(object):
     # Leg Commands
 
     # Roll Angle is in degrees, but Leg needs it to be in radians
-    roll_angle = math.radians(self._roll_angle)
+    roll_angle = radians(self._roll_angle)
 
     self._left_leg.update_command(group_command, roll_angle, soft_start)
     self._right_leg.update_command(group_command, roll_angle, soft_start)
@@ -602,10 +614,11 @@ class Igor(object):
 # ------------------------------------------------
 
   def __init__(self, has_camera=False, config=None):
-    if config == None:
+    if config is None:
       self._config = Igor2Config()
+    elif type(config) is not Igor2Config:
+      raise TypeError
     else:
-      assert_type(config, Igor2Config, 'config')
       self._config = config
 
     if has_camera:
@@ -775,7 +788,6 @@ class Igor(object):
 
       self._start()
 
-    import os
     self._proc_thread = Thread(target=start_routine,
                                name='Igor II Controller',
                                args=(start_condition,))
@@ -826,7 +838,8 @@ class Igor(object):
     :raises TypeError:    if `state` is not bool
     :raises RuntimeError: if `start()` has not been called
     """
-    assert_type(state, bool, 'state')
+    if type(state) is not bool:
+      raise TypeError
     self._state_lock.acquire()
     self._ensure_started()
     self._balance_controller_enabled = state

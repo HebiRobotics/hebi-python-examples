@@ -4,6 +4,7 @@ import hebi
 from .body import PeripheralBody
 from util import math_utils
 
+
 class Arm(PeripheralBody):
 
   damper_gains = np.matrix([1.0, 1.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float64).T
@@ -170,9 +171,6 @@ class Arm(PeripheralBody):
     """
     Updates calculations based on the position of the arm
     at the given point in time
-
-    :param positions:
-    :param commanded_positions:
     """
     super(Arm, self).update_position()
     self._current_det_actual = np.linalg.det(self._current_j_actual[0:4, 0:4])
@@ -183,8 +181,6 @@ class Arm(PeripheralBody):
     Write into the command object based on the current state of the arm
 
     :param group_command:
-    :param positions:
-    :param velocities:
     :param pose:
     :param soft_start:
     """

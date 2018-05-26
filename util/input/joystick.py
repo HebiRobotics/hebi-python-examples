@@ -137,7 +137,7 @@ def hat_get_val(value):
     hx = 1
   elif value & SDL_HAT_LEFT:
     hx = -1
-  return (hx, hy)
+  return hx, hy
 
 
 AXIS = 1
@@ -147,10 +147,10 @@ BUTTON = 4
 
 _joysticks = dict()
 _val_mapper = {
-  AXIS : lambda value: value*0.0000305185,
-  BALL : lambda xrel, yrel: (xrel, yrel),
-  HAT : hat_get_val,
-  BUTTON : lambda value: value == SDL_PRESSED}
+  AXIS: lambda value: value*0.0000305185,
+  BALL: lambda xrel, yrel: (xrel, yrel),
+  HAT: hat_get_val,
+  BUTTON: lambda value: value == SDL_PRESSED}
 
 
 # ------------------------------------------------------------------------------
@@ -203,7 +203,7 @@ class Joystick(object):
     """
     if item == '__joystick_mapping':
       raise RuntimeError
-    elif self.__joystick_mapping == None:
+    elif self.__joystick_mapping is None:
       raise AttributeError
     elif item.startswith('BUTTON_') or item.startswith('AXIS_'):
       return self.__joystick_mapping[item]()
@@ -218,7 +218,7 @@ class Joystick(object):
     for entry in super(Joystick, self).__dir__():
       s_dir.add(entry)
 
-    if self.__joystick_mapping != None:
+    if self.__joystick_mapping is not None:
       s_dir = s_dir.union(self.__joystick_mapping.axis_ids)
       s_dir = s_dir.union(self.__joystick_mapping.button_ids)
     return [entry for entry in s_dir]
@@ -270,10 +270,10 @@ class Joystick(object):
       buttons_last_val = []
 
     last_vals = {
-      AXIS : axes_last_val,
-      BALL : balls_last_val,
-      HAT : hats_last_val,
-      BUTTON : buttons_last_val }
+      AXIS: axes_last_val,
+      BALL: balls_last_val,
+      HAT: hats_last_val,
+      BUTTON: buttons_last_val }
     self.__last_vals = last_vals
 
   def __get_next_val(self, key, idx, timeout):
@@ -332,7 +332,7 @@ class Joystick(object):
     :raises KeyError:  If `index` is not a joystick
     """
     assert_type(index, int, 'index')
-    if not index in _joysticks:
+    if index not in _joysticks:
       raise KeyError('Joystick {0} does not exist'.format(index))
     return _joysticks[index]
 
@@ -436,7 +436,7 @@ class Joystick(object):
     :raises TypeError:               If `index` is not an int
     """
     assert_type(index, int, 'index')
-    if self.__joystick_mapping == None:
+    if self.__joystick_mapping is None:
       raise GameControllerException('Joystick has no mapping')
     return self.__joystick_mapping.get_button(index).name
 
@@ -454,8 +454,8 @@ class Joystick(object):
     :raises TypeError:  If `axis` is not an int or str
     :raises IndexError: If `axis` is an invalid index
     """
-    if (type(axis) == str):
-      if self.__joystick_mapping != None:
+    if type(axis) == str:
+      if self.__joystick_mapping is not None:
         return self.__joystick_mapping.get_axis_value(axis)
       else:
         raise GameControllerException('Joystick has no mapping. You must retrieve button values by integer index')
@@ -515,8 +515,8 @@ class Joystick(object):
     :raises TypeError:               If `button` is not an int or str
     :raises IndexError:              If `button` is an invalid (int) index
     """
-    if (type(button) == str):
-      if self.__joystick_mapping != None:
+    if type(button) == str:
+      if self.__joystick_mapping is not None:
         return self.__joystick_mapping.get_button_value(button)
       else:
         raise GameControllerException('Joystick has no mapping. You must retrieve button values by integer index')

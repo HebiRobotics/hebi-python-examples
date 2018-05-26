@@ -5,6 +5,7 @@ from numpy import matlib
 from util.type_utils import assert_type
 from util import math_utils
 
+
 class BaseBody(object):
   """
   Base class for all body components of Igor
@@ -57,7 +58,6 @@ class BaseBody(object):
     :rtype:  np.matrix
     """
     return self._com
-
 
 
 class PeripheralBody(BaseBody):
@@ -199,7 +199,6 @@ class PeripheralBody(BaseBody):
     np.copyto(self._fbk_velocity__flat, velocity[indices])
     np.copyto(self._fbk_velocity_err__flat, velocity_error[indices])
 
-
   def get_grav_comp_efforts(self, positions, gravity):
     """
     :param positions: 
@@ -252,12 +251,7 @@ class PeripheralBody(BaseBody):
 
   def update_position(self):
     """
-    Upate kinematics from feedback
-
-    :param positions:           
-    :type positions:            np.array
-    :param commanded_positions: 
-    :type commanded_positions:  np.array
+    Update kinematics from feedback
     """
     positions = self._fbk_position__flat
     commanded_positions = self._fbk_position_cmd__flat

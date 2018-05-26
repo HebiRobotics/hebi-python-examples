@@ -1,6 +1,9 @@
 
 import os
 
+# PySDL2 on Windows requires you to set the path to the folder where SDL2.dll resides.
+# If the user has not set the SDL directory in the `PYSDL2_DLL_PATH` environment variable,
+# then this function is invoked.
 def __inject_sdl2_win():
   from platform import machine
   cpu = machine()

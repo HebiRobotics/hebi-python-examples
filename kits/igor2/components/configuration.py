@@ -24,7 +24,7 @@ def _joystick_by_index_selector(index):
 
 
 def _joystick_by_name_selector(name):
-  for pair in range(Joystick.available_joysticks()):
+  for pair in Joystick.available_joysticks():
     try:
       index = pair[0]
       joystick_name = pair[1]
@@ -145,4 +145,3 @@ class Igor2Config(object):
   @property
   def joystick_selector(self):
     return self.__find_joystick_strategy
-  

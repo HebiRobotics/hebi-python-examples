@@ -33,6 +33,8 @@ class SDLEventHandler(object):
     self.__event_loop_frequency = 250.0 # Limit event loop to 250 Hz
     self.__event_loop_period = 1.0/self.__event_loop_frequency
 
+    self.__thread = None
+
   def __on_event(self, event, data):
     data = getattr(data, SDLEventHandler.__sdl_event_attr_dict[event])
     for entry in self.__event_hooks[event]:
@@ -89,7 +91,7 @@ class SDLEventHandler(object):
 
 
 from . import joystick as JoystickModule
-from .joystick import Joystick, GameControllerException
+from .joystick import Joystick
 import sdl2.ext.compat
 
 

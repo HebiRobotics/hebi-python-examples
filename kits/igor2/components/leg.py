@@ -3,6 +3,7 @@ import numpy as np
 from .body import PeripheralBody
 from util import math_utils
 
+
 class Leg(PeripheralBody):
   """
   Represents a leg (and wheel)
@@ -105,7 +106,6 @@ class Leg(PeripheralBody):
     Write into the command object based on the current state of the leg
 
     :param group_command:
-    :param vel_error:
     :param roll_angle:
     :param soft_start:
     :return:

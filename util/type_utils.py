@@ -51,18 +51,17 @@ def assert_range(val, infimum, supremum, what='index', l_inclusive=True, u_inclu
   :param l_inclusive:
   :param u_inclusive:
   """
-  in_range = True
   if l_inclusive:
     l_str = '['
     in_range = val >= infimum
-  else: # exclusive
+  else:  # exclusive
     l_str = '('
     in_range = val > infimum
 
   if u_inclusive:
     u_str = ']'
     in_range = in_range and val <= supremum
-  else: # exclusive
+  else:  # exclusive
     u_str = ')'
     in_range = in_range and val < supremum
 

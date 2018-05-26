@@ -5,6 +5,7 @@ from util import math_utils
 # Arm Event Handlers
 # ------------------------------------------------------------------------------
 
+
 def arm_x_vel_event(igor, in_deadzone_func, ts, axis_value):
   """
   Event handler when left stick Y-Axis motion occurs.
@@ -23,7 +24,7 @@ def arm_x_vel_event(igor, in_deadzone_func, ts, axis_value):
     igor.left_arm.set_x_velocity(0.0)
     igor.right_arm.set_x_velocity(0.0)
   else:
-    scale = -0.4 # TODO: make into customizable parameter
+    scale = -0.4
     axis_value = scale*axis_value
     igor.left_arm.set_x_velocity(scale*axis_value)
     igor.right_arm.set_x_velocity(scale*axis_value)
@@ -47,7 +48,7 @@ def arm_y_vel_event(igor, in_deadzone_func, ts, axis_value):
     igor.left_arm.set_y_velocity(0.0)
     igor.right_arm.set_y_velocity(0.0)
   else:
-    scale = -0.4 # TODO: make into customizable parameter
+    scale = -0.4
     axis_value = scale*axis_value
     igor.left_arm.set_y_velocity(axis_value)
     igor.right_arm.set_y_velocity(axis_value)

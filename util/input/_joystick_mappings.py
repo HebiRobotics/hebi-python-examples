@@ -12,17 +12,17 @@ class JoystickMappingEntry(object):
   def __call__(self):
     return self.__func()
 
-  def __init__(self, type, index, name, mapper):
-    self.__type = type
+  def __init__(self, type_, index, name, mapper):
+    self.__type = type_
     self.__index = index
     self.__name = name
 
-    if type == 'Axis':
+    if type_ == 'Axis':
       self.__func = lambda: mapper.joystick.get_axis(index)
-    elif type == 'Button':
+    elif type_ == 'Button':
       self.__func = lambda: mapper.joystick.get_button(index)
     else:
-      raise ValueError('Unknown type "{0}"'.format(type))
+      raise ValueError('Unknown type "{0}"'.format(type_))
 
   @property
   def type(self):
@@ -126,7 +126,7 @@ class JoystickMapper(object):
     self.__buttons[index] = entry
     self.__button_ids.add('BUTTON_' + key.upper())
 
-    if analogues != None:
+    if analogues is not None:
       for analog in analogues:
         self.__buttons[analog] = entry
         self.__button_ids.add('BUTTON_' + analog.upper())
@@ -231,7 +231,7 @@ def __map_ps4_cuh_zct2u(joystick):
   d.add_button(9, 'Options', 'OPTIONS', ['START'])
   d.add_button(8, 'Share', 'SHARE', ['SELECT'])
 
-  if (sys.platform == 'darwin' or sys.platform == 'win32'):
+  if sys.platform == 'darwin' or sys.platform == 'win32':
     d.add_axis(3, 'Left Trigger', 'LEFT_TRIGGER')
     d.add_axis(4, 'Right Trigger', 'RIGHT_TRIGGER')
     d.add_axis(2, 'Right Stick (x)', 'RIGHT_STICK_X')
@@ -241,10 +241,10 @@ def __map_ps4_cuh_zct2u(joystick):
     d.add_button(2, 'Circle', 'CIRCLE')
     d.add_button(3, 'Triangle', 'TRIANGLE')
     d.add_button(0, 'Square', 'SQUARE')
-    d.add_button(6, 'Left Trigger', 'LEFT_TRIGGER')   #TODO: verify
-    d.add_button(7, 'Right Trigger', 'RIGHT_TRIGGER') #TODO: verify
+    d.add_button(6, 'Left Trigger', 'LEFT_TRIGGER')
+    d.add_button(7, 'Right Trigger', 'RIGHT_TRIGGER')
     d.add_button(10, 'Left Stick', 'LEFT_STICK')
-    d.add_button(11, 'Right Stick', 'RIGHT_STICK')    #TODO: verify
+    d.add_button(11, 'Right Stick', 'RIGHT_STICK')
     d.add_button(13, 'Touchpad', 'TOUCHPAD', ['HOME'])
   elif sys.platform.startswith('linux'):
     d.add_axis(2, 'Left Trigger', 'LEFT_TRIGGER')
@@ -267,10 +267,10 @@ def __map_ps4_cuh_zct2u(joystick):
 
 
 __mappings = {
-  '030000004c0500006802000000000000' : __map_ps3_cechzc2u,
-  '030000004c0500006802000011810000' : __map_ps3_cechzc2u,
-  '030000004c050000cc09000011010000' : __map_ps4_cuh_zct2u,
-  '030000004c050000cc09000011810000' : __map_ps4_cuh_zct2u,
+  '030000004c0500006802000000000000': __map_ps3_cechzc2u,
+  '030000004c0500006802000011810000': __map_ps3_cechzc2u,
+  '030000004c050000cc09000011010000': __map_ps4_cuh_zct2u,
+  '030000004c050000cc09000011810000': __map_ps4_cuh_zct2u,
 }
 
 
@@ -284,4 +284,3 @@ def get_joystick_mapping(joystick):
   if guid in __mappings:
     return __mappings[guid](joystick)
   return None
-
