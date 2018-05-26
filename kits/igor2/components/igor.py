@@ -1,6 +1,7 @@
 from .arm import Arm
 from .chassis import Chassis
 from .leg import Leg
+from .joystick_interface import register_igor_event_handlers
 
 from util import math_utils
 
