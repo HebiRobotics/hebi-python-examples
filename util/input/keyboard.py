@@ -48,10 +48,19 @@ class _GetchUnix:
 class _GetchWindows:
   def __init__(self):
     import msvcrt
-    self._getch = msvcrt.getch 
+    if sys.version_info[0] == 3:
+      def get_char():
+        ch = msvcrt.getch()
+        if type(ch) is bytes:
+          return ch.decode('utf8')
+        return ch
+      self._getch = get_char
+    else:
+      self._getch = msvcrt.getch 
 
   def __call__(self):
-    return self._getch()
+    ret = self._getch()
+    return ret
 
 
 class _GetchMacCarbon:
