@@ -1,3 +1,4 @@
+import numpy as np
 
 
 def get_times(positions, velocities, accelerations):

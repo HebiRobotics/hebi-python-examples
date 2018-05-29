@@ -99,6 +99,8 @@ def build_trajectory(state):
 
 def command_proc(state):
   group = state.arm.group
+  group.feedback_frequency = 100.0
+
   num_modules = group.size
 
   command = hebi.GroupCommand(num_modules)
@@ -140,6 +142,7 @@ def command_proc(state):
       # Clear old position commands
       command.position = None
     group.send_command(command)
+    state.unlock()
     prev_mode = current_mode
 
 
@@ -180,6 +183,7 @@ def run():
   cmd_thread = Thread(target=command_proc,
                       name='Command Thread',
                       args=(state,))
+  cmd_thread.start()
 
   print_and_cr("Press 'w' to add waypoint ('s' for stopping at this waypoint), 'c' to clear waypoints, 'p' to playback, and 'q' to quit.")
   print_and_cr("When in playback mode, 't' resumes training, and 'q' quits.")
@@ -187,8 +191,8 @@ def run():
   res = getch()
 
   while res != 'q':
-    state.lock()
     print_and_cr('')
+    state.lock()
 
     current_mode = state.mode
 
