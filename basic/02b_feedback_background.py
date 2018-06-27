@@ -10,7 +10,7 @@ sleep(2)
 group = lookup.get_group_from_names(['family'], ['base', 'shoulder', 'elbow'])
 
 if group == None:
-  print('Group not found!')
+  print('Group not found: Did you forget to set the module family and names above?')
   exit(1)
 
 # This is by default "100" - setting this to 5 here allows the console output

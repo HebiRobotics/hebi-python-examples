@@ -27,6 +27,11 @@ def get_grav_comp_efforts(robot_model, positions, gravityVec):
 def setup():
   lookup = hebi.Lookup()
   group = lookup.get_group_from_names(['HEBI'], ['base', 'shoulder', 'elbow', 'wrist1', 'wrist2', 'wrist3'])
+
+  if group is None:
+    print('Group not found: Did you forget to set the module family and names above?')
+    exit(1)
+
   group.feedback_frequency = 100
   group.command_lifetime = 100
 

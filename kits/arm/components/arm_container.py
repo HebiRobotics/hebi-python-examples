@@ -52,11 +52,27 @@ class ArmContainer(object):
 
 def create_3_dof():
   lookup = hebi.Lookup()
-  arm = lookup.get_group_from_names(['HEBI'], ['base', 'shoulder', 'elbow'])
+
+  # You can modify the names here to match modules found on your network
+  module_family = 'HEBI'
+  module_names = ['base', 'shoulder', 'elbow']
+
+  from time import sleep
+  sleep(2)
+  arm = lookup.get_group_from_names([module_family], module_names)
 
   if arm is None:
-    print('Could not find arm group')
-    raise RuntimeError()
+    print('\nCould not find arm group: Did you forget to set the module family and names?')
+    print('Searched for modules named:')
+    print("{0} with family '{1}'".format(
+      ', '.join(["'{0}'".format(entry) for entry in module_names]), module_family))
+
+    print('Modules on the network:')
+    for entry in lookup.entrylist:
+      print(entry)
+    else:
+      print('[No Modules Found]')
+    exit(1)
 
   model = hebi.robot_model.RobotModel()
   model.add_actuator('X5-4')
