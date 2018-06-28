@@ -6,6 +6,10 @@ from time import sleep
 lookup = hebi.Lookup()
 group = lookup.get_group_from_names(['family'], ['name'])
 
+if group is None:
+  print('Group not found: Did you forget to set the module family and names above?')
+  exit(1)
+
 # Set command lifetime to 100 ms
 group.command_lifetime = 100
 

@@ -5,6 +5,10 @@ import hebi
 lookup = hebi.Lookup()
 group = lookup.get_group_from_names(['family'], ['base', 'shoulder', 'elbow'])
 
+if group is None:
+  print('Group not found: Did you forget to set the module family and names above?')
+  exit(1)
+
 command = hebi.GroupCommand(group.size)
 
 # Set gains. If this doesn't succeed, it may be because the number of modules

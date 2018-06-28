@@ -8,8 +8,8 @@ sleep(2)
 
 group = lookup.get_group_from_names(['HEBI'], ['IO_BOARD'])
 
-if group == None:
-  print('Group not found on network')
+if group is None:
+  print('Group not found: Did you forget to set the module family and names above?')
   exit(1)
 
 def print_bank(pin_bank, bank_label):

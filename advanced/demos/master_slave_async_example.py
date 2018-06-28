@@ -9,8 +9,11 @@ sleep(2)
 master = lookup.get_group_from_names(['HEBI'], ['master'])
 slave = lookup.get_group_from_names(['HEBI'], ['slave'])
 
-if (master == None) or (slave == None):
-  print('Groups not found!')
+if master is None:
+  print('Master group not found: Did you forget to set the module family and names above?')
+  exit(1)
+elif slave is None:
+  print('Slave group not found: Did you forget to set the module family and names above?')
   exit(1)
 elif master.size != slave.size:
   print('Groups must be same size for master/slave control')

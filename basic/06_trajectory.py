@@ -12,7 +12,7 @@ sleep(2)
 group = lookup.get_group_from_names(['family'], ['shoulder', 'elbow'])
 
 if not group:
-  print('Group not found!')
+  print('Group not found: Did you forget to set the module family and names above?')
   exit(1)
 
 num_joints = group.size

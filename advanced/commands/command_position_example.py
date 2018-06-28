@@ -8,8 +8,8 @@ from math import sin
 lookup = hebi.Lookup()
 group = lookup.get_group_from_names(['X5-4'], ['X5-0000'])
 
-if group == None:
-  print('No group found!')
+if group is None:
+  print('Group not found: Did you forget to set the module family and names above?')
   exit(1)
 
 command = hebi.GroupCommand(group.size)
