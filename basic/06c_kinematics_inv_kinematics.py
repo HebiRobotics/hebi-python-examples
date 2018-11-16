@@ -2,7 +2,6 @@
 
 import hebi
 from time import sleep
-import numpy as np
 
 lookup = hebi.Lookup()
 
@@ -12,7 +11,7 @@ sleep(2.0)
 family_name = "family"
 module_names = ["base", "shoulder", "elbow"]
 
-group = lookup.create_group_from_names([family_name], [module_names])
+group = lookup.get_group_from_names([family_name], module_names)
 
 if group is None:
   print('Group not found! Check that the family and name of a module on the network')

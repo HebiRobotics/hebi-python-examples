@@ -2,7 +2,6 @@
 
 import hebi
 from time import sleep
-import numpy as np
 
 lookup = hebi.Lookup()
 
@@ -12,7 +11,7 @@ sleep(2.0)
 family_name = "family"
 module_names = ["base", "shoulder", "elbow"]
 
-group = lookup.create_group_from_names([family_name], [module_names])
+group = lookup.get_group_from_names([family_name], module_names)
 
 if group is None:
   print('Group not found! Check that the family and name of a module on the network')
@@ -25,10 +24,9 @@ except:
   print("Could not load HRDF.")
   exit(1)
 
-transform = np.empty((4, 4), dtype=np.float64)
 def feedback_handler(group_fbk):
   angles = group_fbk.position
-  transform = model.get_end_effector(angles, output=transform)
+  transform = model.get_end_effector(angles)
   print('x,y,z: {0}, {1}, {2}'.format(transform[0, 3], transform[1, 3], transform[2, 3]))
 
 group.add_feedback_handler(feedback_handler)
