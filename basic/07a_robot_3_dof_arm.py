@@ -1,6 +1,6 @@
 import hebi
 from math import pi
-from time import time
+from time import sleep, time
 import numpy as np
 
 
@@ -8,6 +8,7 @@ import numpy as np
 import os, sys
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path = [root_path] + sys.path
+import util
 
 
 # A helper function to create a group from named modules, and set specified gains on the modules in that group.
@@ -15,6 +16,7 @@ def get_group():
   families = ['3-DoF Arm']
   names = ["Base", "Shoulder", "Elbow"]
   lookup = hebi.Lookup()
+  sleep(2.0)
   group = lookup.get_group_from_names(families, names)
   if group is None:
     return None
@@ -41,7 +43,7 @@ def execute_trajectory(group, model, trajectory, feedback):
   start = time()
   t = time() - start
 
-  while (t < duration):
+  while t < duration:
     # Get feedback and update the timer
     group.get_next_feedback(reuse_fbk=feedback)
     t = time() - start

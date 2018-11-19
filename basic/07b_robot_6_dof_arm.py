@@ -4,11 +4,19 @@ from time import sleep, time
 import numpy as np
 
 
+# Add the root folder of the repository to the search path for modules
+import os, sys
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path = [root_path] + sys.path
+import util
+
+
 # A helper function to create a group from named modules, and set specified gains on the modules in that group.
 def get_group():
   families = ['3-DoF Arm']
   names = ["Base", "Shoulder", "Elbow"]
   lookup = hebi.Lookup()
+  sleep(2.0)
   group = lookup.get_group_from_names(families, names)
   if group is None:
     return None
@@ -16,7 +24,7 @@ def get_group():
   # Set gains
   gains_command = hebi.GroupCommand(group.size)
   try:
-    gains_command.read_Gains("gains/3-DoF_arm_gains.xml")
+    gains_command.read_gains("gains/3-DoF_arm_gains.xml")
   except:
     return None
   if not group.send_command_with_acknowledgement(gains_command):
@@ -31,19 +39,11 @@ def execute_trajectory(group, model, trajectory, feedback):
   num_joints = group.size
   command = hebi.GroupCommand(num_joints)
   duration = trajectory.duration
-  pos_cmd(num_joints)
-  vel_cmd(num_joints)
-  # note that the acceleration command is read from the trajectory.
-  # You need dynamics info before converting to efforts to send to the robot
-  acc_cmd(num_joints)
-
-  eff_cmd(num_joints)
 
   start = time()
   t = time() - start
-  masses = model.masses
 
-  while (t < duration):
+  while t < duration:
     # Get feedback and update the timer
     group.get_next_feedback(reuse_fbk=feedback)
     t = time() - start
@@ -82,8 +82,7 @@ except:
 # that has the end effector point straight forward.
 xyz_targets = np.matrix([[0.20, 0.40, 0.40, 0.20, ], [0.30, 0.30, -0.30, -0.30, ], [0.10, 0.10, 0.10, 0.10]])
 xyz_cols = xyz_targets.shape[1]
-# TODO: impl this
-# rotation_target = Eigen::AngleAxisd(M_PI / 2.0, Eigen::Vector3d::UnitY()).toRotationMatrix();
+rotation_target = util.math_utils.rotate_y(pi / 2.0)
 
 # Convert these to joint angle waypoints using IK solutions for each of the xyz locations
 # as well as the desired orientation of the end effector. Copy the initial waypoint at the end so we close the square.
