@@ -3,28 +3,25 @@
 import hebi
 from time import sleep
 
-# Get a group
 lookup = hebi.Lookup()
-sleep(2)
 
-group = lookup.get_group_from_names(['family'], ['base', 'shoulder', 'elbow'])
+# Wait 2 seconds for the module list to populate
+sleep(2.0)
 
-if group == None:
-  print('Group not found: Did you forget to set the module family and names above?')
+family_name = "Test Family"
+module_name = "Test Actuator"
+
+group = lookup.get_group_from_names([family_name], [module_name])
+
+if group is None:
+  print('Group not found: Did you forget to set the module family and name above?')
   exit(1)
 
-# This is by default "100" - setting this to 5 here allows the console output
-# to be more reasonable.
+# This is by default 100 Hz. Setting this to 5 Hz allows the console output to be reasonable.
 group.feedback_frequency = 5.0
 
-# Retrieve feedback with a blocking call to "get_next_feedback". This
-# constrains the loop to run at the feedback frequency above; we run for
-# about 10 seconds here
+group_feedback = hebi.GroupFeedback(group.size)
 
-group_fbk = hebi.GroupFeedback(group.size)
-
-for i in range(0, 50):
-  # Pass in `group_fbk` to reuse the GroupFeedback instance
-  group_fbk = group.get_next_feedback(group_fbk)  
-  if group_fbk != None:
-    print('Received feedback. Positions:\n{0}'.format(group_fbk.position))
+for i in range(50):
+  if group.get_next_feedback(reuse_fbk=group_feedback) is not None:
+    print('Feedback received. Positions are:\n{0}'.format(group_feedback.position))
