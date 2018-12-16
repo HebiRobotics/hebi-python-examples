@@ -24,8 +24,9 @@ if group_info is None:
   print('Did not receive gains from the module.')
 
 # Save gains to a file. If this doesn't succeed, it probably indicates the directory doesn't exist.
-if group_info.write_gains('gains/my_actuator_gains.xml'):
+try:
+  group_info.write_gains('gains/my_actuator_gains.xml')
   print('Successfully read gains from module and wrote to file.')
-else:
+except Exception as e:
   print('Could not write gains to file.')
 

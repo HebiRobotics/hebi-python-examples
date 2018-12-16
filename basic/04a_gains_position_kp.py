@@ -20,9 +20,9 @@ if group is None:
   exit(1)
 
 # The command struct has fields for gains in addition to the basic position, velocity, and effort commands.
-gain_command  = hebi.GroupCommand(group.size)
+gain_command = hebi.GroupCommand(group.size)
 # Add a separate command object for our step command, so gains are not send in each position command.
-position_command  = hebi.GroupCommand(group.size)
+position_command = hebi.GroupCommand(group.size)
 group_feedback = hebi.GroupFeedback(group.size)
 
 # Start logging in the background
@@ -31,8 +31,9 @@ group.start_log('logs')
 # Parameters for step function
 step_period    = 1.0                  # sec
 step_amplitude = pi / 8.0             # rad
-step_duration  = step_period * 4.0    # the 4.0 multiplier gives 2 full cycles// Make the position controller gradually stiffer.
+step_duration  = step_period * 4.0    # the 4.0 multiplier gives 2 full cycles
 
+# Make the position controller gradually stiffer.
 new_position_kp_gains = [0.2, 0.5, 10.0]
 
 for new_gain in new_position_kp_gains:

@@ -24,10 +24,12 @@ except:
   print("Could not load HRDF.")
   exit(1)
 
+
 def feedback_handler(group_fbk):
   angles = group_fbk.position
   transform = model.get_end_effector(angles)
   print('x,y,z: {0}, {1}, {2}'.format(transform[0, 3], transform[1, 3], transform[2, 3]))
+
 
 group.add_feedback_handler(feedback_handler)
 

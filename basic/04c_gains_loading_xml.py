@@ -19,7 +19,10 @@ if group is None:
   exit(1)
 
 group_command = hebi.GroupCommand(group.size)
-if group_command.read_gains('gains/example_gains.xml') and group.send_command_with_acknowledgement(group_command):
+try:
+  group_command.read_gains('gains/example_gains.xml')
+  if not group.send_command_with_acknowledgement(group_command):
+    raise RuntimeError('Did not receive ack from group.')
   print('Successfully read gains from file and sent to module.')
-else:
-  print('Problem reading gains from file or sending to module.')
+except Exception as e:
+  print('Problem reading gains from file or sending to module: {0}'.format(e))

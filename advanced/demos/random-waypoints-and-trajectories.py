@@ -3,6 +3,7 @@ import numpy
 from time import sleep
 import random
 
+
 def get_grav_comp_efforts(robot_model, positions, gravityVec):
     # Normalize gravity vector (to 1g, or 9.8 m/s^2)
     normed_gravity = gravityVec / numpy.linalg.norm(gravityVec) * 9.81
@@ -23,6 +24,7 @@ def get_grav_comp_efforts(robot_model, positions, gravityVec):
         comp_torque += jacobians[i].transpose() * numpy.reshape(wrench_vec, (6, 1))
 
     return numpy.squeeze(comp_torque)
+
 
 def setup():
   lookup = hebi.Lookup()
@@ -52,6 +54,7 @@ def setup():
   model.add_rigid_body([0,0,0], [1,1,1,0,0,0], payload_mass, numpy.matrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]), True)
   return [group, model]
 
+
 # Simple random number generator within given range
 def r(low, high):
   return random.random() * (high - low) + low
@@ -70,12 +73,14 @@ def generate_waypoints(model, current_pos):
   print ik
   return ik"""
 
+
 def get_fbk(group):
   fbk = group.get_next_feedback()
   if fbk is None:
-    print("Couldn't get feedback")
-    raise hell
+    print('Could not get feedback')
+    raise RuntimeError('Could not get feedback')
   return fbk
+
 
 def play_trajectory(group, model, trajectory, fraction = 1.0):
   t = 0.0
@@ -90,7 +95,7 @@ def play_trajectory(group, model, trajectory, fraction = 1.0):
     pos_cmd, vel_cmd, acc_cmd = trajectory.get_state(t)
     cmd.position = pos_cmd
     cmd.velocity = vel_cmd
-    cmd.effort = numpy.matrix(get_grav_comp_efforts(model, fbk.position, [0,0,1]) + spring_offset).A1
+    cmd.effort = numpy.matrix(get_grav_comp_efforts(model, fbk.position, [0.0, 0.0, 1.0]) + spring_offset).A1
     group.send_command(cmd)
     t = t + period # TODO: do this better!
 
@@ -107,7 +112,7 @@ def run():
   # Pause for 2.5 seconds at start pos
   vel = numpy.zeros((6, 4))
   acc = numpy.zeros((6, 4))
-  time = numpy.linspace(0.0, 7.5, 4.0)
+  time = numpy.linspace(0.0, 7.5, 4)
   wp = numpy.matrix([pos, waypoint1, waypoint1, waypoint2])
   trajectory = hebi.trajectory.create_trajectory(time, wp.T, vel, acc)
 
@@ -117,14 +122,14 @@ def run():
   vel = numpy.zeros((6, 3))
   acc = numpy.zeros((6, 3))
   vel[:,1] = acc[:,1] = numpy.nan
-  time = numpy.linspace(0.0, 5.0, 3.0)
+  time = numpy.linspace(0.0, 5.0, 3)
 
   # Start Logging
   group.start_log()
 
   numMoves = 50
   i = 0
-  while (i < numMoves):
+  while i < numMoves:
     # Update waypoints and regenerate trajectory
     next_waypoint = generate_waypoints(model, waypoint2)
     wp = numpy.matrix([waypoint1, waypoint2, next_waypoint])
@@ -152,12 +157,12 @@ def run():
   t = 0
   period = 0.01
   fbk = get_fbk(group)
-  while (t < 20):
+  while t < 20:
     cmd = hebi.GroupCommand(6)
     spring_offset = numpy.zeros((1, 6))
     spring_offset[0, 1] = -9
     cmd.position = start_pt
-    cmd.effort = numpy.matrix(get_grav_comp_efforts(model, fbk.position, [0,0,1]) + spring_offset).A1
+    cmd.effort = numpy.matrix(get_grav_comp_efforts(model, fbk.position, [0.0, 0.0, 1.0]) + spring_offset).A1
     group.send_command(cmd)
     sleep(period)
     t = t + period

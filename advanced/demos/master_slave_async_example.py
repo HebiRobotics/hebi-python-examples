@@ -21,9 +21,11 @@ elif master.size != slave.size:
 
 command = hebi.GroupCommand(slave.size)
 
+
 def feedback_handler(group_fbk):
   command.position = group_fbk.position
   slave.send_command(command)
+
 
 # Start feedback callbacks
 master.add_feedback_handler(feedback_handler)
