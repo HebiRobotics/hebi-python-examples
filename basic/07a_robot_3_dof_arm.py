@@ -8,12 +8,12 @@ import numpy as np
 import os, sys
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path = [root_path] + sys.path
-import util
+from util import math_utils
 
 
 # A helper function to create a group from named modules, and set specified gains on the modules in that group.
 def get_group():
-  families = ['3-DoF Arm']
+  families = ['Test Family']
   names = ["Base", "Shoulder", "Elbow"]
   lookup = hebi.Lookup()
   sleep(2.0)
@@ -25,9 +25,11 @@ def get_group():
   gains_command = hebi.GroupCommand(group.size)
   try:
     gains_command.read_gains("gains/3-DoF_arm_gains.xml")
-  except:
+  except Exception as e:
+    print('Failed to read gains: {0}'.format(e))
     return None
   if not group.send_command_with_acknowledgement(gains_command):
+    print('Failed to receive ack from group')
     return None
 
   return group
@@ -55,7 +57,7 @@ def execute_trajectory(group, model, trajectory, feedback):
     # Gravity Compensation uses knowledge of the arm's kinematics and mass to
     # compensate for the weight of the arm. Dynamic Compensation uses the
     # kinematics and mass to compensate for the commanded accelerations of the arm.
-    eff_cmd = util.math_utils.get_grav_comp_efforts(model, feedback.position, [0, 0, 1])
+    eff_cmd = math_utils.get_grav_comp_efforts(model, feedback.position, [0, 0, 1])
     # NOTE: dynamic compensation effort computation has not yet been added to the APIs
 
     # Fill in the command and send commands to the arm
@@ -73,8 +75,8 @@ if group is None:
 
 try:
   model = hebi.robot_model.import_from_hrdf("hrdf/3-DoF_arm_example.hrdf")
-except:
-  print('Could not load HRDF.')
+except Exception as e:
+  print('Could not load HRDF: {0}'.format(e))
   exit(1)
 
 # Go to the XYZ positions at four corners of the box.
@@ -100,18 +102,18 @@ group.start_log("logs")
 
 # Get a trajectory from the current position to the first corner of the box: 
 waypoints = np.empty((group.size, 2))
-group.get_next_feedback(feedback)
+group.get_next_feedback(reuse_fbk=feedback)
 waypoints[:, 0] = feedback.position
 waypoints[:, 1] = joint_targets[:, 0]
-time = [0, 5]  # Seconds for the motion - do this slowly
-trajectory = hebi.trajectory.create_trajectory(time, waypoints)
+time_vector = [0, 5]  # Seconds for the motion - do this slowly
+trajectory = hebi.trajectory.create_trajectory(time_vector, waypoints)
 
 # Call helper function to execute this motion on the robot
 execute_trajectory(group, model, trajectory, feedback)
 
 # Go to all 4 corners. Calculate new point-to-point trajectories one at a time.
-time[1] = 3.0  # seconds for the move - do this a little bit more quickly
-for col in range(xyz_cols + 1):
+time_vector[1] = 3.0  # seconds for the move - do this a little bit more quickly
+for col in range(xyz_cols - 1):
   waypoints[:, 0] = joint_targets[:, col]
   waypoints[:, 1] = joint_targets[:, col + 1]
   trajectory = hebi.trajectory.create_trajectory(time, waypoints)

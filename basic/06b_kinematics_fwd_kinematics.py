@@ -8,8 +8,8 @@ lookup = hebi.Lookup()
 # Wait 2 seconds for the module list to populate
 sleep(2.0)
 
-family_name = "family"
-module_names = ["base", "shoulder", "elbow"]
+family_name = "Test Family"
+module_names = ["Base", "Shoulder", "Elbow"]
 
 group = lookup.get_group_from_names([family_name], module_names)
 
