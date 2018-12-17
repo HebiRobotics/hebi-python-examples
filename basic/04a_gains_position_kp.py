@@ -40,7 +40,7 @@ for new_gain in new_position_kp_gains:
   # Update command and send to the actuator
   for i in range(group.size):
     gain_command.position_kp = new_gain
-  if group.send_command_with_cknowledgement(gain_command):
+  if not group.send_command_with_acknowledgement(gain_command):
     print('Did not get acknowledgement from module when sending gains. Check connection.')
     exit(1)
   print('Set position kP gain to: {0}'.format(new_gain))

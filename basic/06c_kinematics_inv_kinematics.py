@@ -8,8 +8,8 @@ lookup = hebi.Lookup()
 # Wait 2 seconds for the module list to populate
 sleep(2.0)
 
-family_name = "family"
-module_names = ["base", "shoulder", "elbow"]
+family_name = "Test Family"
+module_names = ["Base", "Shoulder", "Elbow"]
 
 group = lookup.get_group_from_names([family_name], module_names)
 
@@ -44,7 +44,7 @@ initial_joint_angles = group_fbk.position
 
 # Just one objective:
 # Note: this is a numerical optimization and can be significantly affected by initial conditions (seed joint angles)
-ee_pos_objective = hebi.robot_model.endeffector_position_objective()
+ee_pos_objective = hebi.robot_model.endeffector_position_objective(target_xyz)
 ik_result_joint_angles = model.solve_inverse_kinematics(initial_joint_angles, ee_pos_objective)
 
 print('Target position: {0}'.format(target_xyz))
