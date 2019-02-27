@@ -2,9 +2,7 @@ from sdl2 import *
 from threading import Lock, Condition
 from ..type_utils import assert_callable, assert_type, assert_prange
 
-SDL_InitSubSystem(SDL_INIT_JOYSTICK)
-SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER)
-SDL_InitSubSystem(SDL_INIT_HAPTIC)
+SDL_InitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC)
 SDL_JoystickEventState(SDL_ENABLE)
 SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, b"1")
 
@@ -35,13 +33,15 @@ class JoystickEvent(object):
   Additionally, this acts as a condition variable, providing mutual exclusion to this event.
   """
 
+  __slots__ = ('__callbacks', '__cv')
+
   def __init__(self):
     self.__callbacks = set()
     self.__cv = Condition(Lock())
 
-  def __call__(self, *args):
+  def __call__(self, val):
     for callback in self.__callbacks:
-      callback(*args)
+      callback(val)
 
   def add_event_handler(self, callback):
     """
@@ -68,52 +68,26 @@ class JoystickEventsMap(object):
   Map used to encapsulate all events for a joystick
   """
 
-  def __init__(self, num_axes, num_balls, num_hats, num_buttons):
+  __slots__ = ('_axis_events', '_button_events')
 
-    d = dict()
-    d[AXIS] = [None] * num_axes
+  def __init__(self, num_axes, num_buttons):
+    axis_events   = [None] * num_axes
+    button_events = [None] * num_buttons
+
     for i in range(num_axes):
-      d[AXIS][i] = JoystickEvent()
+      axis_events[i] = JoystickEvent()
 
-    d[BALL] = [None] * num_balls
-    for i in range(num_balls):
-      d[BALL][i] = JoystickEvent()
-
-    d[HAT] = [None] * num_hats
-    for i in range(num_hats):
-      d[HAT][i] = JoystickEvent()
-
-    d[BUTTON] = [None] * num_buttons
     for i in range(num_buttons):
-      d[BUTTON][i] = JoystickEvent()
+      button_events[i] = JoystickEvent()
 
-    self.__dict = d
+    self._axis_events = axis_events
+    self._button_events = button_events
 
-  def get_event(self, key, index):
-    """
-    :param key:
-    :type key:  int
-    :param index:
-    :type index: int
+  def get_axis_event(self, index):
+    return self._axis_events[index]
 
-    :rtype: JoystickEvent
-    """
-    assert_type(index, int, 'index')
-    assert_type(key, int, 'key')
-    if not key in self.__dict:
-      raise KeyError('{0} is not an event type'.format(key))
-    events = self.__dict[key]
-    assert_prange(index, len(events))
-    return events[index]
-
-  def __getitem__(self, item):
-    """
-    Calls :meth:`get_event` with the given input
-    :param item: tuple of key and index
-    :type item:  tuple
-    """
-    assert_type(item, tuple, 'item')
-    return self.get_event(*item)
+  def get_button_event(self, index):
+    return self._button_events[index]
 
 
 class GameControllerException(RuntimeError):
@@ -126,31 +100,9 @@ class GameControllerException(RuntimeError):
 # ------------------------------------------------------------------------------
 
 
-def hat_get_val(value):
-  hx = 0
-  hy = 0
-  if value & SDL_HAT_UP:
-    hy = 1
-  elif value & SDL_HAT_DOWN:
-    hy = -1
-  if value & SDL_HAT_RIGHT:
-    hx = 1
-  elif value & SDL_HAT_LEFT:
-    hx = -1
-  return hx, hy
-
-
-AXIS = 1
-BALL = 2
-HAT = 3
-BUTTON = 4
-
 _joysticks = dict()
-_val_mapper = {
-  AXIS: lambda value: value*0.0000305185,
-  BALL: lambda xrel, yrel: (xrel, yrel),
-  HAT: hat_get_val,
-  BUTTON: lambda value: value == SDL_PRESSED}
+_axis_val_cvt = lambda value: value*0.0000305185
+_button_val_cvt = lambda value: value != 0
 
 
 # ------------------------------------------------------------------------------
@@ -167,150 +119,90 @@ class Joystick(object):
   This class wraps the SDL2 library.
   """
 
+  # TODO
+  #__slots__ = []
+
   def __init__(self, index):
     self.__gamepad = SDL_GameControllerOpen(index)
 
     if not self.__gamepad:
-      self.__joystick = None
-      self._as_parameter_ = self.__joystick
       raise GameControllerException('Not a game controller')
 
     self.__joystick = SDL_JoystickOpen(index)
     self.__index = index
-    self._as_parameter_ = self.__joystick
+    self._as_parameter_ = self.__gamepad
     self.__initialize()
 
-    from ._joystick_mappings import get_joystick_mapping
-    self.__joystick_mapping = get_joystick_mapping(self)
+    # TODO
+    #self.__joystick_mapping = get_joystick_mapping(self)
 
   def __del__(self):
-    if (self.__gamepad):
+    if self.__gamepad:
       SDL_GameControllerClose(self.__gamepad)
-    if (self.__joystick):
+    if self.__joystick:
       SDL_JoystickClose(self.__joystick)
 
-  def __getattr__(self, item):
-    """
-    Hack to allow user to get button or axis value as a field of the Joystick
-    For example, if there was a button named 'SHARE', one could do the following:
-
-      joy = get_joystick() # this is the Joystick object
-      pressed = joy.BUTTON_SHARE
-      print('is SHARE button pressed? {0}'.format(pressed))
-
-    This is only called if an attribute (field in layman's terms) is not found
-    in a call to __getattribute__
-    """
-    if item == '__joystick_mapping':
-      raise RuntimeError
-    elif self.__joystick_mapping is None:
-      raise AttributeError
-    elif item.startswith('BUTTON_') or item.startswith('AXIS_'):
-      return self.__joystick_mapping[item]()
-    else:
-      raise AttributeError
-
-  def __dir__(self):
-    """
-    Hack to allow IDE's and Python consoles to autocomplete button and axis names
-    """
-    s_dir = set()
-    for entry in super(Joystick, self).__dir__():
-      s_dir.add(entry)
-
-    if self.__joystick_mapping is not None:
-      s_dir = s_dir.union(self.__joystick_mapping.axis_ids)
-      s_dir = s_dir.union(self.__joystick_mapping.button_ids)
-    return [entry for entry in s_dir]
-
   def __initialize(self):
+    # See details at https://wiki.libsdl.org/SDL_GameControllerAxis
+    num_axes = 6
+    # See details at https://wiki.libsdl.org/SDL_GameControllerButton
+    num_buttons = 15
 
-    num_axes = SDL_JoystickNumAxes(self)
-    num_balls = SDL_JoystickNumBalls(self)
-    num_hats = SDL_JoystickNumHats(self)
-    num_buttons = SDL_JoystickNumButtons(self)
-
-    self.__num_axes = num_axes
-    self.__num_balls = num_balls
-    self.__num_hats = num_hats
-    self.__num_buttons = num_buttons
-    self.__events = JoystickEventsMap(num_axes, num_balls, num_hats, num_buttons)
+    self.__events = JoystickEventsMap(num_axes, num_buttons)
 
     from ctypes import byref, c_int
 
-    if num_axes > 0:
-      axes_last_val = [None] * num_axes
-      for i in range(num_axes):
-        axes_last_val[i] = _val_mapper[AXIS](SDL_JoystickGetAxis(self, i))
-    else:
-      axes_last_val = []
+    last_axis_vals = [None] * num_axes
+    for i in range(num_axes):
+      last_axis_vals[i] = _axis_val_cvt(SDL_GameControllerGetAxis(self, i))
+    
+    last_button_vals = [None] * num_buttons
+    for i in range(num_buttons):
+      last_button_vals[i] = _button_val_cvt(SDL_GameControllerGetButton(self, i))
 
-    if num_balls > 0:
-      balls_last_val = [None] * num_balls
-      xrel = c_int()
-      yrel = c_int()
-      for i in range(num_balls):
-        SDL_JoystickGetBall(self, i, byref(xrel), byref(yrel))
-        balls_last_val[i] = _val_mapper[BALL](xrel.value, yrel.value)
-    else:
-      balls_last_val = []
+    self.__last_axis_vals = last_axis_vals
+    self.__last_button_vals = last_button_vals
 
-    if num_hats > 0:
-      hats_last_val = [None] * num_hats
-      for i in range(num_hats):
-        hats_last_val[i] = _val_mapper[HAT](SDL_JoystickGetHat(self, i))
-    else:
-      hats_last_val = []
-
-    if num_buttons > 0:
-      buttons_last_val = [None] * num_buttons
-      for i in range(num_buttons):
-        buttons_last_val[i] = _val_mapper[BUTTON](SDL_JoystickGetButton(self, i))
-    else:
-      buttons_last_val = []
-
-    last_vals = {
-      AXIS: axes_last_val,
-      BALL: balls_last_val,
-      HAT: hats_last_val,
-      BUTTON: buttons_last_val }
-    self.__last_vals = last_vals
-
-  def __get_next_val(self, key, idx, timeout):
-    event = self.__events[key, idx]
+  def __get_next_axis_val(self, idx, timeout):
+    event = self.__events.get_axis_event(idx)
     event.acquire()
     event.wait(timeout)
-    val = self.__last_vals[key][idx]
+    value = self.__last_axis_vals[idx]
     event.release()
-    return val
+    return value
 
-  def __update_last_val(self, idx, key, *args):
-    cvtr = _val_mapper[key]
-    value = cvtr(*args)
-    event = self.__events[key, idx]
+  def __get_next_button_val(self, idx, timeout):
+    event = self.__events.get_button_event(idx)
     event.acquire()
-    self.__last_vals[key][idx] = value
+    event.wait(timeout)
+    value = self.__last_button_vals[idx]
+    event.release()
+    return value
+
+  def __update_last_axis_val(self, idx, val):
+    value = _axis_val_cvt(val)
+    event = self.__events.get_axis_event(idx)
+    event.acquire()
+    self.__last_axis_vals[idx] = value
     event.notify_all()
     event.release()
     return event, value
 
-  def __register_event_handler(self, idx, key, callback):
-    self.__events[key, idx].add_event_handler(callback)
+  def __update_last_button_val(self, idx, val):
+    value = _button_val_cvt(val)
+    event = self.__events.get_button_event(idx)
+    event.acquire()
+    self.__last_button_vals[idx] = value
+    event.notify_all()
+    event.release()
+    return event, value
 
   def _on_axis_motion(self, ts, axis, value):
-    event, val = self.__update_last_val(axis, AXIS, value)
+    event, val = self.__update_last_axis_val(axis, value)
     event(ts, val)
 
-  def _on_ball_motion(self, ts, ball, xrel, yrel):
-    event, val = self.__update_last_val(ball, BALL, xrel, yrel)
-    event(ts, *val)
-
-  def _on_hat_motion(self, ts, hat, value):
-    event, val = self.__update_last_val(hat, HAT, value)
-    event(ts, *val)
-
   def _on_button_event(self, ts, button, value):
-    event, val = self.__update_last_val(button, BUTTON, value)
+    event, val = self.__update_last_button_val(button, value)
     event(ts, val)
 
   @staticmethod
@@ -369,7 +261,7 @@ class Joystick(object):
     :rtype:  str
     """
     import sdl2.ext.compat
-    return sdl2.ext.compat.stringify(SDL_GameControllerName(self.__gamepad), 'utf8')
+    return sdl2.ext.compat.stringify(SDL_GameControllerName(self), 'utf8')
 
   @property
   def guid(self):
@@ -377,15 +269,7 @@ class Joystick(object):
     :return: the GUID of the device this joystick represents
     :rtype:  str
     """
-    return SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(self))
-
-  def add_dpad_event_handler(self, handler):
-    """
-    :param handler:
-    :return:
-    """
-    assert_callable(handler)
-    self.__register_event_handler(0, HAT, handler)
+    return SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(self.__joystick))
 
   def add_axis_event_handler(self, axis, handler):
     """
@@ -423,23 +307,6 @@ class Joystick(object):
     assert_type(button, int, 'button')
     self.__register_event_handler(button, BUTTON, handler)
 
-  def get_button_name(self, index):
-    """
-    Get the name of the button at the given index. If this joystick has no
-    mapping, then an exception will be thrown.
-
-    :param index: The index of the button
-    :type index:  int
-    :return: The human readable name of the button
-    :rtype:  str
-    :raises GameControllerException: If the joystick does not have a mapping
-    :raises TypeError:               If `index` is not an int
-    """
-    assert_type(index, int, 'index')
-    if self.__joystick_mapping is None:
-      raise GameControllerException('Joystick has no mapping')
-    return self.__joystick_mapping.get_button(index).name
-
   def get_axis(self, axis):
     """
     Retrieves the last value of the axis provided. This call does not block.
@@ -455,49 +322,9 @@ class Joystick(object):
     :raises IndexError: If `axis` is an invalid index
     """
     if type(axis) == str:
-      if self.__joystick_mapping is not None:
-        return self.__joystick_mapping.get_axis_value(axis)
-      else:
-        raise GameControllerException('Joystick has no mapping. You must retrieve button values by integer index')
-    assert_type(axis, int, 'axis')
-    vals = self.__last_vals[AXIS]
-    assert_prange(axis, len(vals), 'axis index')
-    return vals[axis]
-
-  def get_ball(self, ball):
-    """
-    Retrieves the last value of the ball at the given index.
-    This call does not block.
-    
-    :return: 
-    :rtype:  tuple
-    
-    :raises TypeError:  If `ball` is not an int
-    :raises IndexError: If `ball` is an invalid index
-    """
-    assert_type(ball, int, 'ball')
-    vals = self.__last_vals[BALL]
-    assert_prange(ball, len(vals), 'ball index')
-    return vals[ball]
-
-  def get_hat(self, hat):
-    """
-    Retrieves the last value of the hat at the given index.
-    This call does not block.
-
-    :param hat:   The index of the hat
-    :type button: int
-
-    :return: 
-    :rtype:  tuple
-
-    :raises TypeError:  If `hat` is not an int
-    :raises IndexError: If `hat` is an invalid index
-    """
-    assert_type(hat, int, 'hat')
-    vals = self.__last_vals[HAT]
-    assert_prange(hat, len(vals), 'hat index')
-    return vals[hat]
+      axis = self.__joystick_mapping.get_axis(axis).index
+    # TODO
+    pass
 
   def get_button(self, button):
     """
@@ -516,14 +343,9 @@ class Joystick(object):
     :raises IndexError:              If `button` is an invalid (int) index
     """
     if type(button) == str:
-      if self.__joystick_mapping is not None:
-        return self.__joystick_mapping.get_button_value(button)
-      else:
-        raise GameControllerException('Joystick has no mapping. You must retrieve button values by integer index')
-    assert_type(button, int, 'button')
-    vals = self.__last_vals[BUTTON]
-    assert_prange(button, len(vals), 'button index')
-    return vals[button]
+      button = self.__joystick_mapping.get_button(button).index
+    # TODO
+    pass
 
   def get_next_axis_state(self, axis, timeout=None):
     """
@@ -537,33 +359,9 @@ class Joystick(object):
     :raises TypeError: If `axis` is not an int or str
     :raises IndexError: If `axis` is an invalid index
     """
-    return self.__get_next_val(AXIS, axis, timeout)
-
-  def get_next_ball_state(self, ball, timeout=None):
-    """
-    Retrieves the next value of the given ball. This call blocks until
-    an sdl2.SDL_JOYBALLMOTION event has been received for the ball
-
-    :param ball: 
-    :type ball:  int
-
-    :raises TypeError: If `ball` is not an int
-    :raises IndexError: If `ball` is an invalid index
-    """
-    return self.__get_next_val(BALL, ball, timeout)
-
-  def get_next_hat_state(self, hat, timeout=None):
-    """
-    Retrieves the next value of the given hat. This call blocks until
-    an sdl2.SDL_JOYHATMOTION event has been received for the hat
-
-    :param hat: 
-    :type hat:  int
-
-    :raises TypeError: If `hat` is not an int
-    :raises IndexError: If `hat` is an invalid index
-    """
-    return self.__get_next_val(HAT, hat, timeout)
+    if type(axis) == str:
+      axis = self.__joystick_mapping.get_axis(axis).index
+    return self.__get_next_axis_val(axis, timeout)
 
   def get_next_button_state(self, button, timeout=None):
     """
@@ -578,4 +376,6 @@ class Joystick(object):
     :raises TypeError: If `button` is not an int or str
     :raises IndexError: If `button` is an invalid index
     """
-    return self.__get_next_val(BUTTON, button, timeout)
+    if type(button) == str:
+      button = self.__joystick_mapping.get_button(button).index
+    return self.__get_next_button_val(button, timeout)

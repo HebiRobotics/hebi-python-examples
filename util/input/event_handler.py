@@ -19,8 +19,8 @@ class SDLEventHandler(object):
   def __init__(self):
     hooks = dict()
     hooks[SDL_JOYAXISMOTION] = [_joystick_axis_motion]
-    hooks[SDL_JOYBALLMOTION] = [_joystick_ball_motion]
-    hooks[SDL_JOYHATMOTION] = [_joystick_hat_motion]
+    #hooks[SDL_JOYBALLMOTION] = [_joystick_ball_motion]
+    #hooks[SDL_JOYHATMOTION] = [_joystick_hat_motion]
     hooks[SDL_JOYBUTTONDOWN] = [_joystick_button_event]
     hooks[SDL_JOYBUTTONUP] = [_joystick_button_event]
     hooks[SDL_JOYDEVICEADDED] = [_joystick_added]
@@ -29,19 +29,15 @@ class SDLEventHandler(object):
     self.__event_hooks = hooks
     self.__loop_mutex = threading.Lock()
     self.__last_event_loop_time = 0.0
-
     self.__event_loop_frequency = 250.0 # Limit event loop to 250 Hz
     self.__event_loop_period = 1.0/self.__event_loop_frequency
-
     self.__thread = None
 
-  def __on_event(self, event, data):
-    data = getattr(data, SDLEventHandler.__sdl_event_attr_dict[event])
+  def __dispatch_event(self, sdl_event):
+    event = sdl_event.type
+    data = getattr(sdl_event, SDLEventHandler.__sdl_event_attr_dict[event])
     for entry in self.__event_hooks[event]:
       entry(data)
-
-  def __dispatch_event(self, sdl_event):
-    self.__on_event(sdl_event.type, sdl_event)
 
   def __run(self):
     while True:
@@ -91,7 +87,7 @@ class SDLEventHandler(object):
 
 
 from . import joystick as JoystickModule
-from .joystick import Joystick
+from .joystick import Joystick as JoystickController
 import sdl2.ext.compat
 
 
@@ -112,23 +108,6 @@ def _joystick_axis_motion(sdl_event):
   axis = sdl_event.axis
   value = sdl_event.value
   Joystick.at_index(joystick_id)._on_axis_motion(ts, axis, value)
-
-
-def _joystick_ball_motion(sdl_event):
-  joystick_id = sdl_event.which
-  ts = sdl_event.timestamp
-  ball = sdl_event.ball
-  xrel = sdl_event.xrel
-  yrel = sdl_event.yrel
-  Joystick.at_index(joystick_id)._on_ball_motion(ts, ball, xrel, yrel)
-
-
-def _joystick_hat_motion(sdl_event):
-  joystick_id = sdl_event.which
-  ts = sdl_event.timestamp
-  hat = sdl_event.hat
-  value = sdl_event.value
-  Joystick.at_index(joystick_id)._on_hat_motion(ts, hat, value)
 
 
 def _joystick_button_event(sdl_event):
