@@ -284,7 +284,7 @@ def register_igor_event_handlers(igor):
 
   def stance_height_calc():
     l_val = joystick.get_axis(_l2_index) # equivalent to `get_axis('L2')`
-    r_val = joystick.get_axis(_lr_index) # equivalent to `get_axis('R2')`
+    r_val = joystick.get_axis(_r2_index) # equivalent to `get_axis('R2')`
     d_ax = l_val-r_val
     if abs(d_ax) > igor.joystick_dead_zone:
       return 0.5*d_ax
