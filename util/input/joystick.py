@@ -90,6 +90,26 @@ class JoystickEventsMap(object):
     return self._button_events[index]
 
 
+class JoystickMapping(object):
+
+  __slots__ = ('__axis_map', '__buttons_map')
+
+  def __init__(self, joystick):
+    self.__axis_map = dict()
+    self.__buttons_map = dict()
+    # TODO: iterate through all axes and buttons and add the aliases
+
+  def get_axis(self, axis):
+    if axis not in self.__axis_map:
+      raise ValueError('Invalid axis {0}'.format(axis))
+    return self.__axis_map[axis]
+
+  def get_button(self, button):
+    if button not in self.__button_map:
+      raise ValueError('Invalid button {0}'.format(button))
+    return self.__button_map[button]
+
+
 class GameControllerException(RuntimeError):
   def __init__(self, *args, **kwargs):
     super(GameControllerException, self).__init__(*args, **kwargs)
@@ -132,9 +152,7 @@ class Joystick(object):
     self.__index = index
     self._as_parameter_ = self.__gamepad
     self.__initialize()
-
-    # TODO
-    #self.__joystick_mapping = get_joystick_mapping(self)
+    self.__joystick_mapping = JoystickMapping(self.__gamepad)
 
   def __del__(self):
     if self.__gamepad:
