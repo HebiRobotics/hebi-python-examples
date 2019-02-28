@@ -1,6 +1,15 @@
 from functools import partial as funpart
 from util import math_utils
 
+
+import sdl2
+# Use these below for executing fast path in joystick accessors
+_l1_index = sdl2.SDL_CONTROLLER_BUTTON_LEFTSHOULDER
+_l2_index = sdl2.SDL_CONTROLLER_AXIS_TRIGGERLEFT
+_r1_index = sdl2.SDL_CONTROLLER_BUTTON_RIGHTSHOULDER
+_r2_index = sdl2.SDL_CONTROLLER_AXIS_TRIGGERRIGHT
+
+
 # ------------------------------------------------------------------------------
 # Arm Event Handlers
 # ------------------------------------------------------------------------------
@@ -54,39 +63,39 @@ def arm_y_vel_event(igor, in_deadzone_func, ts, axis_value):
     igor.right_arm.set_y_velocity(axis_value)
 
 
-def arm_z_vel_event_l(igor, ts, axis_value):
+def arm_z_vel_event_l(igor, ts, button_value):
   """
-  Event handler when left trigger of joystick has its axis value changed
-  (Left Trigger Axis event handler)
+  Event handler when left shoulder (L1) of joystick has its button state changed
+  (Left Shoulder Button event handler)
 
-  :param igor:       (bound parameter)
-  :param ts:         (ignored)
-  :param axis_value: [-1,1] value of the axis
+  :param igor:         (bound parameter)
+  :param ts:           (ignored)
+  :param button_value: button pressed state
   """
-  # Left Trigger
-  # map [-1,1] to [0,1]
-  axis_value = -0.2*(axis_value*0.5+0.5)
-  set_arm_vel_z(igor.left_arm, axis_value)
-  set_arm_vel_z(igor.right_arm, axis_value)
+  # If R1 is pressed too, just ignore this
+  if igor.joystick.get_button(_r1_index):
+    return
+
+  if button_value:
+    igor.left_arm.set_z_velocity(-0.2)
+    igor.right_arm.set_z_velocity(-0.2)
 
 
-def arm_z_vel_event_r(igor, ts, axis_value):
+def arm_z_vel_event_r(igor, ts, button_value):
   """
-  Event handler when right trigger of joystick has its axis value changed
-  (Right Trigger Axis event handler)
+  Event handler when right shoulder (R1) of joystick has its button state changed
+  (Right Shoulder Button event handler)
 
-  :param igor:       (bound parameter)
-  :param ts:         (ignored)
-  :param axis_value: [-1,1] value of the axis
+  :param igor:         (bound parameter)
+  :param ts:           (ignored)
+  :param button_value: button pressed state
   """
-  # Right Trigger
-  # map [-1,1] to [0,1]
-  axis_value = 0.2*(axis_value*0.5+0.5)
-  set_arm_vel_z(igor.left_arm, axis_value)
-  set_arm_vel_z(igor.right_arm, axis_value)
+  if button_value:
+    igor.left_arm.set_z_velocity(0.2)
+    igor.right_arm.set_z_velocity(0.2)
 
 
-def zero_arm_z_event(igor, both_triggers_released, ts, pressed):
+def zero_arm_vel_z_event(igor, both_shoulders_zeroing, ts, pressed):
   """
   Event handler when left or right trigger of joystick is pressed or released.
   This event handler will zero the Z axis velocity of the arms, if both joysticks
@@ -94,11 +103,11 @@ def zero_arm_z_event(igor, both_triggers_released, ts, pressed):
   does nothing.
 
   :param igor:                   (bound parameter)
-  :param both_triggers_released: (bound parameter)
+  :param both_shoulders_zeroing: (bound parameter)
   :param ts:                     (ignored)
   :param pressed:                (ignored)
   """
-  if both_triggers_released():
+  if both_shoulders_zeroing():
     igor.left_arm.set_z_velocity(0.0)
     igor.right_arm.set_z_velocity(0.0)
 
@@ -248,26 +257,11 @@ def quit_session_event(igor, ts, pressed):
 # ------------------------------------------------------------------------------
 
 
-def set_arm_vel_z(arm, val):
+def both_shoulders_zeroing(joy):
   """
-  Set the Z axis velocity of the given arm.
-  If the velocity is less than 1e-4, this function does nothing.
-
-  :param arm:
-  :param val: The velocity
+  :return: ``True`` if both the left and right shoulder are both pressed or not pressed
   """
-  # Ignore small values from being set (noise)
-  if abs(val) > 1e-4:
-    arm.set_z_velocity(val)
-
-
-def both_triggers_released(joy):
-  """
-  :return: ``True`` if both the left and right triggers are not being pressed
-  """
-  left = joy.get_button('LEFT_TRIGGER')
-  right = joy.get_button('RIGHT_TRIGGER')
-  return not (left or right)
+  return joy.get_button(_l1_index) == joy.get_button(_r1_index)
 
 
 # ------------------------------------------------------------------------------
@@ -289,15 +283,15 @@ def register_igor_event_handlers(igor):
   arm_y_deadzone = lambda val: abs(val) <= igor.joystick_dead_zone
 
   def stance_height_calc():
-    l_val = joystick.get_axis('LEFT_TRIGGER')
-    r_val = joystick.get_axis('RIGHT_TRIGGER')
+    l_val = joystick.get_axis(_l2_index) # equivalent to `get_axis('L2')`
+    r_val = joystick.get_axis(_lr_index) # equivalent to `get_axis('R2')`
     d_ax = l_val-r_val
     if abs(d_ax) > igor.joystick_dead_zone:
       return 0.5*d_ax
     return 0.0
 
   # The current joystick used is not a global state, so we need to wrap it here
-  both_triggers = lambda: both_triggers_released(joystick)
+  l1_r1_combo = lambda: both_shoulders_zeroing(joystick)
 
   # ----------------------------------------------------------------------
   # Functions which have bound parameters, in order to have right function
@@ -328,19 +322,19 @@ def register_igor_event_handlers(igor):
 
   # Reacts to left trigger axis
   arm_z_vel_lt = funpart(arm_z_vel_event_l, igor)
-  joystick.add_axis_event_handler('LEFT_TRIGGER', arm_z_vel_lt)
+  joystick.add_button_event_handler('L1', arm_z_vel_lt)
 
   # Reacts to right trigger axis
   arm_z_vel_rt = funpart(arm_z_vel_event_r, igor)
-  joystick.add_axis_event_handler('RIGHT_TRIGGER', arm_z_vel_rt)
+  joystick.add_button_event_handler('R1', arm_z_vel_rt)
 
   # ------------------------
   # Both Arms event handlers
 
-  # Reacts to triggers pressed/released
-  zero_arm_z = funpart(zero_arm_z_event, igor, both_triggers)
-  joystick.add_button_event_handler('LEFT_TRIGGER', zero_arm_z)
-  joystick.add_button_event_handler('RIGHT_TRIGGER', zero_arm_z)
+  # Reacts to L1/R1 pressed/released
+  zero_arm_z = funpart(zero_arm_vel_z_event, igor, l1_r1_combo)
+  joystick.add_button_event_handler('L1', zero_arm_z)
+  joystick.add_button_event_handler('R1', zero_arm_z)
 
   # Reacts to D-Pad pressed/released
   wrist_vel = funpart(wrist_vel_event, igor)
@@ -361,8 +355,8 @@ def register_igor_event_handlers(igor):
   # Stance height
 
   stance_height_trigger = funpart(stance_height_triggers_event, igor, joystick, stance_height_calc)
-  joystick.add_axis_event_handler('LEFT_TRIGGER', stance_height_trigger)
-  joystick.add_axis_event_handler('RIGHT_TRIGGER', stance_height_trigger)
+  joystick.add_axis_event_handler('L2', stance_height_trigger)
+  joystick.add_axis_event_handler('R2', stance_height_trigger)
 
   stance_height = funpart(stance_height_event, igor, stance_height_calc)
   joystick.add_button_event_handler('OPTIONS', stance_height)

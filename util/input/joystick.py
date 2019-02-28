@@ -39,9 +39,9 @@ class JoystickEvent(object):
     self.__callbacks = set()
     self.__cv = Condition(Lock())
 
-  def __call__(self, val):
+  def __call__(self, ts, val):
     for callback in self.__callbacks:
-      callback(val)
+      callback(ts, val)
 
   def add_event_handler(self, callback):
     """
@@ -90,26 +90,6 @@ class JoystickEventsMap(object):
     return self._button_events[index]
 
 
-class JoystickMapping(object):
-
-  __slots__ = ('__axis_map', '__buttons_map')
-
-  def __init__(self, joystick):
-    self.__axis_map = dict()
-    self.__buttons_map = dict()
-    # TODO: iterate through all axes and buttons and add the aliases
-
-  def get_axis(self, axis):
-    if axis not in self.__axis_map:
-      raise ValueError('Invalid axis {0}'.format(axis))
-    return self.__axis_map[axis]
-
-  def get_button(self, button):
-    if button not in self.__button_map:
-      raise ValueError('Invalid button {0}'.format(button))
-    return self.__button_map[button]
-
-
 class GameControllerException(RuntimeError):
   def __init__(self, *args, **kwargs):
     super(GameControllerException, self).__init__(*args, **kwargs)
@@ -151,8 +131,15 @@ class Joystick(object):
     self.__joystick = SDL_JoystickOpen(index)
     self.__index = index
     self._as_parameter_ = self.__gamepad
-    self.__initialize()
-    self.__joystick_mapping = JoystickMapping(self.__gamepad)
+
+    # See details at https://wiki.libsdl.org/SDL_GameControllerAxis
+    num_axes = 6
+    # See details at https://wiki.libsdl.org/SDL_GameControllerButton
+    num_buttons = 15
+    self.__initialize_values(num_axes, num_buttons)
+
+    from ._joystick_mapping import default_joystick_mapping
+    self.__joystick_mapping = default_joystick_mapping()
 
   def __del__(self):
     if self.__gamepad:
@@ -160,14 +147,8 @@ class Joystick(object):
     if self.__joystick:
       SDL_JoystickClose(self.__joystick)
 
-  def __initialize(self):
-    # See details at https://wiki.libsdl.org/SDL_GameControllerAxis
-    num_axes = 6
-    # See details at https://wiki.libsdl.org/SDL_GameControllerButton
-    num_buttons = 15
-
+  def __initialize_values(self, num_axes, num_buttons):
     self.__events = JoystickEventsMap(num_axes, num_buttons)
-
     from ctypes import byref, c_int
 
     last_axis_vals = [None] * num_axes
@@ -303,9 +284,9 @@ class Joystick(object):
     """
     assert_callable(handler)
     if type(axis) == str:
-      axis = self.__joystick_mapping.get_axis(axis).index
+      axis = self.__joystick_mapping.get_axis(axis)
     assert_type(axis, int, 'axis')
-    self.__register_event_handler(axis, AXIS, handler)
+    self.__events.get_axis_event(axis).add_event_handler(handler)
 
   def add_button_event_handler(self, button, handler):
     """
@@ -321,9 +302,9 @@ class Joystick(object):
     """
     assert_callable(handler)
     if type(button) == str:
-      button = self.__joystick_mapping.get_button(button).index
+      button = self.__joystick_mapping.get_button(button)
     assert_type(button, int, 'button')
-    self.__register_event_handler(button, BUTTON, handler)
+    self.__events.get_button_event(button).add_event_handler(handler)
 
   def get_axis(self, axis):
     """
@@ -340,9 +321,8 @@ class Joystick(object):
     :raises IndexError: If `axis` is an invalid index
     """
     if type(axis) == str:
-      axis = self.__joystick_mapping.get_axis(axis).index
-    # TODO
-    pass
+      axis = self.__joystick_mapping.get_axis(axis)
+    return self.__last_axis_vals[axis]
 
   def get_button(self, button):
     """
@@ -361,14 +341,13 @@ class Joystick(object):
     :raises IndexError:              If `button` is an invalid (int) index
     """
     if type(button) == str:
-      button = self.__joystick_mapping.get_button(button).index
-    # TODO
-    pass
+      button = self.__joystick_mapping.get_button(button)
+    return self.__last_button_vals[button]
 
   def get_next_axis_state(self, axis, timeout=None):
     """
     Retrieves the next value of the given axis. This call blocks until
-    an sdl2.SDL_JOYAXISMOTION event has been received for the axis
+    an sdl2.<joy motion> event has been received for the axis
 
     :param axis: 
     :type axis:  int, str
@@ -378,13 +357,13 @@ class Joystick(object):
     :raises IndexError: If `axis` is an invalid index
     """
     if type(axis) == str:
-      axis = self.__joystick_mapping.get_axis(axis).index
+      axis = self.__joystick_mapping.get_axis(axis)
     return self.__get_next_axis_val(axis, timeout)
 
   def get_next_button_state(self, button, timeout=None):
     """
     Retrieves the next value of the given button. This call blocks until
-    an sdl2.SDL_JOYBUTTONDOWN or sdl2.SDL_JOYBUTTONUP event has been received
+    an sdl2.<button down> or sdl2.<button up> event has been received
     for the button
 
     :param button: 
@@ -395,5 +374,5 @@ class Joystick(object):
     :raises IndexError: If `button` is an invalid index
     """
     if type(button) == str:
-      button = self.__joystick_mapping.get_button(button).index
+      button = self.__joystick_mapping.get_button(button)
     return self.__get_next_button_val(button, timeout)
