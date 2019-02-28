@@ -1,6 +1,7 @@
 import os
 
 from util.input.joystick import Joystick
+from util.input.module_controller import HebiModuleController
 
 # ------------------------------------------------------------------------------
 # Joystick selectors
@@ -35,6 +36,20 @@ def _joystick_by_name_selector(name):
   return None
 
 
+def _joystick_by_mobile_io_selector(family, name, feedback_frequency):
+  import hebi
+  from time import sleep
+  lookup = hebi.Lookup()
+  sleep(2)
+  group = lookup.get_group_from_names([family], [name])
+  if group is None:
+    msg = 'Could not find Mobile IO on network with\nfamily: {0}\nname: {1}'.format(family, name)
+    print(msg)
+    raise RuntimeError(msg)
+  group.feedback_frequency = feedback_frequency
+  return HebiModuleController(group)
+
+
 def _create_joystick_selector(strategy, arg=None):
   if strategy == 'first':
     return _joystick_first_available_selector
@@ -44,6 +59,9 @@ def _create_joystick_selector(strategy, arg=None):
   elif strategy == 'name':
     assert arg is not None
     return lambda: _joystick_by_name_selector(arg)
+  elif strategy == 'mobile_io':
+    assert arg is not None
+    return lambda: _joystick_by_mobile_io_selector(arg[0], arg[1], arg[2])
   else:
     raise RuntimeError('Invalid strategy {0}'.format(strategy))
 
@@ -93,6 +111,12 @@ class Igor2Config(object):
     Set the joystick selection strategy to select the first available joystick
     """
     self.__find_joystick_strategy = _create_joystick_selector('first')
+
+  def select_joystick_by_mobile_io(self, family, name, feedback_frequency=200):
+    """
+    Set the joystick selection strategy to select a mobile IO module with the provided family and name
+    """
+    self.__find_joystick_strategy = _create_joystick_selector('mobile_io', (family, name, feedback_frequency))
 
   @property
   def module_names(self):

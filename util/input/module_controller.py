@@ -3,7 +3,7 @@
 class FeedbackData(object):
   """Data to be passed to subscribed handlers"""
   __slots__ = ('_a1', '_a2', '_a3', '_a4', '_a5', '_a6', '_a7', '_a8',
-               '_b1', '_b2', '_b3', '_b4', '_b5', '_b6', '_b7', '_b8')
+               '_b1', '_b2', '_b3', '_b4', '_b5', '_b6', '_b7', '_b8', '_time')
 
   def __init__(self):
     self._a1 = 0.0
@@ -87,6 +87,10 @@ class FeedbackData(object):
   def b8(self):
     return self._b8
 
+  @property
+  def time(self):
+    return self._time
+
 
 _getter_dict = {
 'a1': lambda data: data.a1,
@@ -118,22 +122,23 @@ def _transformer_for_field(field):
 def _fill_feedback_data(data_dst, hebi_feedback_src):
   io_a = hebi_feedback_src.io.a
   io_b = hebi_feedback_src.io.b
-  data_dst._a1 = io_a.get_float(1)
-  data_dst._a2 = io_a.get_float(2)
-  data_dst._a3 = io_a.get_float(3)
-  data_dst._a4 = io_a.get_float(4)
-  data_dst._a5 = io_a.get_float(5)
-  data_dst._a6 = io_a.get_float(6)
-  data_dst._a7 = io_a.get_float(7)
-  data_dst._a8 = io_a.get_float(8)
-  data_dst._b1 = io_a.get_int(1)
-  data_dst._b2 = io_a.get_int(2)
-  data_dst._b3 = io_a.get_int(3)
-  data_dst._b4 = io_a.get_int(4)
-  data_dst._b5 = io_a.get_int(5)
-  data_dst._b6 = io_a.get_int(6)
-  data_dst._b7 = io_a.get_int(7)
-  data_dst._b8 = io_a.get_int(8)
+  data_dst._a1 = io_a.get_float(1)[0]
+  data_dst._a2 = io_a.get_float(2)[0]
+  data_dst._a3 = io_a.get_float(3)[0]
+  data_dst._a4 = io_a.get_float(4)[0]
+  data_dst._a5 = io_a.get_float(5)[0]
+  data_dst._a6 = io_a.get_float(6)[0]
+  data_dst._a7 = io_a.get_float(7)[0]
+  data_dst._a8 = io_a.get_float(8)[0]
+  data_dst._b1 = io_b.get_int(1)[0]
+  data_dst._b2 = io_b.get_int(2)[0]
+  data_dst._b3 = io_b.get_int(3)[0]
+  data_dst._b4 = io_b.get_int(4)[0]
+  data_dst._b5 = io_b.get_int(5)[0]
+  data_dst._b6 = io_b.get_int(6)[0]
+  data_dst._b7 = io_b.get_int(7)[0]
+  data_dst._b8 = io_b.get_int(8)[0]
+  data_dst._time = hebi_feedback_src.receive_time_us[0]
 
 
 class HebiModuleController(object):
@@ -163,7 +168,7 @@ class HebiModuleController(object):
 
     cvtr = _getter_dict[axis]
     def wrapped_handler(data):
-      handler(cvtr(data))
+      handler(data.time, cvtr(data))
     self._event_handlers.append(wrapped_handler)
 
   def add_button_event_handler(self, button, handler):
@@ -172,8 +177,18 @@ class HebiModuleController(object):
 
     cvtr = _getter_dict[button]
     def wrapped_handler(data):
-      handler(cvtr(data))
+      handler(data.time, cvtr(data))
     self._event_handlers.append(wrapped_handler)
+
+  def get_axis(self, axis):
+    if axis not in _axis_set:
+      raise ValueError('{0} is not a valid axis'.format(axis))
+    return _getter_dict[axis](self._feedback_data)
+
+  def get_button(self, button):
+    if button not in _button_set:
+      raise ValueError('{0} is not a valid button'.format(button))
+    return _getter_dict[button](self._feedback_data)
 
   @property
   def feedback_frequency(self):
