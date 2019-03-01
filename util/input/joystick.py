@@ -270,6 +270,10 @@ class Joystick(object):
     """
     return SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(self.__joystick))
 
+  @property
+  def controller_type(self):
+    return 'GameController'
+
   def add_axis_event_handler(self, axis, handler):
     """
     :param axis:    

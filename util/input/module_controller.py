@@ -191,6 +191,10 @@ class HebiModuleController(object):
     return _getter_dict[button](self._feedback_data)
 
   @property
+  def controller_type(self):
+    return 'MobileIO'
+
+  @property
   def feedback_frequency(self):
     return self._group.feedback_frequency
 

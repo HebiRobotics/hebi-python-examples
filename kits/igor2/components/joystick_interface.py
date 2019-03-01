@@ -250,20 +250,26 @@ def quit_session_event(igor, ts, pressed):
 
 
 # ------------------------------------------------------------------------------
-# Helper Functions
+# Binding event handler parameters
 # ------------------------------------------------------------------------------
 
 
-def both_shoulders_zeroing(joy, l1_index, r1_index):
-  """
-  :return: ``True`` if both the left and right shoulder are both pressed or not pressed
-  """
-  return joy.get_button(l1_index) == joy.get_button(r1_index)
+def bind_arm_x_deadzone(igor):
+  return lambda val: abs(val) <= igor.joystick_dead_zone*3.0
+
+
+def bind_arm_y_deadzone(igor):
+  return lambda val: abs(val) <= igor.joystick_dead_zone
+
+
+def bind_both_shoulders_zeroing(joystick, lower_btn_id, raise_btn_id):
+  return lambda: joystick.get_button(lower_btn_id) == joystick.get_button(raise_btn_id)
 
 
 # ------------------------------------------------------------------------------
 # Register event handlers
 # ------------------------------------------------------------------------------
+
 
 def _register_sdl_joystick(igor):
   joystick = igor.joystick
@@ -276,9 +282,6 @@ def _register_sdl_joystick(igor):
   # ----------------------------------------------
   # Functions to be passed to event handlers below
 
-  arm_x_deadzone = lambda val: abs(val) <= igor.joystick_dead_zone*3.0
-  arm_y_deadzone = lambda val: abs(val) <= igor.joystick_dead_zone
-
   def stance_height_calc():
     l_val = joystick.get_axis(_l2_index) # equivalent to `get_axis('L2')`
     r_val = joystick.get_axis(_r2_index) # equivalent to `get_axis('R2')`
@@ -286,9 +289,6 @@ def _register_sdl_joystick(igor):
     if abs(d_ax) > igor.joystick_dead_zone:
       return 0.5*d_ax
     return 0.0
-
-  # The current joystick used is not a global state, so we need to wrap it here
-  l1_r1_combo = lambda: both_shoulders_zeroing(joystick, _l1_index, _r1_index)
 
   # ----------------------------------------------------------------------
   # Functions which have bound parameters, in order to have right function
@@ -310,11 +310,11 @@ def _register_sdl_joystick(igor):
   # Left Arm event handlers
 
   # Reacts to left stick Y-axis
-  arm_x_vel = funpart(arm_x_vel_event, igor, arm_x_deadzone)
+  arm_x_vel = funpart(arm_x_vel_event, igor, bind_arm_x_deadzone(igor))
   joystick.add_axis_event_handler('LEFT_STICK_Y', arm_x_vel)
 
   # Reacts to left stick X-axis
-  arm_y_vel = funpart(arm_y_vel_event, igor, arm_y_deadzone)
+  arm_y_vel = funpart(arm_y_vel_event, igor, bind_arm_y_deadzone(igor))
   joystick.add_axis_event_handler('LEFT_STICK_X', arm_y_vel)
 
   # Reacts to left trigger axis
@@ -341,11 +341,11 @@ def _register_sdl_joystick(igor):
   # Chassis event handlers
 
   # Reacts to right stick Y-axis
-  chassis_velocity = funpart(chassis_velocity_event, igor, arm_y_deadzone)
+  chassis_velocity = funpart(chassis_velocity_event, igor, bind_arm_y_deadzone(igor))
   joystick.add_axis_event_handler('RIGHT_STICK_Y', chassis_velocity)
 
   # Reacts to right stick X-axis
-  chassis_yaw = funpart(chassis_yaw_event, igor, arm_y_deadzone)
+  chassis_yaw = funpart(chassis_yaw_event, igor, bind_arm_y_deadzone(igor))
   joystick.add_axis_event_handler('RIGHT_STICK_X', chassis_yaw)
 
   # -------------
@@ -398,9 +398,6 @@ def _register_mobile_io(igor):
   # ----------------------------------------------
   # Functions to be passed to event handlers below
 
-  arm_x_deadzone = lambda val: abs(val) <= igor.joystick_dead_zone*3.0
-  arm_y_deadzone = lambda val: abs(val) <= igor.joystick_dead_zone
-
   def stance_height_calc():
     l_val = joystick.get_axis('a3')
     r_val = joystick.get_axis('a6')
@@ -408,9 +405,6 @@ def _register_mobile_io(igor):
     if abs(d_ax) > igor.joystick_dead_zone:
       return 0.5*d_ax
     return 0.0
-
-  # The current joystick used is not a global state, so we need to wrap it here
-  l1_r1_combo = lambda: both_shoulders_zeroing(joystick, L1_BUTTON, R1_BUTTON)
 
   # ----------------------------------------------------------------------
   # Functions which have bound parameters, in order to have right function
@@ -432,11 +426,11 @@ def _register_mobile_io(igor):
   # Left Arm event handlers
 
   # Reacts to left stick Y-axis
-  arm_x_vel = funpart(arm_x_vel_event, igor, arm_x_deadzone)
+  arm_x_vel = funpart(arm_x_vel_event, igor, bind_arm_x_deadzone(igor))
   joystick.add_axis_event_handler(LEFT_STICK_Y_AXIS, arm_x_vel)
 
   # Reacts to left stick X-axis
-  arm_y_vel = funpart(arm_y_vel_event, igor, arm_y_deadzone)
+  arm_y_vel = funpart(arm_y_vel_event, igor, bind_arm_y_deadzone(igor))
   joystick.add_axis_event_handler(LEFT_STICK_X_AXIS, arm_y_vel)
 
   # Reacts to left trigger axis
@@ -463,11 +457,11 @@ def _register_mobile_io(igor):
   # Chassis event handlers
 
   # Reacts to right stick Y-axis
-  chassis_velocity = funpart(chassis_velocity_event, igor, arm_y_deadzone)
+  chassis_velocity = funpart(chassis_velocity_event, igor, bind_arm_y_deadzone(igor))
   joystick.add_axis_event_handler(RIGHT_STICK_Y_AXIS, chassis_velocity)
 
   # Reacts to right stick X-axis
-  chassis_yaw = funpart(chassis_yaw_event, igor, arm_y_deadzone)
+  chassis_yaw = funpart(chassis_yaw_event, igor, bind_arm_y_deadzone(igor))
   joystick.add_axis_event_handler(RIGHT_STICK_X_AXIS, chassis_yaw)
 
   # -------------
@@ -481,19 +475,19 @@ def _register_mobile_io(igor):
   joystick.add_button_event_handler(OPTIONS_BUTTON, stance_height)
 
 
+_controller_init_hooks = {
+  'GameController': _register_sdl_joystick,
+  'MobileIO': _register_mobile_io}
+
+
 def register_igor_event_handlers(igor):
   """
   Registers all Igor joystick event handlers
   """
   joystick = igor.joystick
+  controller_type = joystick.controller_type
 
-  # TODO: abstract this out
-  from util.input.joystick import Joystick
-  from util.input.module_controller import HebiModuleController
+  if controller_type not in _controller_init_hooks.keys():
+    raise RuntimeError('Cannot find a suitable interface for the given Igor controller {0}'.format(joystick))
 
-  if type(joystick) is Joystick:
-    _register_sdl_joystick(igor)
-  elif type(joystick) is HebiModuleController:
-    _register_mobile_io(igor)
-  else:
-    raise TypeError('unexpected type: {0}'.format(type(joystick)))
+  _controller_init_hooks[controller_type](igor)
