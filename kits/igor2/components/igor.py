@@ -565,6 +565,10 @@ class Igor(object):
 # Lifecycle functions
 # ------------------------------------------------
 
+  def _on_stop(self):
+    for entry in self._on_stop_callbacks:
+      entry()
+
   def _stop(self):
     """
     Stop running Igor. This happens once the user requests the demo to stop,
@@ -583,6 +587,7 @@ class Igor(object):
       avg_frequency = tics/duration
       print('Ran for: {0} seconds.'.format(duration))
       print('Average processing frequency: {0} Hz'.format(avg_frequency))
+      self._on_stop()
 
   def _start(self):
     """
@@ -611,6 +616,9 @@ class Igor(object):
 
     self._stop_time = time()
     self._stop()
+
+  def add_on_stop_callback(self, callback):
+    self._on_stop_callbacks.append(callback)
 
 # ------------------------------------------------
 # Initialization functions
@@ -642,6 +650,8 @@ class Igor(object):
     self._group_info = None
 
     self._proc_thread = None
+
+    self._on_stop_callbacks = list()
 
     # ----------------
     # Parameter fields

@@ -57,6 +57,7 @@ def stop_running_callback(*args):
   keep_running = False
 
 
+igor.add_on_stop_callback(stop_running_callback)
 igor.start()
 
 # The joystick has been initialized once `igor.start()` returns
