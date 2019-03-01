@@ -23,7 +23,7 @@ class Chassis(BaseBody):
                                              self._jerks)
 
   def __init__(self, val_lock):
-    super(Chassis, self).__init__(val_lock, mass=6.0, com=[0.0, 0.0, 0.10+0.3])
+    super(Chassis, self).__init__(val_lock, mass=6.0, com=[-0.05, 0.0, 0.10+0.3])
     self._user_commanded_directional_velocity = 0.0
     self._user_commanded_yaw_velocity = 0.0
     self._min_ramp_time = 0.5
