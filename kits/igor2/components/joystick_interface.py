@@ -392,8 +392,8 @@ def _register_mobile_io(igor):
   SHARE_BUTTON = 'b1'
   TOUCHPAD_BUTTON = 'b2'
   OPTIONS_BUTTON = 'b4'
-  L1_BUTTON = 'b6'
-  R1_BUTTON = 'b8'
+  L1_BUTTON = 'b8'
+  R1_BUTTON = 'b6'
 
   # ----------------------------------------------
   # Functions to be passed to event handlers below
