@@ -15,6 +15,8 @@ parser.add_argument('--imitation', action='store_true', default=False, dest='imi
                     help='Use the imitation group API to not connect to physical modules on the network.')
 parser.add_argument('--mobile-io', action='store_true', default=False, dest='mobile_io',
                     help='Drive Igor using a Mobile IO app on the network. Requires --mobile-io-family and --mobile-io-name.')
+parser.add_argument('--mobile-io-frequency', default=200.0, dest='mobile_io_freq',
+                    help='Feedback frequency of Mobile IO group. Ignored if not controlling Igor using a Mobile IO device.')
 parser.add_argument('--mobile-io-family', type=str, default=None, dest='mobile_io_family',
                     help='The Mobile IO app family.')
 parser.add_argument('--mobile-io-name', type=str, default=None, dest='mobile_io_name',
@@ -40,7 +42,14 @@ from components.configuration import Igor2Config
 igor_config = Igor2Config(args.imitation)
 
 if has_io:
-  igor_config.select_joystick_by_mobile_io(io_fam, io_name)
+  from math import isfinite
+  if args.mobile_io_freq < 1.0 or not isfinite(args.mobile_io_freq):
+    print('ignoring specified feedback frequency {0}. Defaulting to 200Hz.'.format(args.mobile_io_freq))
+    fbk_freq = 200.0
+  else:
+    fbk_freq = args.mobile_io_freq
+
+  igor_config.select_controller_by_mobile_io(io_fam, io_name, fbk_freq)
 
 
 # ------------------------------------------------------------------------------
@@ -63,7 +72,8 @@ igor.start()
 # The joystick has been initialized once `igor.start()` returns
 joy = igor.joystick
 if joy is None:
-  raise RuntimeError('No Joystick found')
+  igor.request_stop()
+  raise RuntimeError('Could not initialize controller for Igor.')
 
 from time import sleep
 while keep_running:

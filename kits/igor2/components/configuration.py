@@ -4,7 +4,7 @@ from util.input.joystick import Joystick
 from util.input.module_controller import HebiModuleController
 
 # ------------------------------------------------------------------------------
-# Joystick selectors
+# Controller selectors
 # ------------------------------------------------------------------------------
 
 
@@ -36,7 +36,7 @@ def _joystick_by_name_selector(name):
   return None
 
 
-def _joystick_by_mobile_io_selector(family, name, feedback_frequency):
+def _controller_by_mobile_io_selector(family, name, feedback_frequency):
   import hebi
   from time import sleep
   lookup = hebi.Lookup()
@@ -50,7 +50,7 @@ def _joystick_by_mobile_io_selector(family, name, feedback_frequency):
   return HebiModuleController(group)
 
 
-def _create_joystick_selector(strategy, arg=None):
+def _create_controller_selector(strategy, arg=None):
   if strategy == 'first':
     return _joystick_first_available_selector
   elif strategy == 'index':
@@ -61,14 +61,104 @@ def _create_joystick_selector(strategy, arg=None):
     return lambda: _joystick_by_name_selector(arg)
   elif strategy == 'mobile_io':
     assert arg is not None
-    return lambda: _joystick_by_mobile_io_selector(arg[0], arg[1], arg[2])
+    return lambda: _controller_by_mobile_io_selector(arg[0], arg[1], arg[2])
   else:
-    raise RuntimeError('Invalid strategy {0}'.format(strategy))
+    raise RuntimeError('Invalid controller selector strategy {0}'.format(strategy))
+
+
+# ------------------------------------------------------------------------------
+# Controller Mappings
+# ------------------------------------------------------------------------------
+
+"""
+  ARM_VEL_X_AXIS = 'a2'
+  ARM_VEL_Y_AXIS = 'a1'
+  STANCE_HEIGHT_AXIS = 'a3'
+  WRIST_VEL_AXIS = 'a6'
+  CHASSIS_YAW_AXIS = 'a7'
+  CHASSIS_VEL_AXIS = 'a8'
+  QUIT_BTN = 'b1'
+  BALANCE_CONTROLLER_TOGGLE_BTN = 'b2'
+  SOFT_SHUTDOWN_BTN = 'b4'
+  LOWER_ARM_BTN = 'b8'
+  RAISE_ARM_BTN = 'b6'
+"""
+
+
+class IgorControllerMapping(object):
+  __slots__ = ('_arm_vel_x', '_arm_vel_y', '_stance_height', '_wrist_vel',
+    '_chassis_yaw', '_chassis_vel', '_quit', '_balance_controller_toggle',
+    '_soft_shutdown', '_lower_arm', '_raise_arm')
+
+  def __init__(self, arm_vel_x, arm_vel_y, stance_height, wrist_vel, chassis_yaw,
+    chassis_vel, quit, balance_controller_toggle, soft_shutdown,
+    lower_arm, raise_arm):
+
+    self._arm_vel_x = arm_vel_x
+    self._arm_vel_y = arm_vel_y
+    self._stance_height = stance_height
+    self._wrist_vel = wrist_vel
+    self._chassis_yaw = chassis_yaw
+    self._chassis_vel = chassis_vel
+    self._quit = quit
+    self._balance_controller_toggle = balance_controller_toggle
+    self._soft_shutdown = soft_shutdown
+    self._lower_arm = lower_arm
+    self._raise_arm = raise_arm
+
+  @property
+  def arm_vel_x(self):
+    return self._arm_vel_x
+
+  @property
+  def arm_vel_y(self):
+    return self._arm_vel_y
+
+  @property
+  def stance_height(self):
+    return self._stance_height
+
+  @property
+  def wrist_vel(self):
+    return self._wrist_vel
+
+  @property
+  def chassis_yaw(self):
+    return self._chassis_yaw
+
+  @property
+  def chassis_vel(self):
+    return self._chassis_vel
+
+  @property
+  def quit(self):
+    return self._quit
+
+  @property
+  def balance_controller_toggle(self):
+    return self._balance_controller_toggle
+
+  @property
+  def soft_shutdown(self):
+    return self._soft_shutdown
+
+  @property
+  def lower_arm(self):
+    return self._lower_arm
+
+  @property
+  def raise_arm(self):
+    return self._raise_arm
+
+
+_default_joystick_mapping = IgorControllerMapping() # TODO
+_default_mobile_io_mapping = IgorControllerMapping('a2', 'a1', 'a3', 'a6', 'a7', 'a8', 'b1', 'b2', 'b4', 'b8', 'b6')
 
 
 # ------------------------------------------------------------------------------
 # Configuration
 # ------------------------------------------------------------------------------
+
 
 class Igor2Config(object):
   """
@@ -98,25 +188,25 @@ class Igor2Config(object):
     """
     Set the joystick selection strategy to select a joystick by name
     """
-    self.__find_joystick_strategy = _create_joystick_selector('name', name)
+    self.__find_joystick_strategy = _create_controller_selector('name', name)
 
   def select_joystick_by_index(self, index):
     """
     Set the joystick selection strategy to select a joystick by index
     """
-    self.__find_joystick_strategy = _create_joystick_selector('index', index)
+    self.__find_joystick_strategy = _create_controller_selector('index', index)
 
   def select_first_available_joystick(self):
     """
     Set the joystick selection strategy to select the first available joystick
     """
-    self.__find_joystick_strategy = _create_joystick_selector('first')
+    self.__find_joystick_strategy = _create_controller_selector('first')
 
-  def select_joystick_by_mobile_io(self, family, name, feedback_frequency=200):
+  def select_controller_by_mobile_io(self, family, name, feedback_frequency=200):
     """
     Set the joystick selection strategy to select a mobile IO module with the provided family and name
     """
-    self.__find_joystick_strategy = _create_joystick_selector('mobile_io', (family, name, feedback_frequency))
+    self.__find_joystick_strategy = _create_controller_selector('mobile_io', (family, name, feedback_frequency))
 
   @property
   def module_names(self):
