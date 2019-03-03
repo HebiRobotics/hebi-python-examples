@@ -70,29 +70,16 @@ def _create_controller_selector(strategy, arg=None):
 # Controller Mappings
 # ------------------------------------------------------------------------------
 
-"""
-  ARM_VEL_X_AXIS = 'a2'
-  ARM_VEL_Y_AXIS = 'a1'
-  STANCE_HEIGHT_AXIS = 'a3'
-  WRIST_VEL_AXIS = 'a6'
-  CHASSIS_YAW_AXIS = 'a7'
-  CHASSIS_VEL_AXIS = 'a8'
-  QUIT_BTN = 'b1'
-  BALANCE_CONTROLLER_TOGGLE_BTN = 'b2'
-  SOFT_SHUTDOWN_BTN = 'b4'
-  LOWER_ARM_BTN = 'b8'
-  RAISE_ARM_BTN = 'b6'
-"""
-
 
 class IgorControllerMapping(object):
   __slots__ = ('_arm_vel_x', '_arm_vel_y', '_stance_height', '_wrist_vel',
     '_chassis_yaw', '_chassis_vel', '_quit', '_balance_controller_toggle',
-    '_soft_shutdown', '_lower_arm', '_raise_arm')
+    '_soft_shutdown', '_lower_arm', '_raise_arm', '_stance_height_control_strategy', 
+    '_wrist_velocity_control_strategy')
 
   def __init__(self, arm_vel_x, arm_vel_y, stance_height, wrist_vel, chassis_yaw,
     chassis_vel, quit, balance_controller_toggle, soft_shutdown,
-    lower_arm, raise_arm):
+    lower_arm, raise_arm, stance_height_control_strategy, wrist_velocity_control_strategy):
 
     self._arm_vel_x = arm_vel_x
     self._arm_vel_y = arm_vel_y
@@ -105,6 +92,26 @@ class IgorControllerMapping(object):
     self._soft_shutdown = soft_shutdown
     self._lower_arm = lower_arm
     self._raise_arm = raise_arm
+    if stance_height_control_strategy == 'SLIDER':
+      if type(stance_height) is not str:
+        raise TypeError('stance_height must be a string for `SLIDER` stance height control strategy')
+    elif stance_height_control_strategy == 'TRIGGERS':
+      if type(stance_height) is not tuple:
+        raise TypeError('stance_height must be a tuple for `TRIGGERS` stance height control strategy')
+    else:
+      raise ValueError('Invalid stance height control strategy {0}'.format(stance_height_control_strategy))
+
+    if wrist_velocity_control_strategy == 'SLIDER':
+      if type(wrist_vel) is not str:
+        raise TypeError('wrist_vel must be a string for `SLIDER` wrist velocity control strategy')
+    elif wrist_velocity_control_strategy == 'BUTTONS':
+      if type(wrist_vel) is not tuple:
+        raise TypeError('wrist_vel must be a tuple for `BUTTONS` wrist velocity control strategy')
+    else:
+      raise ValueError('Invalid wrist velocity control strategy {0}'.format(wrist_velocity_control_strategy))
+  
+    self._wrist_velocity_control_strategy = wrist_velocity_control_strategy
+    self._stance_height_control_strategy = stance_height_control_strategy
 
   @property
   def arm_vel_x(self):
@@ -150,9 +157,17 @@ class IgorControllerMapping(object):
   def raise_arm(self):
     return self._raise_arm
 
+  @property
+  def stance_height_control_strategy(self):
+    return self._stance_height_control_strategy
 
-_default_joystick_mapping = IgorControllerMapping() # TODO
-_default_mobile_io_mapping = IgorControllerMapping('a2', 'a1', 'a3', 'a6', 'a7', 'a8', 'b1', 'b2', 'b4', 'b8', 'b6')
+  @property
+  def wrist_velocity_control_strategy(self):
+    return self._wrist_velocity_control_strategy
+
+
+_default_joystick_mapping = IgorControllerMapping('LEFT_STICK_Y', 'LEFT_STICK_X', ('L2', 'R2'), ('DPAD_DOWN', 'DPAD_UP'), 'RIGHT_STICK_X', 'RIGHT_STICK_Y', 'SHARE', 'TOUCHPAD', 'OPTIONS', 'L1', 'R1', 'TRIGGERS', 'BUTTONS')
+_default_mobile_io_mapping = IgorControllerMapping('a2', 'a1', 'a3', 'a6', 'a7', 'a8', 'b1', 'b2', 'b4', 'b8', 'b6', 'SLIDER', 'SLIDER')
 
 
 # ------------------------------------------------------------------------------
@@ -182,6 +197,7 @@ class Igor2Config(object):
     self.__default_gains_no_cam = os.path.join(resource_path, 'igorGains_noCamera.xml')
     self.__imitation = imitation
     self.__find_joystick_strategy = None
+    self.__controller_mapping = None
     self.select_first_available_joystick()
 
   def select_joystick_by_name(self, name):
@@ -189,73 +205,58 @@ class Igor2Config(object):
     Set the joystick selection strategy to select a joystick by name
     """
     self.__find_joystick_strategy = _create_controller_selector('name', name)
+    self.__controller_mapping = _default_joystick_mapping
 
   def select_joystick_by_index(self, index):
     """
     Set the joystick selection strategy to select a joystick by index
     """
     self.__find_joystick_strategy = _create_controller_selector('index', index)
+    self.__controller_mapping = _default_joystick_mapping
 
   def select_first_available_joystick(self):
     """
     Set the joystick selection strategy to select the first available joystick
     """
     self.__find_joystick_strategy = _create_controller_selector('first')
+    self.__controller_mapping = _default_joystick_mapping
 
   def select_controller_by_mobile_io(self, family, name, feedback_frequency=200):
     """
     Set the joystick selection strategy to select a mobile IO module with the provided family and name
     """
     self.__find_joystick_strategy = _create_controller_selector('mobile_io', (family, name, feedback_frequency))
+    self.__controller_mapping = _default_mobile_io_mapping
 
   @property
   def module_names(self):
-    """
-    :return:
-    :rtype:  list
-    """
     return self.__module_names
 
   @property
   def module_names_no_cam(self):
-    """
-    :return:
-    :rtype:  list
-    """
     return self.__module_names[0:-1]
 
   @property
   def family(self):
-    """
-    :return:
-    :rtype:  str
-    """
     return self.__family
 
   @property
   def gains_xml(self):
-    """
-    :return:
-    :rtype:  str
-    """
     return self.__default_gains
 
   @property
   def gains_no_camera_xml(self):
-    """
-    :return:
-    :rtype:  str
-    """
     return self.__default_gains_no_cam
 
   @property
   def is_imitation(self):
-    """
-    :return:
-    :rtype:  bool
-    """
     return self.__imitation
 
   @property
   def joystick_selector(self):
     return self.__find_joystick_strategy
+
+  @property
+  def controller_mapping(self):
+    return self.__controller_mapping
+  
