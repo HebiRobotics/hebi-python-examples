@@ -1,8 +1,4 @@
-from functools import partial as funpart
 from util import math_utils
-
-
-import sdl2
 
 
 # ------------------------------------------------------------------------------
