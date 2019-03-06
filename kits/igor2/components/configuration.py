@@ -73,12 +73,12 @@ def _create_controller_selector(strategy, arg=None):
 
 class IgorControllerMapping(object):
   __slots__ = ('_arm_vel_x', '_arm_vel_y', '_stance_height', '_wrist_vel',
-    '_chassis_yaw', '_chassis_vel', '_quit', '_balance_controller_toggle',
+    '_chassis_yaw', '_chassis_vel', '_exit_idle_modle', '_quit', '_balance_controller_toggle',
     '_soft_shutdown', '_lower_arm', '_raise_arm', '_stance_height_control_strategy', 
     '_wrist_velocity_control_strategy')
 
   def __init__(self, arm_vel_x, arm_vel_y, stance_height, wrist_vel, chassis_yaw,
-    chassis_vel, quit, balance_controller_toggle, soft_shutdown,
+    chassis_vel, exit_idle_modle, quit, balance_controller_toggle, soft_shutdown,
     lower_arm, raise_arm, stance_height_control_strategy, wrist_velocity_control_strategy):
 
     self._arm_vel_x = arm_vel_x
@@ -87,6 +87,7 @@ class IgorControllerMapping(object):
     self._wrist_vel = wrist_vel
     self._chassis_yaw = chassis_yaw
     self._chassis_vel = chassis_vel
+    self._exit_idle_modle = exit_idle_modle
     self._quit = quit
     self._balance_controller_toggle = balance_controller_toggle
     self._soft_shutdown = soft_shutdown
@@ -138,6 +139,10 @@ class IgorControllerMapping(object):
     return self._chassis_vel
 
   @property
+  def exit_idle_modle(self):
+    return self._exit_idle_modle
+
+  @property
   def quit(self):
     return self._quit
 
@@ -166,8 +171,8 @@ class IgorControllerMapping(object):
     return self._wrist_velocity_control_strategy
 
 
-_default_joystick_mapping = IgorControllerMapping('LEFT_STICK_Y', 'LEFT_STICK_X', ('L2', 'R2'), ('DPAD_DOWN', 'DPAD_UP'), 'RIGHT_STICK_X', 'RIGHT_STICK_Y', 'SHARE', 'TOUCHPAD', 'OPTIONS', 'L1', 'R1', 'TRIGGERS', 'BUTTONS')
-_default_mobile_io_mapping = IgorControllerMapping('a2', 'a1', 'a3', 'a6', 'a7', 'a8', 'b1', 'b2', 'b4', 'b8', 'b6', 'SLIDER', 'SLIDER')
+_default_joystick_mapping = IgorControllerMapping('LEFT_STICK_Y', 'LEFT_STICK_X', ('L2', 'R2'), ('DPAD_DOWN', 'DPAD_UP'), 'RIGHT_STICK_X', 'RIGHT_STICK_Y', 'L3', 'SHARE', 'TOUCHPAD', 'OPTIONS', 'L1', 'R1', 'TRIGGERS', 'BUTTONS')
+_default_mobile_io_mapping = IgorControllerMapping('a2', 'a1', 'a3', 'a6', 'a7', 'a8', 'b3', 'b1', 'b2', 'b4', 'b8', 'b6', 'SLIDER', 'SLIDER')
 
 
 # ------------------------------------------------------------------------------

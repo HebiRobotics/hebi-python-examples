@@ -135,6 +135,8 @@ def soft_shutdown_event(igor, igor_state, ts, pressed):
   else:
     igor_state.soft_shutdown_enabled = False
 
+  igor.allow_transition_to_idle(pressed)
+
 
 # ------------------------------------------------------------------------------
 # Chassis Event Handlers
