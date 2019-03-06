@@ -89,25 +89,51 @@ def arm_z_vel_raise_event(igor, lower_btn_id, ts, button_value):
     igor.right_arm.set_z_velocity(0.2)
 
 
-def wrist_vel_event(igor, in_deadzone_func, ts, value):
-  """
-  This event handler will set the velocity of the wrists.
+# ------------------------------------------------------------------------------
+# Wrist Event Handlers
+# 
+# Note: There are different event handlers depending on the type of controller
+# ------------------------------------------------------------------------------
 
-  :param igor:              (bound parameter)
-  :param in_deadzone_func:  (bound parameter)
-  :param ts:                (ignored)
-  :param value:             [-1,1] value
-  """
+
+def wrist_vel_event__buttons(igor, scale, ts, value):
   l_arm = igor.left_arm
   r_arm = igor.right_arm
-  if in_deadzone_func(value):
+  if value:
+    l_arm.set_wrist_velocity(scale)
+    r_arm.set_wrist_velocity(scale)
+  else:
     l_arm.set_wrist_velocity(0.0)
     r_arm.set_wrist_velocity(0.0)
-  else:
-    joy_low_pass = 0.95
-    vel = (joy_low_pass*l_arm.user_commanded_wrist_velocity)+value*(1.0-joy_low_pass)*0.25
-    l_arm.set_wrist_velocity(vel)
-    r_arm.set_wrist_velocity(vel)
+
+
+def wrist_vel_event__axis(igor, deadzone_calc, ts, value):
+  l_arm = igor.left_arm
+  r_arm = igor.right_arm
+  vel = deadzone_calc(value)
+  l_arm.set_wrist_velocity(vel)
+  r_arm.set_wrist_velocity(vel)
+
+
+# ------------------------------------------------------------------------------
+# Stance Handlers
+# ------------------------------------------------------------------------------
+
+
+def stance_height_triggers_event(igor, state, vel_calc, ts, value):
+  # Ignore this if soft shutdown is currently being requested
+  if not state.soft_shutdown_enabled:
+    return
+
+  val = vel_calc(value)
+  igor.left_leg.set_knee_velocity(val)
+  igor.right_leg.set_knee_velocity(val)
+
+
+def soft_shutdown_event(igor, ts, pressed):
+  if pressed:
+    igor.left_leg.set_knee_velocity(1.0)
+    igor.right_leg.set_knee_velocity(1.0)
 
 
 # ------------------------------------------------------------------------------
@@ -160,48 +186,6 @@ def chassis_yaw_event(igor, in_deadzone_func, ts, axis_value):
 # ------------------------------------------------------------------------------
 
 
-def stance_height_triggers_event(igor, joy, vel_calc, soft_shutdown_btn_id, ts, axis_value):
-  """
-  Event handler to leg stance height modification request
-
-  :param igor:
-  :param joy:
-  :param vel_calc:
-  :param ts:          (ignored)
-  :param axis_value:
-  """
-  # Ignore this if soft shutdown is currently being requested
-  if joy.get_button(soft_shutdown_btn_id):
-    return
-
-  val = vel_calc()
-  igor.left_leg.set_knee_velocity(val)
-  igor.right_leg.set_knee_velocity(val)
-
-
-def stance_height_event(igor, vel_calc, ts, pressed):
-  """
-  Event handler to soft shutdown request
-
-  :param igor:     (bound parameter)
-  :param vel_calc: (bound parameter)
-  :param ts:       (ignored)
-  :param pressed:
-  """
-  if pressed:
-    igor.left_leg.set_knee_velocity(1.0)
-    igor.right_leg.set_knee_velocity(1.0)
-    if igor.left_leg.knee_angle > 2.5:
-      # TODO: implement restart
-      pass
-      #igor.request_restart()
-      #igor.request_stop()
-  else:
-    val = vel_calc()
-    igor.left_leg.set_knee_velocity(val)
-    igor.right_leg.set_knee_velocity(val)
-
-
 def balance_controller_event(igor, ts, pressed):
   """
   Event handler to a request to temporarily disable/enable the balance controller.
@@ -250,8 +234,22 @@ def bind_arm_y_deadzone(igor):
   return lambda val: abs(val) <= igor.joystick_dead_zone
 
 
-def bind_wrist_deadzone(igor):
-  return lambda val: abs(val) <= igor.joystick_dead_zone
+def deadzone_clip(igor):
+  def calculate(val):
+    if abs(val) <= igor.joystick_dead_zone:
+      return 0.0
+    else
+      return val
+  return calculate
+
+
+def deadzone_clip_scaled(igor, dz_scale, out_scale):
+  def calculate(val):
+    if abs(val) <= igor.joystick_dead_zone * dz_scale:
+      return 0.0
+    else
+      return val * out_scale
+  return calculate
 
 
 # ------------------------------------------------------------------------------
@@ -259,53 +257,71 @@ def bind_wrist_deadzone(igor):
 # ------------------------------------------------------------------------------
 
 
+class IgorControlState(object):
+
+  __slots__ = ('_balance_controller_enabled', '_soft_shutdown_enabled')
+  def __init__(self):
+    self._balance_controller_enabled = True
+    self._soft_shutdown_enabled = False
+
+  @property
+  def soft_shutdown_enabled(self):
+    return self._soft_shutdown_enabled
+  
+  @soft_shutdown_enabled.setter
+  def soft_shutdown_enabled(self, value):
+    self._soft_shutdown_enabled = value
+
+
 def _add_event_handlers(igor, controller, controller_mapping):
 
   # Shortcut closures to get around having to use functool.partial
-  def bind_1_to_method(method, arg1):
+  def bind_to_method(method, *args):
     def bound_meth(ts, val):
-      method(arg1, ts, val)
-    return bound_meth
-
-  def bind_2_to_method(method, arg1, arg2):
-    def bound_meth(ts, val):
-      method(arg1, arg2, ts, val)
+      method(*args, ts, val)
     return bound_meth
 
   arm_x_deadzone_func = bind_arm_x_deadzone(igor)
   arm_y_deadzone_func = bind_arm_y_deadzone(igor)
+  igor_state = IgorControlState()
 
-  controller.add_button_event_handler(controller_mapping.quit, bind_1_to_method(quit_session_event, igor))
-  controller.add_button_event_handler(controller_mapping.balance_controller_toggle, bind_1_to_method(balance_controller_event, igor))
+  controller.add_button_event_handler(controller_mapping.quit, bind_to_method(quit_session_event, igor))
+  controller.add_button_event_handler(controller_mapping.balance_controller_toggle, bind_to_method(balance_controller_event, igor))
 
-  controller.add_axis_event_handler(controller_mapping.arm_vel_x, bind_2_to_method(arm_x_vel_event, igor, arm_x_deadzone_func))
-  controller.add_axis_event_handler(controller_mapping.arm_vel_y, bind_2_to_method(arm_y_vel_event, igor, arm_y_deadzone_func))
-  controller.add_axis_event_handler(controller_mapping.lower_arm, bind_2_to_method(arm_z_vel_lower_event, igor, controller_mapping.raise_arm))
-  controller.add_axis_event_handler(controller_mapping.raise_arm, bind_2_to_method(arm_z_vel_raise_event, igor, controller_mapping.lower_arm))
+  controller.add_axis_event_handler(controller_mapping.arm_vel_x, bind_to_method(arm_x_vel_event, igor, arm_x_deadzone_func))
+  controller.add_axis_event_handler(controller_mapping.arm_vel_y, bind_to_method(arm_y_vel_event, igor, arm_y_deadzone_func))
+  controller.add_axis_event_handler(controller_mapping.lower_arm, bind_to_method(arm_z_vel_lower_event, igor, controller_mapping.raise_arm))
+  controller.add_axis_event_handler(controller_mapping.raise_arm, bind_to_method(arm_z_vel_raise_event, igor, controller_mapping.lower_arm))
 
-  controller.add_axis_event_handler(controller_mapping.chassis_vel, bind_2_to_method(chassis_velocity_event, igor, arm_y_deadzone_func))
-  controller.add_axis_event_handler(controller_mapping.chassis_yaw, bind_2_to_method(chassis_yaw_event, igor, arm_y_deadzone_func))
+  controller.add_axis_event_handler(controller_mapping.chassis_vel, bind_to_method(chassis_velocity_event, igor, arm_y_deadzone_func))
+  controller.add_axis_event_handler(controller_mapping.chassis_yaw, bind_to_method(chassis_yaw_event, igor, arm_y_deadzone_func))
 
   # Stance height events are responded to differently by different kinds of controllers, thus requiring a bit more complex logic
   if controller_mapping.stance_height_control_strategy == 'TRIGGERS':
     stance_height_lower_axis_id = controller_mapping.stance_height[0]
     stance_height_raise_axis_id = controller_mapping.stance_height[1]
-    #controller.add_axis_event_handler(stance_height_lower_axis_id, ...)
-    #controller.add_axis_event_handler(stance_height_raise_axis_id, ...)
+
+    lower_event = bind_to_method(stance_height_triggers_event, igor, state, deadzone_clip_scaled(igor, 5.0, 1.0))
+    raise_event = bind_to_method(stance_height_triggers_event, igor, state, deadzone_clip_scaled(igor, 5.0, -1.0))
+
+    controller.add_axis_event_handler(stance_height_lower_axis_id, lower_event)
+    controller.add_axis_event_handler(stance_height_raise_axis_id, raise_event)
   elif controller_mapping.stance_height_control_strategy == 'SLIDER':
     stance_height_axis_id = controller_mapping.stance_height
-    #controller.add_axis_event_handler(stance_height_axis_id, ...)
+    controller.add_axis_event_handler(stance_height_axis_id, stance_height_triggers_event, igor, state, deadzone_clip_scaled(igor, 5.0))
 
   # Like stance height events, wrist velocity events have the same conditional logic
   if controller_mapping.wrist_velocity_control_strategy == 'BUTTONS':
     wrist_vel_lower_btn_id = controller_mapping.wrist_vel[0]
     wrist_vel_raise_btn_id = controller_mapping.wrist_vel[1]
-    #controller.add_button_event_handler(wrist_vel_lower_btn_id, ...)
-    #controller.add_button_event_handler(wrist_vel_raise_btn_id, ...)
+    controller.add_button_event_handler(wrist_vel_lower_btn_id, bind_to_method(wrist_vel_event__buttons, igor, -0.5))
+    controller.add_button_event_handler(wrist_vel_raise_btn_id, bind_to_method(wrist_vel_event__buttons, igor, 0.5))
   elif controller_mapping.wrist_velocity_control_strategy == 'SLIDER':
     wrist_vel_axis_id = controller_mapping.wrist_vel
-    # Note: additionally use `bind_wrist_deadzone` for deadzone calculation
-    #controller.add_axis_event_handler(wrist_vel_axis_id, ...)
+    wrist_vel_event = bind_to_method(wrist_vel_event__axis, igor, deadzone_clip(igor))
+    controller.add_axis_event_handler(wrist_vel_axis_id, wrist_vel_event)
+
+  # TODO: soft shutdown button
 
 
 def register_igor_event_handlers(igor):
