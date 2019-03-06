@@ -363,6 +363,15 @@ class Igor(object):
 
     from time import sleep
 
+    if self._num_spins > 0:
+      # This is not the first time we have been in the idle state. We will clear
+      # the state of the body objects before beginning the loop below.
+      self._chassis.reset_state()
+      self._left_leg.reset_state()
+      self._right_leg.reset_state()
+      self._left_arm.reset_state()
+      self._right_arm.reset_state()
+
     self._leave_idle_flag = False
     while not self._leave_idle_flag:
       group_command.led.color = 'magenta'

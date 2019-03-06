@@ -294,3 +294,20 @@ class Chassis(BaseBody):
     self._user_commanded_yaw_velocity = velocity
     self.release_value_lock()
 
+  def reset_state(self):
+    self._user_commanded_directional_velocity = 0.0
+    self._user_commanded_yaw_velocity = 0.0
+    self._hip_pitch = 0.0
+    self._hip_pitch_velocity = 0.0
+    self._velocity_feedforward = 0.0
+    self._velocity_error = 0.0
+    self._velocity_error_cumulative = 0.0
+    self._lean_angle_error = 0.0
+    self._lean_angle_error_cumulative = 0.0
+    self._cmd_chassis_vel_last = 0.0
+    self._fbk_chassis_vel_last = 0.0
+    self._calculated_lean_angle = 0.0
+    self._traj_times.fill(0)
+    self._velocities.fill(0)
+    self._accels.fill(0)
+    self._jerks.fill(0)

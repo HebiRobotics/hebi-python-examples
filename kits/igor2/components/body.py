@@ -272,3 +272,25 @@ class PeripheralBody(BaseBody):
     masses = self._masses
     np.sum(np.multiply(self._current_xyz, matlib.repmat(masses.T, 3, 1)), axis=1, out=self._com)
     self._com *= 1.0/self.mass
+
+  def reset_state(self):
+    """
+    Used when transitioning Igor back into idle mode.
+    """
+    self._fbk_position.fill(0)
+    self._fbk_position_cmd.fill(0)
+    self._fbk_velocity.fill(0)
+    self._fbk_velocity_err.fill(0)
+    self._xyz_error.fill(0)
+    self._pos_error.fill(0)
+    self._vel_error.fill(0)
+    self._impedance_err.fill(0)
+    self._impedance_torque.fill(0)
+    self._current_tip_fk.fill(0)
+    self._current_j_actual.fill(0)
+    self._current_j_actual_f.fill(0)
+    self._current_j_expected.fill(0)
+    self._current_j_expected_f.fill(0)
+
+    if self._current_xyz is not None:
+      self._current_xyz.fill(0)
