@@ -601,8 +601,8 @@ class Igor(object):
     # all of the joystick event handlers registered
     try:
       register_igor_event_handlers(self)
-    except:
-      pass
+    except Exception as e:
+      print('Caught exception while registering event handlers:\n{0}'.format(e))
 
     self._start_time = time()
     self._state_lock.acquire()
