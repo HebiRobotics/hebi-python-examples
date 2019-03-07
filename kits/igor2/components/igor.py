@@ -373,9 +373,7 @@ class Igor(object):
       self._left_arm.reset_state()
       self._right_arm.reset_state()
       # Stop commanding while in idle
-      group_command.position = None
-      group_command.velocity = None
-      group_command.effort = None
+      group_command.clear()
 
     self._leave_idle_flag = False
     while not self._leave_idle_flag:
@@ -389,6 +387,10 @@ class Igor(object):
       group_command.led.color = 'green'
       group.send_command(group_command)
       sleep(0.1)
+
+    # Let module control the LED color
+    group_command.led.color = 'transparent'
+    group.send_command(group_command)
 
   def _soft_startup(self):
     """
