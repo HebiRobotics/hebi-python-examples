@@ -79,6 +79,11 @@ class Chassis(BaseBody):
     t = time_now - self._time_s
     self._time_s = time_now
 
+    if t > self._trajectory.end_time:
+      # Clamp to end time to prevent undesired trajectory calculations.
+      # This can lead to issues when re-entering running mode after entering idle mode from running mode
+      t = self._trajectory.end_time
+
     # ---------------------------------------------
     # Smooth the trajectories for various commands.
     # This will be the starting waypoint for the new trajectory.
@@ -307,7 +312,3 @@ class Chassis(BaseBody):
     self._cmd_chassis_vel_last = 0.0
     self._fbk_chassis_vel_last = 0.0
     self._calculated_lean_angle = 0.0
-    self._traj_times.fill(0)
-    self._velocities.fill(0)
-    self._accels.fill(0)
-    self._jerks.fill(0)

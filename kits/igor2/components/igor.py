@@ -181,6 +181,7 @@ class Igor(object):
     return True
 
   def _transition_from_idle_to_running(self, ts, pressed):
+    """Controller event handler to transition from idle to running mode"""
     if pressed:
       self._leave_idle_flag = True
 
@@ -371,9 +372,17 @@ class Igor(object):
       self._right_leg.reset_state()
       self._left_arm.reset_state()
       self._right_arm.reset_state()
+      # Stop commanding while in idle
+      group_command.position = None
+      group_command.velocity = None
+      group_command.effort = None
 
     self._leave_idle_flag = False
     while not self._leave_idle_flag:
+      if self._quit_flag:
+        # User requested to quit, so bail out before actually being instructed to go into running mode.
+        return
+
       group_command.led.color = 'magenta'
       group.send_command(group_command)
       sleep(0.1)
@@ -385,6 +394,10 @@ class Igor(object):
     """
     Performs the startup phase, which takes about 3 seconds
     """
+    if self._quit_flag:
+      # Can happen if user was in running mode, re-entered idle, then requested to quit during idle
+      return
+
     l_arm = self._left_arm
     r_arm = self._right_arm
     l_leg = self._left_leg
@@ -607,8 +620,14 @@ class Igor(object):
     duration = self._stop_time - self._start_time
     tics = float(self._num_spins)
     avg_frequency = tics/duration
-    print('Ran for: {0} seconds.'.format(duration))
-    print('Average processing frequency: {0} Hz'.format(avg_frequency))
+    #print('Ran for: {0} seconds.'.format(duration))
+    #print('Average processing frequency: {0} Hz'.format(avg_frequency))
+    
+    # Set the LED color strategy back to the default
+    self._group_command.clear()
+    self._group_command.led.color = 'transparent'
+    self._group.send_command_with_acknowledgement(self._group_command)
+
     self._on_stop()
 
   def _start(self):

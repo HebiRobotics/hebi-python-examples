@@ -294,3 +294,10 @@ class PeripheralBody(BaseBody):
 
     if self._current_xyz is not None:
       self._current_xyz.fill(0)
+
+    # TODO: is this necessary?
+    self._home_angles__flat = self._home_angles.A1
+    self._fbk_position__flat = self._fbk_position.A1
+    self._fbk_position_cmd__flat = self._fbk_position_cmd.A1
+    self._fbk_velocity__flat = self._fbk_velocity.A1
+    self._fbk_velocity_err__flat = self._fbk_velocity_err.A1

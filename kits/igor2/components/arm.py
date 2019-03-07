@@ -260,7 +260,7 @@ class Arm(PeripheralBody):
     self._current_xyz.fill(0)
     np.copyto(self._grip_pos, self._home_ef[0:3, 3])
     np.copyto(self._grip_pos, self._new_grip_pos)
-    np.copyto(self._joint_angles, home_angles.reshape((4, 1)))
+    np.copyto(self._joint_angles, self.home_angles.reshape((4, 1)))
     self._joint_velocities.fill(0)
     self._joint_efforts.fill(0)
     self._user_commanded_wrist_velocity = 0.0
