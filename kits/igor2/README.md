@@ -35,4 +35,4 @@ The default gamecontroller mappings are as followed. Note that the image is of a
 ### Mobile IO
 
 The default Mobile IO mappings are as followed. Note that the layout of the application may appear different on your device than what is shown, but the buttons and axes are guaranteed across any device.
-`[mobile io igor](resources/mobile_io_igor.png)
+![mobile io igor](resources/mobile_io_igor.png)
