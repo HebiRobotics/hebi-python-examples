@@ -167,17 +167,23 @@ class Igor(object):
       self._state_lock.release()
       raise RuntimeError('Igor has not been started (igor.start() was not called)')
 
-  def _pending_quit(self):
+  def _should_continue(self):
     """
     Contract: This method assumes the caller has acquired `_state_lock`
     """
-    return self._quit_flag
+    if not is_main_thread_active() or self._quit_flag:
+      return False
 
-  def _continue(self):
-    """
-    Contract: This method assumes the caller has acquired `_state_lock`
-    """
-    return is_main_thread_active() and not self._pending_quit()
+    if self._transition_to_idle_possible:
+      # Check if stance is low enough to transition to idle
+      return self._left_leg.knee_angle < 2.5
+
+    return True
+
+  def _transition_from_idle_to_running(self, ts, pressed):
+    """Controller event handler to transition from idle to running mode"""
+    if pressed:
+      self._leave_idle_flag = True
 
 # ------------------------------------------------
 # Calculations
@@ -352,10 +358,48 @@ class Igor(object):
 # Actions
 # ------------------------------------------------
 
+  def _enter_idle(self):
+    group = self._group
+    group_command = self._group_command
+
+    from time import sleep
+
+    if self._num_spins > 0:
+      # This is not the first time we have been in the idle state. We will clear
+      # the state of the body objects before beginning the loop below.
+      self._chassis.reset_state()
+      self._left_leg.reset_state()
+      self._right_leg.reset_state()
+      self._left_arm.reset_state()
+      self._right_arm.reset_state()
+      # Stop commanding while in idle
+      group_command.clear()
+
+    self._leave_idle_flag = False
+    while not self._leave_idle_flag:
+      if self._quit_flag:
+        # User requested to quit, so bail out before actually being instructed to go into running mode.
+        return
+
+      group_command.led.color = 'magenta'
+      group.send_command(group_command)
+      sleep(0.1)
+      group_command.led.color = 'green'
+      group.send_command(group_command)
+      sleep(0.1)
+
+    # Let module control the LED color
+    group_command.led.color = 'transparent'
+    group.send_command(group_command)
+
   def _soft_startup(self):
     """
     Performs the startup phase, which takes about 3 seconds
     """
+    if self._quit_flag:
+      # Can happen if user was in running mode, re-entered idle, then requested to quit during idle
+      return
+
     l_arm = self._left_arm
     r_arm = self._right_arm
     l_leg = self._left_leg
@@ -565,52 +609,69 @@ class Igor(object):
 # Lifecycle functions
 # ------------------------------------------------
 
+  def _on_stop(self):
+    for entry in self._on_stop_callbacks:
+      entry()
+
   def _stop(self):
     """
     Stop running Igor. This happens once the user requests the demo to stop,
     or when the running application begins to shut down.
-    This is only called by :meth:`__start`l_leg
     """
-    if self._restart_flag:
-      # Prepare for a restart
-      # TODO
-      pass
-    else:
-      # TODO
-      print('Shutting down Igor...')
-      duration = self._stop_time - self._start_time
-      tics = float(self._num_spins)
-      avg_frequency = tics/duration
-      print('Ran for: {0} seconds.'.format(duration))
-      print('Average processing frequency: {0} Hz'.format(avg_frequency))
+    print('Shutting down Igor...')
+    duration = self._stop_time - self._start_time
+    tics = float(self._num_spins)
+    avg_frequency = tics/duration
+    #print('Ran for: {0} seconds.'.format(duration))
+    #print('Average processing frequency: {0} Hz'.format(avg_frequency))
+    
+    # Set the LED color strategy back to the default
+    self._group_command.clear()
+    self._group_command.led.color = 'transparent'
+    self._group.send_command_with_acknowledgement(self._group_command)
+
+    self._on_stop()
 
   def _start(self):
     """
     Main processing method. This runs on a background thread.
     """
-    self._soft_startup()
+    first_run = True
+    while True:
+      self._enter_idle()
+      self._soft_startup()
 
-    # Delay registering event handlers until now, so Igor
-    # can start up without being interrupted by user commands.
-    # View this function in `event_handlers.py` to see
-    # all of the joystick event handlers registered
-    try:
-      register_igor_event_handlers(self)
-    except:
-      pass
+      # Delay registering event handlers until now, so Igor
+      # can start up without being interrupted by user commands.
+      # View this function in `event_handlers.py` to see
+      # all of the joystick event handlers registered
+      if first_run:
+        try:
+          register_igor_event_handlers(self)
+        except Exception as e:
+          print('Caught exception while registering event handlers:\n{0}'.format(e))
+        self._start_time = time()
+        first_run = False
 
-    self._start_time = time()
-    self._state_lock.acquire()
-    while self._continue():
-      # We have `_state_lock` at this point. Access fields here before releasing lock
-      bc = self._balance_controller_enabled
-      self._state_lock.release()
-      self._spin_once(bc)
-      self._num_spins = self._num_spins + 1
       self._state_lock.acquire()
+      while self._should_continue():
+        bc = self._balance_controller_enabled
+        self._state_lock.release()
+        self._spin_once(bc)
+        self._num_spins = self._num_spins + 1
+        self._state_lock.acquire()
 
-    self._stop_time = time()
-    self._stop()
+      if self._quit_flag:
+        self._stop_time = time()
+        self._state_lock.release()
+        self._stop()
+        # Break out if quit was requested
+        return
+      else:
+        self._state_lock.release()
+
+  def add_on_stop_callback(self, callback):
+    self._on_stop_callbacks.append(callback)
 
 # ------------------------------------------------
 # Initialization functions
@@ -643,6 +704,8 @@ class Igor(object):
 
     self._proc_thread = None
 
+    self._on_stop_callbacks = list()
+
     # ----------------
     # Parameter fields
     self._has_camera = has_camera
@@ -657,7 +720,8 @@ class Igor(object):
     self._started = False
     self._balance_controller_enabled = True
     self._quit_flag = False
-    self._restart_flag = False
+    self._transition_to_idle_possible = False
+    self._leave_idle_flag = False
     self._time_last = np.empty(num_dofs, dtype=np.float64)
     self._diff_time = np.empty(num_dofs, dtype=np.float64)
     value_lock = Lock()
@@ -771,7 +835,19 @@ class Igor(object):
     self._group_info = hebi.GroupInfo(group.size)
 
     joystick_selector = self._config.joystick_selector
-    self._joy = joystick_selector()
+
+    while True:
+      try:
+        joy = joystick_selector()
+        if joy is None:
+          raise RuntimeError
+        self._joy = joy
+        break
+      except:
+        pass
+
+    self._joy.add_button_event_handler(self._config.controller_mapping.exit_idle_modle, self._transition_from_idle_to_running)
+
     load_gains(self)
 
     from threading import Condition, Lock, Thread
@@ -817,17 +893,16 @@ class Igor(object):
     self._quit_flag = True
     self._state_lock.release()
 
-  def request_restart(self):
+  def allow_transition_to_idle(self, value):
     """
-    Send a request to restart the demo.
+    Set if the transition back to idle mode is allowed if igor is crouched low enough.
     If the demo has not been started, this method raises an exception.
 
     :raises RuntimeError: if `start()` has not been called
     """
     self._state_lock.acquire()
     self._ensure_started()
-    self._restart_flag = True
-    self._quit_flag = True
+    self._transition_to_idle_possible = bool(value)
     self._state_lock.release()
 
   def set_balance_controller_state(self, state):

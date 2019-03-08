@@ -252,3 +252,18 @@ class Arm(PeripheralBody):
     self.acquire_value_lock()
     self._user_commanded_wrist_velocity = value
     self.release_value_lock()
+
+  def reset_state(self):
+    super(Arm, self).reset_state()
+
+    self._user_commanded_grip_velocity.fill(0)
+    self._current_xyz.fill(0)
+    np.copyto(self._grip_pos, self._home_ef[0:3, 3])
+    np.copyto(self._grip_pos, self._new_grip_pos)
+    np.copyto(self._joint_angles, self.home_angles.reshape((4, 1)))
+    self._joint_velocities.fill(0)
+    self._joint_efforts.fill(0)
+    self._user_commanded_wrist_velocity = 0.0
+    self._grav_comp_torque.fill(0)
+    self._current_det_actual = 0.0
+    self._current_det_expected = 0.0

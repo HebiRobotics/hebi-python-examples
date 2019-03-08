@@ -188,3 +188,11 @@ class Leg(PeripheralBody):
     self.acquire_value_lock()
     self._user_commanded_knee_velocity = vel
     self.release_value_lock()
+
+  def reset_state(self):
+    super(Leg, self).reset_state()
+
+    self._knee_velocity = 0
+    self._user_commanded_knee_velocity = 0
+    self._e_term.fill(0)
+    self._current_cmd_tip_fk.fill(0)
