@@ -23,5 +23,16 @@ Note: By default, the demo will look for a USB gamecontroller. You must provide 
 
 ## Controls
 
+The demo provides default mappings for both supported controllers. You can modify them, if needed, by editing the `components/configuration.py` file directly.
+
+### Game Controller
+
 The default gamecontroller mappings are as followed. Note that the image is of a generic Sony Playstation 4 controller, but the concept applies to all other SDL2 compatible controllers.
 ![ps4 igor](resources/ps4_igor.png)
+
+*Note: To exit idle mode, press L3 (press in left axis stick)*
+
+### Mobile IO
+
+The default Mobile IO mappings are as followed. Note that the layout of the application may appear different on your device than what is shown, but the buttons and axes are guaranteed across any device.
+`[mobile io igor](resources/mobile_io_igor.png)
