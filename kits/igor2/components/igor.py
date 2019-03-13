@@ -100,6 +100,7 @@ def create_group(config, has_camera):
     def connect():
       group = lookup.get_group_from_names(families, names)
       if group is None:
+        print('Cannot find igor on network...')
         raise RuntimeError()
       elif group.size != len(names):
         raise RuntimeError()

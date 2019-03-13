@@ -13,8 +13,8 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--imitation', action='store_true', default=False, dest='imitation',
                     help='Use the imitation group API to not connect to physical modules on the network.')
-parser.add_argument('--mobile-io', action='store_true', default=False, dest='mobile_io',
-                    help='Drive Igor using a Mobile IO app on the network. Use --mobile-io-family and --mobile-io-name to override app default family and name.')
+parser.add_argument('--joystick', action='store_true', default=False, dest='joystick', help='Drive Igor using a USB gamecontroller.')
+parser.add_argument('--mobile-io', action='store_true', default=True, dest='mobile_io', help='(ignored)')
 parser.add_argument('--mobile-io-frequency', default=200.0, dest='mobile_io_freq',
                     help='Feedback frequency of Mobile IO group. Ignored if not controlling Igor using a Mobile IO device.')
 parser.add_argument('--mobile-io-family', type=str, default=None, dest='mobile_io_family',
@@ -29,7 +29,7 @@ io_fam = args.mobile_io_family
 io_name = args.mobile_io_name
 has_io_fam = io_fam is not None
 has_io_name = io_name is not None
-has_io = args.mobile_io or has_io_fam or has_io_name
+has_io = not args.joystick
 
 if has_io:
   if not has_io_fam:
@@ -37,7 +37,7 @@ if has_io:
     io_fam = 'HEBI'
   if not has_io_name:
     # Mobile IO default name
-    io_fam = 'Mobile IO'
+    io_name = 'Mobile IO'
 
 from components.configuration import Igor2Config
 igor_config = Igor2Config(args.imitation)
