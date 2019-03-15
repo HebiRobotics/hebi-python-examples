@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+./hebi_demo_wait_for_connected
+python3 ./hebi-python-examples/kits/igor2/igor2_demo.py
