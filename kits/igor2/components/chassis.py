@@ -23,7 +23,7 @@ class Chassis(BaseBody):
                                              self._jerks)
 
   def __init__(self, val_lock):
-    super(Chassis, self).__init__(val_lock, mass=6.0, com=[0.0, 0.0, 0.10+0.3])
+    super(Chassis, self).__init__(val_lock, mass=6.0, com=[-0.05, 0.0, 0.10+0.3])
     self._user_commanded_directional_velocity = 0.0
     self._user_commanded_yaw_velocity = 0.0
     self._min_ramp_time = 0.5
@@ -78,6 +78,11 @@ class Chassis(BaseBody):
     time_now = time()
     t = time_now - self._time_s
     self._time_s = time_now
+
+    if t > self._trajectory.end_time:
+      # Clamp to end time to prevent undesired trajectory calculations.
+      # This can lead to issues when re-entering running mode after entering idle mode from running mode
+      t = self._trajectory.end_time
 
     # ---------------------------------------------
     # Smooth the trajectories for various commands.
@@ -294,3 +299,16 @@ class Chassis(BaseBody):
     self._user_commanded_yaw_velocity = velocity
     self.release_value_lock()
 
+  def reset_state(self):
+    self._user_commanded_directional_velocity = 0.0
+    self._user_commanded_yaw_velocity = 0.0
+    self._hip_pitch = 0.0
+    self._hip_pitch_velocity = 0.0
+    self._velocity_feedforward = 0.0
+    self._velocity_error = 0.0
+    self._velocity_error_cumulative = 0.0
+    self._lean_angle_error = 0.0
+    self._lean_angle_error_cumulative = 0.0
+    self._cmd_chassis_vel_last = 0.0
+    self._fbk_chassis_vel_last = 0.0
+    self._calculated_lean_angle = 0.0
