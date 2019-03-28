@@ -2,6 +2,7 @@
 
 import hebi
 from time import sleep
+from matplotlib import pyplot as plt
 
 lookup = hebi.Lookup()
 
@@ -20,8 +21,23 @@ if group is None:
 # This is by default 100 Hz. Setting this to 5 Hz allows the console output to be reasonable.
 group.feedback_frequency = 5.0
 
+plt.ion()
+f = plt.figure()
+plt.title('Actuator Gyro Feedback')
+plt.xlabel('Axis')
+plt.ylabel('Angular Velocity (rad/sec)')
+plt.ylim([-15, 15])
+plt.grid(True)
+# Start with 0 data first
+plt.bar([0, 1, 2], [0, 0, 0])
+plt.draw()
+
+
 def feedback_handler(group_feedback):
-  print('Feedback received. Positions are:\n{0}'.format(group_feedback.position))
+  gyro = group_feedback.gyro[0]
+  plt.bar([0, 1, 2], gyro)
+  plt.pause(0.00001)
+
 
 group.add_feedback_handler(feedback_handler)
 
