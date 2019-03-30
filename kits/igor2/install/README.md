@@ -16,6 +16,8 @@ Consequently, the following distros are guaranteed to work:
 
 This list is _not_ exhaustive, but if you are using a distro not mentioned above, you probably know what you are doing.
 
+**Note:** The service assumes you have Python 3. Python 2 is nearly EOL and should be avoided. You must modify the shell scripts to use Python 2 if you must support a legacy environment.
+
 ## Installing (Easy Guide)
 
 To automate the steps shown in the manual guide below, you can run the `service_install` shell script in this folder
