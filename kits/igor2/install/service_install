@@ -6,13 +6,13 @@ if [ $(whoami) != root ]; then
 fi
 
 # make sure current working directory is where this script resides and hide output
-pushd $(readlink -f $(dirname $0)) 2>&1 > /dev/null
+pushd $(readlink -f $(dirname $0)) >/dev/null 2>&1
 
 cp hebi-demo.service /usr/lib/systemd/system/
 # Reload all service files (scanning for new ones as well)
 systemctl daemon-reload
 # Check that systemd found the service
-systemctl status hebi-demo.service
+systemctl status hebi-demo.service >/dev/null 2>&1
 
 if [ $? -ne 0 ]; then
   echo "An error occurred while querying the service status. Was the service file installed properly?"
