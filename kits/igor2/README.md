@@ -17,9 +17,14 @@ The demo can be run using either a gamecontroller or Mobile IO device acessible 
 
 ## Running
 
-Simply run the `igor2_demo.py` file located at `kits/igor2`. Both Python 2 and 3 are supported, but note that Python 2 upstream will become [unsupported 1 Jan 2020.](https://pythonclock.org/)
+Simply run the `igor2_demo.py` file located at `kits/igor2`. You can run this in a terminal by executing
+```sh
+python3 igor2_demo.py
+```
 
-Note: By default, the demo will look for a Mobile IO device with family `HEBI` and name `Mobile IO`. You must provide `--joystick` if you want to control Igor using a USB gamecontroller.
+Both Python 2 and 3 are supported, but note that Python 2 upstream will become [unsupported 1 Jan 2020.](https://pythonclock.org/).
+
+**Note:** By default, the demo will look for a Mobile IO device with family `HEBI` and name `Mobile IO`. You must provide `--joystick` if you want to control Igor using a USB gamecontroller.
 
 ## Controls
 
