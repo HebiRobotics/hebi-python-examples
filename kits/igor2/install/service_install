@@ -5,6 +5,8 @@ if [ $(whoami) != root ]; then
   exit 1
 fi
 
+USER_HOME_DIR=/home/hebi
+
 # make sure current working directory is where this script resides and hide output
 pushd $(readlink -f $(dirname $0)) >/dev/null 2>&1
 
@@ -20,8 +22,8 @@ if [ $? -ne 0 ]; then
 fi
 
 # Copy shell scripts to home directory - also make sure to set executable bits
-cp hebi_demo_wait_for_connected /home/hebi && chmod +x /home/hebi/hebi_demo_wait_for_connected && chown hebi:hebi /home/hebi/hebi_demo_wait_for_connected
-cp launch_demo /home/hebi && chmod +x /home/hebi/launch_demo && chown hebi:hebi /home/hebi/launch_demo
+cp hebi_demo_wait_for_connected $USER_HOME_DIR && chmod +x $USER_HOME_DIR/hebi_demo_wait_for_connected && chown hebi:hebi $USER_HOME_DIR/hebi_demo_wait_for_connected
+cp launch_demo $USER_HOME_DIR && chmod +x $USER_HOME_DIR/launch_demo && chown hebi:hebi $USER_HOME_DIR/launch_demo
 # Enable service to run on startup
 systemctl enable hebi-demo.service
 
