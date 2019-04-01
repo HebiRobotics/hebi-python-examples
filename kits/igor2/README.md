@@ -1,4 +1,4 @@
-# Igor Balancing Robot Matlab Demo
+# Igor Balancing Robot Python Demo
 
 ## Requirements
 

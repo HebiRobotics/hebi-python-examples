@@ -1,0 +1,32 @@
+#!/bin/bash
+
+if [ $(whoami) != root ]; then
+  echo "You must run this script as root.";
+  exit 1
+fi
+
+DEMO_USER=hebi
+USER_HOME_DIR=/home/$DEMO_USER
+
+# make sure current working directory is where this script resides and hide output
+pushd $(readlink -f $(dirname $0)) >/dev/null 2>&1
+
+cp hebi-demo.service /usr/lib/systemd/system/
+# Reload all service files (scanning for new ones as well)
+systemctl daemon-reload
+# Check that systemd found the service
+FOUND_HEBI_SERVICE=$(systemctl list-unit-files | grep hebi-demo.service | wc -l)
+
+if [ "$FOUND_HEBI_SERVICE" -eq 0 ]; then
+  echo "An error occurred while finding 'hebi-demo.service' - Was the service file installed properly?"
+  exit 1
+fi
+
+# Copy shell scripts to home directory - also make sure to set executable bits
+cp hebi_demo_wait_for_connected $USER_HOME_DIR && chmod +x $USER_HOME_DIR/hebi_demo_wait_for_connected && chown $DEMO_USER:$DEMO_USER $USER_HOME_DIR/hebi_demo_wait_for_connected
+cp launch_demo $USER_HOME_DIR && chmod +x $USER_HOME_DIR/launch_demo && chown $DEMO_USER:$DEMO_USER $USER_HOME_DIR/launch_demo
+# Enable service to run on startup
+systemctl enable hebi-demo.service
+
+echo "Service installed."
+
