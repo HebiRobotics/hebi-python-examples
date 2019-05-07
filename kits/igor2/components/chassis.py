@@ -12,9 +12,9 @@ class Chassis(BaseBody):
   Class representing the chassis of Igor
   """
 
-  Velocity_P = 15.0
-  Velocity_I = 0.1
-  Velocity_D = .3
+  Velocity_P = 20.0
+  Velocity_I = 3.0
+  Velocity_D = 0.5
 
   def _create_trajectory(self):
     return hebi.trajectory.create_trajectory(self._traj_times,
