@@ -153,7 +153,7 @@ def set_command_subgroup_pv(group_command, pos, vel, indices):
 class Igor(object):
 
   Lean_P = 1.0
-  Lean_I = 20.0
+  Lean_I = 0.0
   Lean_D = 10.0
 
 # ------------------------------------------------
