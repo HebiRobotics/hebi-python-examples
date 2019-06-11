@@ -53,13 +53,12 @@ class VirtualFeedback:
         self.orientation = orientation  # this is the identity quaternion
 
 
-'''
-the Robot class represents your robot. specific values for the robot model are defined in __init__ and can be changed
-according to your specific configuration
-'''
-
-
 class Robot:
+    '''
+    the Robot class represents your robot. specific values for the robot model are defined in __init__ and can be changed
+    according to your specific configuration
+    '''
+
     # constructs a hebi robot model from a list of components
     def make_model(self, components):
         model = hebi.robot_model.RobotModel()
@@ -138,11 +137,12 @@ class Robot:
                 m.face_vectors.append(nT.A1)
             self.mesh.append(m)
 
-'''
-the App class is what actually creates the window, runs the program and takes in user inputs
-uses tkinter library
-'''
+
 class App:
+    '''
+    the App class is what actually creates the window, runs the program and takes in user inputs
+    uses tkinter library
+    '''
     def __init__(self, title):
         self.window = tkinter.Tk()  # creates a tkinter window
         self.window.title(title)
