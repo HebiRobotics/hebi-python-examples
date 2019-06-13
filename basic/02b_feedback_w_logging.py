@@ -21,9 +21,9 @@ if group is None:
 # Live Visualization
 # Starts logging in the background. Note that logging can be enabled at any time, and that it does not negatively
 # affect the performance of your running programs.
-group.start_log('dir', 'logs');
+group.start_log('dir', 'logs')
 
-print('Use Scope to command the module and make it move...');
+print('Use Scope to command the module and make it move...')
 plt.ion()
 f = plt.figure()
 plt.ylim([-5 5])
@@ -41,7 +41,7 @@ while current_time < end_time:
   plt.bar(fbk.velocity)
   plt.pause(0.00001)
 
-print('All done!');
+print('All done!')
 
 # Stops background logging and converts the logged data into readable data that can be easily plotted.
 log = group.stop_log()  
@@ -49,18 +49,16 @@ log = group.stop_log()
 # Offline Visualization
 # Plot the logged position feedback
 plt.figure(101)
-plt.plot(log.time, log.position);
-plt.title('Position');
-plt.xlabel('time (sec)');
-plt.ylabel('position (rad)');
-plt.grid(True);
+plt.plot(log.time, log.position)
+plt.title('Position')
+plt.xlabel('time (sec)')
+plt.ylabel('position (rad)')
+plt.grid(True)
 
 # Plot the logged velocity feedback
-plt.figure(102);
-plt.plot(log.time, log.velocity);
-plt.title('Velocity');
-plt.xlabel('time (sec)');
-plt.ylabel('velocity (rad/sec)');
-plt.grid(True);
-
-
+plt.figure(102)
+plt.plot(log.time, log.velocity)
+plt.title('Velocity')
+plt.xlabel('time (sec)')
+plt.ylabel('velocity (rad/sec)')
+plt.grid(True)

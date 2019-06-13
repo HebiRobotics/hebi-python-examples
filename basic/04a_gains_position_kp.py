@@ -61,4 +61,5 @@ for new_gain in new_position_kp_gains:
 
     group.send_command(position_command)
 
-group.stop_log()
+log_file = group.stop_log()
+hebi.util.plot_logs(log_file, 'position', figure_spec=101)
