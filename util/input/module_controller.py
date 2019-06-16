@@ -142,6 +142,13 @@ def _fill_feedback_data(data_dst, hebi_feedback_src):
 
 
 class HebiModuleController(object):
+  """
+  Provides the same interface as a Joystick but backed by a physical HEBI group.
+
+  The device in the group must be able to provide IO data from banks A and B.
+  The preferred use of this class is to be backed by an iOS/Android enabled device
+  using the HEBI Mobile IO app, but a HEBI IO board in theory can work as well.
+  """
   
   def __init__(self, group):
     if group.size != 1:
@@ -200,4 +207,8 @@ class HebiModuleController(object):
 
   @feedback_frequency.setter
   def feedback_frequency(self, value):
+    """
+    Set the feedback frequency of the group. This will be the frequency
+    at which your IO data is updated.
+    """
     self._group.feedback_frequency = value

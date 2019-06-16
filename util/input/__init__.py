@@ -25,6 +25,7 @@ if os.name == 'nt':
 
 from . import event_handler as __event_handler
 
+
 def register_event(event, callback):
   """
   Register a callback for the given event
@@ -36,4 +37,40 @@ def register_event(event, callback):
     print(str(e))
 
 
+def register_key_event_handler(key, callback):
+  """
+  :param callback: must accept 3 parameters -
+                    `ts` (timestamp),
+                    `state` (pressed or not) and
+                    `repeat` (n times key has been repeatedly pressed)
+  """
+  from .keyboard import _kbd_instance
+  _kbd_instance.add_key_event_handler(key, callback)
+
+
+def listen_for_escape_key():
+  """
+  Used to automatically listen for any presses of the `ESC` key in a background thread.
+  Note: the thread on which `ESC` events will be listened is spawned regardless of this function.
+  """
+  keyboard._listen_for_esc()
+
+
+def has_esc_been_pressed():
+  """
+  Used to see if `ESC` key has been pressed. Nonblocking.
+  """
+  return keyboard._has_esc_been_pressed()
+
+
+def clear_esc_state():
+  """
+  Clear the flag corresponding to `ESC` being pressed. Nonblocking.
+
+  Returns the old value of the flag.
+  """
+  return keyboard._clear_esc_state()
+
+
 from .joystick import Joystick
+from . import keyboard

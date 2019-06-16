@@ -1,49 +1,56 @@
 import hebi
-from .util import setup_arm
-
 import os
+import sys
+
+
+# ------------------------------------------------------------------------------
+# Add the root folder of the repository to the search path for modules
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path = [root_path] + sys.path
+# ------------------------------------------------------------------------------
+
+
+from util import listen_for_escape_key, has_esc_been_pressed
+
+# Listens for `ESC` being pressed
+listen_for_escape_key()
+
 
 arm_name = '6-DoF + gripper'
 arm_family = 'Arm'
 # If you attach a gas spring to the shoulder for extra payload, set this to True
 has_gas_spring = False
 
-group, kin, params = setup_arm( arm_name, arm_family, has_gas_spring )
+group, kin, params = setup_arm(arm_name, arm_family, has_gas_spring)
 
 gravity_vec = params.gravity_vec
 effort_offset = params.effort_offset
 local_dir = params.local_dir
 
-enable_logging = true
+enable_logging = True
 
 # Start background logging 
 if enable_logging:
-   logFile = group.startLog('dir', os.path.join(local_dir, '/logs')) 
+  log_file_dir = group.startLog('dir', os.path.join(local_dir, 'logs')) 
 
 # Gravity compensated mode
 cmd = hebi.GroupCommand(group.size)
-
-# Keyboard input
-kb = HebiKeyboard()
-keys = read(kb)
+fbk = hebi.GroupFeedback(group.size)
 
 print('Commanded gravity-compensated zero torques to the arm.')
 print('Press ESC to stop.')
 
-while True:   
+while not has_esc_been_pressed():   
   # Gather sensor data from the arm
-  fbk = group.getNextFeedback()
+  fbk = group.get_next_feedback(reuse_fbk=fbk)
 
   # Calculate required torques to negate gravity at current position
-  cmd.effort = kin.getGravCompEfforts( fbk.position, gravity_vec ) + effort_offset
+  cmd.effort = util.math_utils.get_grav_comp_efforts(kin, fbk.position, gravity_vec) + effort_offset
 
   # Send to robot
   group.send_command(cmd)
 
-  # Check for new key presses on the keyboard
-  keys = read(kb)
-
-  if esc_pressed():
+  if escape_pressed():
     break
 
 
@@ -58,6 +65,6 @@ if enable_logging:
   hebi.util.plot_logs(hebi_log, 'effort')
 
   # Plot the end-effectory trajectory and error
-  kinematics_analysis( hebilog, kin )
+  kinematics_analysis(hebilog, kin)
 
   # Put more plotting code here
