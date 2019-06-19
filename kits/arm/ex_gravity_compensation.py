@@ -10,7 +10,9 @@ sys.path = [root_path] + sys.path
 # ------------------------------------------------------------------------------
 
 
-from util import listen_for_escape_key, has_esc_been_pressed
+from util.input import listen_for_escape_key, has_esc_been_pressed
+from util.math_utils import get_grav_comp_efforts
+
 
 # Listens for `ESC` being pressed
 listen_for_escape_key()
@@ -31,7 +33,7 @@ enable_logging = True
 
 # Start background logging 
 if enable_logging:
-  log_file_dir = group.startLog('dir', os.path.join(local_dir, 'logs')) 
+  log_file_dir = group.startLog('dir', os.path.join(local_dir, 'logs'))
 
 # Gravity compensated mode
 cmd = hebi.GroupCommand(group.size)
@@ -40,18 +42,18 @@ fbk = hebi.GroupFeedback(group.size)
 print('Commanded gravity-compensated zero torques to the arm.')
 print('Press ESC to stop.')
 
-while not has_esc_been_pressed():   
+while not has_esc_been_pressed():
   # Gather sensor data from the arm
   fbk = group.get_next_feedback(reuse_fbk=fbk)
 
+  # Update gravity vector the base module of the arm
+  params.update_gravity(fbk)
+
   # Calculate required torques to negate gravity at current position
-  cmd.effort = util.math_utils.get_grav_comp_efforts(kin, fbk.position, gravity_vec) + effort_offset
+  cmd.effort = get_grav_comp_efforts(kin, fbk.position, gravity_vec) + effort_offset
 
   # Send to robot
   group.send_command(cmd)
-
-  if escape_pressed():
-    break
 
 
 if enable_logging:

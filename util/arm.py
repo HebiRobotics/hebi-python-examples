@@ -4,7 +4,7 @@ import os
 
 
 # Where the HRDF, safety params and gains files are for the arms
-__arm_resource_local_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'kits', 'arm'))
+_arm_resource_local_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'kits', 'arm'))
 
 # The shoulder joint (effort) compensation for most kits which has a gas spring
 default_shoulder_joint_comp = -7.0
@@ -15,105 +15,109 @@ default_shoulder_joint_comp = -7.0
 # ------------------------------------------------------------------------------
 
 
-class GripperConfig(object):
-  """
-  TODO: Document
-  """
+class ArmParams(object):
+  __slots__ = ["_robot_name", "_gains", "_has_gripper", "_gripper_open_effort",
+               "_gripper_close_effort", "_gripper_gains", "_effort_offset",
+               "_ik_seed_pos", "_gravity_vec"]
+  def __init__(self, robot_name, effort_offset, ik_seed_pos, has_gripper=False, gripper_open_effort=None, gripper_close_effort=None, gripper_gains=None):
+    self._robot_name = robot_name
 
-  def __init__(self, gains_file, open_effort=1.0, close_effort=-5.0):
-    self._open_effort = open_effort
-    self._close_effort = close_effort
-    self._gains = hebi.GroupCommand(1)
-    try:
-      self._gains.read_gains(gains_file)
-    except Exception as e:
-      print('Could not load gains from file {0}'.format(gains_file))
-      raise e
+    gains_path = os.path.join(_arm_resource_local_dir, "gains", robot_name + "_gains.xml")
+    gains = hebi.GroupCommand(len(ik_seed_pos))
+    gains.read_gains(gains_path)
 
-  @property
-  def open_effort(self):
-    return self._open_effort
-  
-  @property
-  def close_effort(self):
-    return self._close_effort
-  
-  @property
-  def gains(self):
-    """
-    TODO: Document
-
-    Note: These gains are different than the gains specified in the Arm class.
-    """
-    return self._gains
-
-
-class Arm(object):
-  """
-  TODO: Document
-  """
-
-  def __init__(self, ik_seed_position, gains_file, has_gas_spring, effort_offset, robot_description=None, robot=None, gripper=None):
-    if robot is not None and robot_description is not None:
-      raise ValueError('Both `robot` and `robot_description` cannot be specified. Only specify one.')
-    if robot is None:
-      # robot_description must not be none
-      if robot_description is None:
-        raise ValueError('Either `robot` or `robot_description` parameter must not be None.')
-      robot = hebi.robot_model.import_from_hrdf(robot_description)
-
-    self._robot = robot
-    self._default_ik_seed = ik_seed_position
-    self._gains_file = gains_file
-    self._has_gas_spring = has_gas_spring
-    self._effort_offset = np.asarray(np.effort_offset, dtype=np.float32)
-    self._gripper = gripper
-
-    num_dof = robot.dof_count
-    self._gains = hebi.GroupCommand(num_dof)
-    try:
-      self._gains.read_gains(gains_file)
-    except Exception as e:
-      print('Could not load gains from file {0}'.format(gains_file))
-      raise e
+    self._gains = gains
+    self._has_gripper = has_gripper
+    self._gripper_open_effort = gripper_open_effort
+    self._gripper_close_effort = gripper_close_effort
+    self._gripper_gains = gripper_gains
+    self._effort_offset = np.asarray(effort_offset)
+    self._ik_seed_pos = ik_seed_pos
+    self._gravity_vec = np.zero(3, dtype=np.float32)
 
   @property
-  def robot(self):
-    return self._robot
-
-  @property
-  def default_ik_seed(self):
-    return self._default_ik_seed
+  def robot_name(self):
+    return self._robot_name
 
   @property
   def gains(self):
     return self._gains
-
-  @property
-  def has_gas_spring(self):
-    return self._has_gas_spring
-  
-  @property
-  def effort_offset(self):
-    return self._effort_offset
-  
-  @property
-  def gripper(self):
-    return self._gripper
 
   @property
   def has_gripper(self):
-    return self._gripper is not None
+    return self._has_gripper
+
+  @property
+  def gripper_open_effort(self):
+    return self._gripper_open_effort
+
+  @property
+  def gripper_close_effort(self):
+    return self._gripper_close_effort
+
+  @property
+  def gripper_gains(self):
+    return self._gripper_gains
+
+  @property
+  def effort_offset(self):
+    return self._effort_offset
+
+  @property
+  def ik_seed_pos(self):
+    return self._ik_seed_pos
+
+  @property
+  def gravity_vec(self):
+    return self._gravity_vec
+
+  @property
+  def local_dir(self):
+    return _arm_resource_local_dir
+
+  def update_gravity(self, fbk):
+    gravity_from_quaternion(fbk.orientation[0], output=self._gravity_vec)
 
 
-__arm_setup_dict = {
-  '6-DoF + gripper' : todo,
-  '6-DoF' : todo,
-  '5-DoF + gripper' : todo,
-  '5-DoF' : todo,
-  '4-DoF' : todo,
-  '4-DoF SCARA' : todo,
-  '3-DoF' : todo
+__arm_setup_params_dict = {
+  '6-DoF + gripper' : (ArmParams("6-DoF_arm",
+              effort_offset=[0, default_shoulder_joint_comp, 0, 0, 0, 0],
+              ik_seed_pos=[0.01, 1.0, 2.5, 1.5, -1.5, 0.01],
+              has_gripper=True, gripper_open_effort=1, gripper_close_effort=-5,
+              gripper_gains="gripper_spool_gains"),
+                      ['Base', 'Shoulder', 'Elbow', 'Wrist1', 'Wrist2', 'Wrist3']),
+
+  '6-DoF' : (ArmParams("6-DoF_arm",
+              effort_offset=[0, default_shoulder_joint_comp, 0, 0, 0, 0],
+              ik_seed_pos=[0.01, 1.0, 2.5, 1.5, -1.5, 0.01]),
+            ['Base', 'Shoulder', 'Elbow', 'Wrist1', 'Wrist2', 'Wrist3']),
+
+  '5-DoF + gripper' : (ArmParams("5-DoF_arm",
+              effort_offset=[0, default_shoulder_joint_comp, 0, 0, 0],
+              ik_seed_pos=[0.01, 1.0, 2.5, 1.5, -1.5],
+              has_gripper=True, gripper_open_effort=1, gripper_close_effort=-5,
+              gripper_gains="gripper_spool_gains"),
+                      ['Base', 'Shoulder', 'Elbow', 'Wrist1', 'Wrist2']),
+
+  '5-DoF' : (ArmParams("5-DoF_arm",
+              effort_offset=[0, default_shoulder_joint_comp, 0, 0, 0],
+              ik_seed_pos=[0.01, 1.0, 2.5, 1.5, -1.5]),
+            ['Base', 'Shoulder', 'Elbow', 'Wrist1', 'Wrist2']),
+
+  '4-DoF' : (ArmParams("4-DoF_arm",
+              effort_offset=[0, default_shoulder_joint_comp, 0, 0],
+              ik_seed_pos=[0.01, 1.0, 2.5, 1.5]),
+            ['Base', 'Shoulder', 'Elbow', 'Wrist1']),
+
+  '4-DoF SCARA' : (ArmParams("4-DoF_arm_scara",
+              effort_offset=[0, default_shoulder_joint_comp, 0, 0],
+              ik_seed_pos=[0.01, 1.0, 2.5, 1.5]),
+                  ['Base', 'Shoulder', 'Elbow', 'Wrist1']),
+
+  '3-DoF' : (ArmParams("3-DoF_arm",
+              effort_offset=[0, default_shoulder_joint_comp, 0],
+              ik_seed_pos=[0.01, 1.0, 2.5]),
+            ['Base', 'Shoulder', 'Elbow'])
 }
 
 
@@ -122,7 +126,7 @@ __arm_setup_dict = {
 # ------------------------------------------------------------------------------
 
 
-def setup_arm(name, family, has_gas_spring=False):
+def setup_arm_params(name, family, has_gas_spring=False):
   """
   :param name:  This argument currently supports the following names
                   * '6-DoF + gripper'
@@ -139,10 +143,27 @@ def setup_arm(name, family, has_gas_spring=False):
                           of the arm to provide extra payload.
   """
   
-  if name not in __arm_setup_dict:
-    valid_vals = __arm_setup_dict.keys()
+  if name not in __arm_setup_params_dict:
+    valid_vals = __arm_setup_params_dict.keys()
     print('Invalid `name` input {0}'.format(name))
     print('Valid names include: {0}'.format(valid_vals))
     raise KeyError('Invalid name')
 
-  
+  arm_setup_params = __arm_setup_params_dict[name]
+  params = arm_setup_params[0]
+  group_names = arm_setup_params[1]
+  kin = hebi.robot_model.import_from_hrdf(os.path.join(_arm_resource_local_dir, "hrdf", params.robot_name + ".hrdf"))
+
+  lookup = hebi.Lookup()
+  from time import sleep
+  sleep(2)
+
+  group = lookup.get_group_from_names([family], group_names)
+  if group is None:
+    raise RuntimeError("Could not find group")
+
+  if not group.feedback_frequency > 0.0:
+    group.send_feedback_request()
+
+  params.update_gravity(group.get_next_feedback())
+  return group, kin, params

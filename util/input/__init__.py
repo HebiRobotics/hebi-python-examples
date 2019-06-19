@@ -56,11 +56,26 @@ def listen_for_escape_key():
   keyboard._listen_for_esc()
 
 
+def listen_for_space_bar():
+  """
+  Used to automatically listen for any presses of the `SPACE` key in a background thread.
+  Note: the thread on which `SPACE` events will be listened is spawned regardless of this function.
+  """
+  keyboard._listen_for_space()
+
+
 def has_esc_been_pressed():
   """
   Used to see if `ESC` key has been pressed. Nonblocking.
   """
   return keyboard._has_esc_been_pressed()
+
+
+def has_space_been_pressed():
+  """
+  Used to see if `SPACE` key has been pressed. Nonblocking.
+  """
+  return keyboard._has_space_been_pressed()
 
 
 def clear_esc_state():
@@ -71,6 +86,14 @@ def clear_esc_state():
   """
   return keyboard._clear_esc_state()
 
+
+def clear_space_state():
+  """
+  Clear the flag corresponding to `SPACE` being pressed. Nonblocking.
+
+  Returns the old value of the flag.
+  """
+  return keyboard._clear_space_state()
 
 from .joystick import Joystick
 from . import keyboard

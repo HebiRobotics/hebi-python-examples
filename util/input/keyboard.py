@@ -163,7 +163,7 @@ class _Keyboard:
 _kbd_instance = _Keyboard()
 
 
-class _EscNoop:
+class _ButtonNoop:
   def __init__(self): pass
   def clear(self): return False
   def event_handler(self, ts, pressed, repeat): pass
@@ -171,16 +171,15 @@ class _EscNoop:
   def has_been_pressed(self): return False
     
 
-__esc_listener = _EscNoop()
+__esc_listener = _ButtonNoop()
+__space_listener = _ButtonNoop()
 
 
 def _listen_for_esc():
+  global __esc_listener
   if __esc_listener is not None:
     # already listening - return
     return
-
-  global __esc_listener
-
 
   class EscListener:
     def __init__(self):
@@ -210,3 +209,38 @@ def _clear_esc_state():
 def _has_esc_been_pressed():
   return __esc_listener.has_been_pressed
 
+
+def _listen_for_space():
+  global __space_listener
+  if __space_listener is not None:
+    # already listening - return
+    return
+
+
+  class SpaceListener:
+    def __init__(self):
+      self._has_been_pressed = False
+      _kbd_instance.add_key_event_handler(sdl2.SDLK_SPACE, self.event_handler)
+
+    def clear(self):
+      ret = self._has_been_pressed
+      self._has_been_pressed = False
+      return ret
+
+    def event_handler(self, ts, pressed, repeat):
+      self._has_been_pressed = pressed or self._has_been_pressed
+
+    @property
+    def has_been_pressed(self):
+      return self._has_been_pressed
+
+
+  __space_listener = SpaceListener()
+
+
+def _clear_space_state():
+  return __space_listener.clear()
+
+
+def _has_space_been_pressed():
+  return __space_listener.has_been_pressed
