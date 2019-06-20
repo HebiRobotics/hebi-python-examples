@@ -22,6 +22,7 @@ class FeedbackData(object):
     self._b6 = 0
     self._b7 = 0
     self._b8 = 0
+    self._time = 0
 
   @property
   def a1(self):
@@ -149,7 +150,8 @@ class HebiModuleController(object):
   The preferred use of this class is to be backed by an iOS/Android enabled device
   using the HEBI Mobile IO app, but a HEBI IO board in theory can work as well.
   """
-  
+  __slots__ = ['_group', '_event_handlers', '_feedback_data', '_current_feedback', "_current_feedback_lock"]
+
   def __init__(self, group):
     if group.size != 1:
       raise RuntimeError('Group must be of a single module')
@@ -158,11 +160,17 @@ class HebiModuleController(object):
     group.add_feedback_handler(self.__fbk_handler)
     self._event_handlers = list()
     self._feedback_data = FeedbackData()
+    self._current_feedback = hebi.GroupFeedback(group.size)
+    from threading import Lock
+    self._current_feedback_lock = Lock()
 
   def __fbk_handler(self, feedback):
     # Check this to avoid having to update the feedback
     if len(self._event_handlers) == 0:
       return
+
+    with self._current_feedback_lock:
+      self._current_feedback.copy_from(feedback)
 
     data = self._feedback_data
     _fill_feedback_data(data, feedback)
@@ -192,6 +200,14 @@ class HebiModuleController(object):
       raise ValueError('{0} is not a valid axis'.format(axis))
     return _getter_dict[axis](self._feedback_data)
 
+  def get_slider(self, slider):
+    """
+    Alias for :meth:`.get_axis`.
+    """
+    if slider not in _axis_set:
+      raise ValueError('{0} is not a valid slider'.format(slider))
+    return _getter_dict[slider](self._feedback_data)
+
   def get_button(self, button):
     if button not in _button_set:
       raise ValueError('{0} is not a valid button'.format(button))
@@ -212,3 +228,15 @@ class HebiModuleController(object):
     at which your IO data is updated.
     """
     self._group.feedback_frequency = value
+
+  @property
+  def group(self):
+    return self._group
+
+  @property
+  def current_feedback(self):
+    """
+    The last feedback received from the module
+    """
+    return self._current_feedback
+  

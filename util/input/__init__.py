@@ -26,6 +26,11 @@ if os.name == 'nt':
 from . import event_handler as __event_handler
 
 
+def create_mobile_io_controller(group):
+  from .module_controller import HebiModuleController
+  return HebiModuleController(group)
+
+
 def register_event(event, callback):
   """
   Register a callback for the given event

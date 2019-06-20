@@ -126,7 +126,7 @@ __arm_setup_params_dict = {
 # ------------------------------------------------------------------------------
 
 
-def setup_arm_params(name, family, has_gas_spring=False):
+def setup_arm_params(name, family, has_gas_spring=False, lookup=None):
   """
   :param name:  This argument currently supports the following names
                   * '6-DoF + gripper'
@@ -154,9 +154,10 @@ def setup_arm_params(name, family, has_gas_spring=False):
   group_names = arm_setup_params[1]
   kin = hebi.robot_model.import_from_hrdf(os.path.join(_arm_resource_local_dir, "hrdf", params.robot_name + ".hrdf"))
 
-  lookup = hebi.Lookup()
-  from time import sleep
-  sleep(2)
+  if lookup is None:
+    lookup = hebi.Lookup()
+    from time import sleep
+    sleep(2)
 
   group = lookup.get_group_from_names([family], group_names)
   if group is None:
