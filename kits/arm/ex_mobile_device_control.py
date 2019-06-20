@@ -49,6 +49,7 @@ has_gas_spring = False # If you attach a gas spring to the shoulder for extra pa
 
 group, kin, params = setup_arm_params(arm_name, arm_family, has_gas_spring, lookup=lookup)
 
+fbk = hebi.GroupFeedback(group.size)
 ik_seed_pos = params.ik_seed_pos
 effort_offset = params.effortOffset
 gravity_vec = params.gravity_vec
@@ -63,8 +64,6 @@ if params.has_gripper:
 
 arm_dof_count = kin.dof_count
 
-armDOFs = range(group.size)
-
 # Trajectory
 arm_trajGen = HebiTrajectoryGenerator(kin)
 arm_trajGen.setMinDuration(1.0) % Min move time for 'small' movements
@@ -72,7 +71,6 @@ arm_trajGen.setMinDuration(1.0) % Min move time for 'small' movements
 arm_trajGen.setSpeedFactor(1.0) % Slow down movements to a safer speed.
                              % (default is 1.0)
                              
-print('  ')
 print('Arm end-effector is now following the mobile device pose.')
 print('The control interface has the following commands:')
 print('  B1 - Reset/re-align poses.')
@@ -87,7 +85,7 @@ cmd = hebi.GroupCommand(group.size)
 
 # Startup
 while not abort_flag:
-  fbk = group.get_next_feedback()
+  group.get_next_feedback(reuse_fbk=fbk)
 
   cmd.position = None
   cmd.velocity = None
@@ -108,9 +106,9 @@ while not abort_flag:
 
   # Slow trajectories down for the initial move to home position
   arm_trajGen.setSpeedFactor(0.5)
-    
+
   arm_traj = arm_trajGen.newJointMove([fbk.position ik_pos])
-    
+
   # Set trajectories to normal speed for following mobile input
   arm_trajGen.setSpeedFactor(1.0)   
   arm_trajGen.setMinDuration(0.33)  
@@ -119,7 +117,7 @@ while not abort_flag:
   t = 0
 
   while t < arm_traj.duration:
-    fbk = group.get_next_feedback()
+    group.get_next_feedback(reuse_fbk=fbk)
     t = min((fbk.time - t0).min(), arm_traj.duration)
 
     pos, vel, accel = arm_traj.getState(t)
@@ -127,8 +125,7 @@ while not abort_flag:
     cmd.velocity = vel
 
     if enable_effort_comp:
-      # TODO: get_dynamic_comp_efforts
-      #dynamics_comp = kin.getDynamicCompEfforts(fbk.position, pos, vel, accel)
+      dynamics_comp = get_dynamic_comp_efforts(fbk_position, pos, vel, accel, robot)
       grav_comp = get_grav_comp_efforts(kin, fbk.position, gravity_vec)
       cmd.effort = dynamics_comp + grav_comp + effort_offset
 
@@ -137,16 +134,10 @@ while not abort_flag:
   # Grab initial pose
   fbk_mobile = mobile_io_controller.current_feedback
 
-  q = [ fbk_mobile.arOrientationW ...
-        fbk_mobile.arOrientationX ...
-        fbk_mobile.arOrientationY ...
-        fbk_mobile.arOrientationZ ]     
+  q = fbk_mobile.ar_orientation[0]
   R_init = quat2rot(q)
 
-  xyz_init = [ fbk_mobile.arPositionX
-               fbk_mobile.arPositionY 
-               fbk_mobile.arPositionZ ]
-
+  xyz_init = fbk_mobile.ar_position[0]
   xyz_phone_new = xyz_init
 
   end_velocities = np.zeros((1, arm_dof_count))
@@ -161,7 +152,7 @@ while not abort_flag:
   first_run = true
 
   while not abort_flag:
-    fbk = group.get_next_feedback()
+    group.get_next_feedback(reuse_fbk=fbk)
 
     time_now = fbk.time
     dt = time_now - time_last
@@ -187,13 +178,12 @@ while not abort_flag:
 
     # Parameter to limit XYZ Translation of the arm if a slider is pulled down.  
     # Pulling all the way down resets translation.
-    phone_control_scale = mobile_io_controller.get_slider(translationScaleSlider)
+    phone_control_scale = mobile_io_controller.get_slider(translation_scale_slider)
     if phone_control_scale < 0:
       xyz_init = xyz_phone_new
 
     # Pose Information for Arm Control
     xyz_phone_new = fbk_mobile.ar_position[0]
-                    
     xyz_target = xyz_target_init + phone_control_scale * xyz_scale .* (R_init.T * (xyz_phone_new - xyz_init))
 
     q = fbk_mobile.ar_orientation[0]
@@ -208,37 +198,32 @@ while not abort_flag:
     else:
       t = time_now - arm_trajStartTime
       pos, vel, accel = arm_traj.get_state(t)
-        
+
     cmd.position = pos
     cmd.velocity = vel
 
+    fbk_position = fbk.position
+
     if enable_effort_comp:
-      # TODO: get_dynamic_comp_efforts
-      #dynamics_comp = kin.getDynamicCompEfforts(fbk.position, pos, vel, accel)
-      grav_comp = get_grav_comp_efforts(kin, fbk.position, gravity_vec)
+      dynamics_comp = get_dynamic_comp_efforts(fbk_position, pos, vel, accel, robot)
+      grav_comp = get_grav_comp_efforts(kin, fbk_position, gravity_vec)
       cmd.effort = dynamics_comp + grav_comp + effort_offset
 
     # Force elbow up config
     seed_pos_ik = pos
-    seed_pos_ik(3) = abs(seed_pos_ik(3))
+    seed_pos_ik[3] = abs(seed_pos_ik[3])
 
     # Find target using inverse kinematics
-    ik_pos = kin.getIK( 'xyz', xyz_target, ...
-                               'SO3', rot_mat_target, ...
-                               'initial', seed_pos_ik, ...
-                               'MaxIter', 50 ) 
+    ik_pos = kin.getIK('xyz', xyz_target, 'SO3', rot_mat_target, 'initial', seed_pos_ik) 
 
     # Start new trajectory at the current state        
     phone_hz = 10
     phone_period = 1 / phone_hz
-        
+
     if toc(phone_fbk_timer) > phone_period:
       arm_trajStartTime = time_now
       phone_fbk_timer = tic
-
-      arm_traj = arm_trajGen.newJointMove( [pos ik_pos], ...
-                    'Velocities', [vel end_velocities], ...
-                    'Accelerations', [accel end_accels])  
+      arm_traj = arm_trajGen.newJointMove([pos ik_pos], 'Velocities', [vel end_velocities], 'Accelerations', [accel end_accels])  
 
     # Send to robot
     group.send_command(cmd)
