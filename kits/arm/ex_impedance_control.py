@@ -12,6 +12,7 @@ sys.path = [root_path] + sys.path
 
 from util.input import listen_for_escape_key, has_esc_been_pressed, listen_for_space_bar, has_space_been_pressed
 from util.math_utils import get_grav_comp_efforts
+from util.arm import setup_arm_params
 
 
 # Listens for `ESC`, `SPACE` being pressed
@@ -24,7 +25,7 @@ arm_family = 'Arm'
 # If you attach a gas spring to the shoulder for extra payload, set this to True
 has_gas_spring = False
 
-group, kin, params = setup_arm(arm_name, arm_family, has_gas_spring)
+group, kin, params = setup_arm_params(arm_name, arm_family, has_gas_spring)
 
 gravity_vec = params.gravity_vec
 local_dir = params.local_dir
@@ -44,7 +45,7 @@ enable_logging = True
 
 # Start background logging 
 if enable_logging:
-  log_file_dir = group.startLog('dir', os.path.join(local_dir, 'logs')) 
+  log_file_dir = group.start_log('dir', os.path.join(local_dir, 'logs')) 
 
 # Gravity compensated mode
 cmd = hebi.GroupCommand(group.size)
@@ -93,6 +94,7 @@ while not has_esc_been_pressed():
 
   # Update gravity vector the base module of the arm
   params.update_gravity(fbk)
+  gravity_vec = params.gravity_vec
 
   # Calculate required torques to negate gravity at current position
   get_grav_comp_efforts(kin, fbk.position, gravity_vec, output=grav_effort)
