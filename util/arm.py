@@ -2,6 +2,8 @@ import hebi
 import numpy as np
 import os
 
+from .math_utils import gravity_from_quaternion
+
 
 # Where the HRDF, safety params and gains files are for the arms
 _arm_resource_local_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'kits', 'arm'))
@@ -24,7 +26,12 @@ class ArmParams(object):
 
     gains_path = os.path.join(_arm_resource_local_dir, "gains", robot_name + "_gains.xml")
     gains = hebi.GroupCommand(len(ik_seed_pos))
-    gains.read_gains(gains_path)
+    try:
+      gains.read_gains(gains_path)
+    except Exception as e:
+      import sys
+      sys.stderr.write("Could not load gains from file {0}\n".format(gains_path))
+      raise e
 
     self._gains = gains
     self._has_gripper = has_gripper
@@ -33,7 +40,7 @@ class ArmParams(object):
     self._gripper_gains = gripper_gains
     self._effort_offset = np.asarray(effort_offset)
     self._ik_seed_pos = ik_seed_pos
-    self._gravity_vec = np.zero(3, dtype=np.float32)
+    self._gravity_vec = np.zeros(3, dtype=np.float32)
 
   @property
   def robot_name(self):

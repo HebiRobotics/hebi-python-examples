@@ -45,7 +45,7 @@ print('Press ESC to stop.')
 
 while not has_esc_been_pressed():
   # Gather sensor data from the arm
-  fbk = group.get_next_feedback(reuse_fbk=fbk)
+  group.get_next_feedback(reuse_fbk=fbk)
 
   # Update gravity vector the base module of the arm
   params.update_gravity(fbk)
