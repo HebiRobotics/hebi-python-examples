@@ -238,6 +238,20 @@ def rot2ea(R, output=None):
   return output
 
 
+def rot2axisangle(R):
+  """
+  Retrieves the axis + angle from the input rotation matrix
+  """
+  axis = np.empty(3, np.float64)
+  axis[0] = R[2, 1] - R[1, 2]
+  axis[1] = R[0, 2] - R[2, 0]
+  axis[2] = R[1, 0] - R[0, 1]
+
+  y = np.hypot(axis[0], np.hypot(axis[1], axis[2]))
+  axis = axis / y
+  return axis, atan2(y, R[:3, :3].diagonal().sum()-1)
+
+
 def get_grav_comp_efforts(robot, positions, gravity, output=None):
   """
   :param robot:

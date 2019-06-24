@@ -13,7 +13,7 @@ sys.path = [root_path] + sys.path
 
 
 from util.input import listen_for_escape_key, has_esc_been_pressed, listen_for_space_bar, has_space_been_pressed
-from util.math_utils import get_grav_comp_efforts
+from util.math_utils import get_grav_comp_efforts, rot2axisangle
 from util.arm import setup_arm_params
 
 
@@ -65,12 +65,6 @@ spring_gains = np.asarray([500, 500, 0, 5, 5, 5])
 
 fbk = group.get_next_feedback(reuse_fbk=fbk)
 
-arm_tip_fk = kin.get_end_effector(fbk.position)
-J_arm_tip = kin.get_jacobian_end_effector(fbk.position)
-
-end_effector_XYZ = arm_tip_fk[0:3,3].copy()
-end_effector_rot_mat = arm_tip_fk[0:3,0:3].copy()
-
 # Error terms
 pos_error = np.zeros(fbk.size)
 vel_error = np.zeros(fbk.size)
@@ -86,6 +80,12 @@ grav_effort = np.zeros((6, 1))
 arm_cmd_joint_angs = fbk.position
 arm_cmd_joint_vels = np.zeros(1, numDoF)
 
+arm_tip_fk = kin.get_end_effector(arm_cmd_joint_angs)
+J_arm_tip = kin.get_jacobian_end_effector(arm_cmd_joint_angs)
+
+end_effector_XYZ = arm_tip_fk[0:3,3].copy()
+end_effector_rot_mat = arm_tip_fk[0:3,0:3].copy()
+
 
 controller_on = False
 
@@ -94,17 +94,19 @@ while not has_esc_been_pressed():
   # Gather sensor data from the arm
   fbk = group.get_next_feedback(reuse_fbk=fbk)
 
+  fbk_position = fbk.position
+
   # Update gravity vector the base module of the arm
   params.update_gravity(fbk)
   gravity_vec = params.gravity_vec
 
   # Calculate required torques to negate gravity at current position
-  get_grav_comp_efforts(kin, fbk.position, gravity_vec, output=grav_effort)
+  get_grav_comp_efforts(kin, fbk_position, gravity_vec, output=grav_effort)
 
   if controller_on:
     # Get Updated Forward Kinematics and Jacobians
-    kin.get_end_effector(fbk.position, output=arm_tip_fk)
-    kin.get_jacobian_end_effector(fbk.position, output=J_arm_tip)
+    kin.get_end_effector(fbk_position, output=arm_tip_fk)
+    kin.get_jacobian_end_effector(fbk_position, output=J_arm_tip)
 
     # Calculate Impedence Control Wrenches and Appropraite Joint Torque
     spring_wrench[:] = 0
@@ -117,7 +119,7 @@ while not has_esc_been_pressed():
     # Rotational error involves calculating axis-angle from the
     # resulting error in S03 and providing a torque around that axis.
     error_rot_mat = end_effector_rot_mat * arm_tip_fk[0:2, 0:2].T
-    axis, angle = HebiUtils.rotMat2axAng(error_rot_mat)
+    axis, angle = rot2axisangle(error_rot_mat)
     rot_error_vec = angle * axis
 
     if gains_in_end_effector_frame:
