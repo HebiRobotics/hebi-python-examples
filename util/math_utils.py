@@ -314,7 +314,7 @@ def get_dynamic_comp_efforts(fbk_positions, cmd_positions, cmd_velocities, cmd_a
     accel = ((lastv+nextv)-(2*nowv))*dt_s_inv
 
     # Set translational part of wrench vector (rotational stays zero)
-    wrench[0:3] = accel*masses[module]
+    wrench[0:3] = np.reshape(accel*masses[module], (3,))
 
     # compEffort = J' * wrench
     efforts += jacobians[module].T*np.reshape(wrench, (6, 1))

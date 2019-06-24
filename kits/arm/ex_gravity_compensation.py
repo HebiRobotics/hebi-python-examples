@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import hebi
 import os
 import sys

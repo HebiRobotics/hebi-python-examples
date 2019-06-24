@@ -1,7 +1,9 @@
+#!/usr/bin/env python3
+
 import hebi
+import numpy as np
 import os
 import sys
-
 
 # ------------------------------------------------------------------------------
 # Add the root folder of the repository to the search path for modules
@@ -51,11 +53,11 @@ if enable_logging:
 cmd = hebi.GroupCommand(group.size)
 fbk = hebi.GroupFeedback(group.size)
 
-disp('Commanded gravity-compensated zero force to the arm.')
-disp('  SPACE - Toggles an impedance controller on/off:')
-disp('          ON  - Apply controller based on current position')
-disp('          OFF - Go back to gravity-compensated mode')
-disp('  ESC - Exits the demo.')
+print('Commanded gravity-compensated zero force to the arm.')
+print('  SPACE - Toggles an impedance controller on/off:')
+print('          ON  - Apply controller based on current position')
+print('          OFF - Go back to gravity-compensated mode')
+print('  ESC - Exits the demo.')
 
 gains_in_end_effector_frame = True
 damper_gains = np.asarray([10, 10, 0, .1, .1, .1])
@@ -63,7 +65,7 @@ spring_gains = np.asarray([500, 500, 0, 5, 5, 5])
 
 fbk = group.get_next_feedback(reuse_fbk=fbk)
 
-arm_tip_fk = arm.get_end_effector(fbk.position)
+arm_tip_fk = kin.get_end_effector(fbk.position)
 J_arm_tip = kin.get_jacobian_end_effector(fbk.position)
 
 end_effector_XYZ = arm_tip_fk[0:3,3].copy()

@@ -1,4 +1,7 @@
+#!/usr/bin/env python3
+
 import hebi
+import numpy as np
 import os
 import sys
 
@@ -10,8 +13,10 @@ sys.path = [root_path] + sys.path
 # ------------------------------------------------------------------------------
 
 
+from hebi.trajectory import create_trajectory
+from hebi.robot_model import endeffector_position_objective, endeffector_so3_objective
 from util.input import listen_for_escape_key, has_esc_been_pressed, create_mobile_io_controller
-from util.math_utils import get_grav_comp_efforts, get_dynamic_comp_efforts, quat2rot
+from util.math_utils import get_grav_comp_efforts, get_dynamic_comp_efforts, quat2rot, rotate_y
 from util.arm import setup_arm_params
 from time import sleep
 
@@ -51,12 +56,16 @@ group, kin, params = setup_arm_params(arm_name, arm_family, has_gas_spring, look
 
 fbk = hebi.GroupFeedback(group.size)
 ik_seed_pos = params.ik_seed_pos
-effort_offset = params.effortOffset
+effort_offset = params.effort_offset
 gravity_vec = params.gravity_vec
 local_dir = params.local_dir
 
 if params.has_gripper:
   gripper_group = lookup.get_group_from_names(arm_family, 'Spool')
+
+  if gripper_group is None:
+    raise RuntimeError("Cannot create gripper group.")
+
   gripper_group.send_command(params.gripper_gains)
   grip_force_scale = 0.5 * (params.gripper_open_effort - params.gripper_close_effort) 
   grip_force_shift = np.mean([params.gripper_open_effort, params.gripper_close_effort]) 
@@ -64,12 +73,8 @@ if params.has_gripper:
 
 arm_dof_count = kin.dof_count
 
-# Trajectory
-arm_trajGen = HebiTrajectoryGenerator(kin)
-arm_trajGen.setMinDuration(1.0) % Min move time for 'small' movements
-                             % (default is 1.0)
-arm_trajGen.setSpeedFactor(1.0) % Slow down movements to a safer speed.
-                             % (default is 1.0)
+# Min move time for 'small' movements.
+arm_traj_min_duration = 1.0
                              
 print('Arm end-effector is now following the mobile device pose.')
 print('The control interface has the following commands:')
@@ -83,6 +88,16 @@ print('  B8 - Quits the demo.')
 
 cmd = hebi.GroupCommand(group.size)
 
+# Move to current coordinates
+xyz_target_init = np.asarray([0.5, 0.0, 0.1])
+rot_mat_target_init = rotate_y(np.pi)
+
+
+def get_ik(xyz_target, rot_target, ik_seed):
+  # Helper function to rebuild the IK solver with the appropriate objective functions
+  return kin.solve_inverse_kinematics(ik_seed_pos, endeffector_position_objective(xyz_target), endeffector_so3_objective(rot_target))
+
+
 # Startup
 while not abort_flag:
   group.get_next_feedback(reuse_fbk=fbk)
@@ -91,42 +106,32 @@ while not abort_flag:
   cmd.velocity = None
   cmd.effort = None
 
-  xyz_scale = [1 1 2].T
+  xyz_scale = np.asarray([1, 1, 2])
 
   # Start background logging
   if enable_logging:
     group.start_log(os.path.join(local_dir, 'logs'))
     phone_group.start_log(os.path.join(local_dir, 'logs'))
 
-  # Move to current coordinates
-  xyz_target_init = [0.5 0.0 0.1].T
-  rot_mat_target_init = R_y(pi)
+  ik_pos = get_ik(xyz_target_init, rot_mat_target_init, ik_seed_pos)
 
-  ik_pos = kin.getIK('xyz', xyz_target_init, 'so3', rot_mat_target_init, 'initial', ik_seed_pos)
-
-  # Slow trajectories down for the initial move to home position
-  arm_trajGen.setSpeedFactor(0.5)
-
-  arm_traj = arm_trajGen.newJointMove([fbk.position ik_pos])
-
-  # Set trajectories to normal speed for following mobile input
-  arm_trajGen.setSpeedFactor(1.0)   
-  arm_trajGen.setMinDuration(0.33)  
-
-  t0 = fbk.time
+  arm_traj = create_trajectory([0, arm_traj_min_duration], np.asmatrix([fbk.position, ik_pos]).T)
+  fbk_time = fbk.receive_time
+  t0 = fbk_time.min()
   t = 0
 
   while t < arm_traj.duration:
     group.get_next_feedback(reuse_fbk=fbk)
-    t = min((fbk.time - t0).min(), arm_traj.duration)
+    t = min((fbk_time - t0).min(), arm_traj.duration)
 
-    pos, vel, accel = arm_traj.getState(t)
+    pos, vel, accel = arm_traj.get_state(t)
     cmd.position = pos
     cmd.velocity = vel
 
     if enable_effort_comp:
-      dynamics_comp = get_dynamic_comp_efforts(fbk_position, pos, vel, accel, robot)
-      grav_comp = get_grav_comp_efforts(kin, fbk.position, gravity_vec)
+      fbk_position = fbk.position
+      dynamics_comp = get_dynamic_comp_efforts(fbk_position, pos, vel, accel, kin)
+      grav_comp = get_grav_comp_efforts(kin, fbk_position, gravity_vec)
       cmd.effort = dynamics_comp + grav_comp + effort_offset
 
     group.send_command(cmd)
@@ -184,7 +189,7 @@ while not abort_flag:
 
     # Pose Information for Arm Control
     xyz_phone_new = fbk_mobile.ar_position[0]
-    xyz_target = xyz_target_init + phone_control_scale * xyz_scale .* (R_init.T * (xyz_phone_new - xyz_init))
+    xyz_target = xyz_target_init + (np.multiply(phone_control_scale * xyz_scale, R_init.T * (xyz_phone_new - xyz_init)))
 
     q = fbk_mobile.ar_orientation[0]
     rot_mat_target = R_init.T * quat2rot(q) * rot_mat_target_init
@@ -214,7 +219,7 @@ while not abort_flag:
     seed_pos_ik[3] = abs(seed_pos_ik[3])
 
     # Find target using inverse kinematics
-    ik_pos = kin.getIK('xyz', xyz_target, 'SO3', rot_mat_target, 'initial', seed_pos_ik) 
+    ik_pos = get_ik(xyz_target, rot_mat_target, seed_pos_ik)
 
     # Start new trajectory at the current state        
     phone_hz = 10
@@ -223,7 +228,7 @@ while not abort_flag:
     if toc(phone_fbk_timer) > phone_period:
       arm_trajStartTime = time_now
       phone_fbk_timer = tic
-      arm_traj = arm_trajGen.newJointMove([pos ik_pos], 'Velocities', [vel end_velocities], 'Accelerations', [accel end_accels])  
+      arm_traj = create_trajectory([0, arm_traj_min_duration], np.asmatrix([pos, ik_pos]).T, np.asmatrix([vel, end_velocities]).T, np.asmatrix([accel, end_accels]).T)  
 
     # Send to robot
     group.send_command(cmd)
