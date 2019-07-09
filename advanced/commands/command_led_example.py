@@ -40,7 +40,7 @@ sleep(3)
 
 # Set the LED purple. Note that this override automatically sets the alpha
 # channel to "255" (e.g., arguments are RGB).
-group_command.led.color = hebi.Color(0, 255, 255)
+group_command.led.color = hebi.Color(255, 0, 255)
 group.send_command(group_command)
 
 sleep(3)
