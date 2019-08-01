@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Corresponding Actuator Names --> 
+<!-- wheel1 wheel2 hip1 knee1 hip2 knee2 base1 shoulder1 elbow1 wrist1 base2 shoulder2 elbow2 wrist2 -->
+<!-- 1 = left side -->
+<!-- 2 = right side -->
 <group_gains>
    <control_strategy>3 3 4 4 4 4 4 4 4 3 4 4 4 3 3</control_strategy>
    <position>
