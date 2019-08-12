@@ -237,14 +237,14 @@ while not abort_flag:
 if enable_logging:
   hebi_log = group.stop_log()
 
-  # Plot tracking / error from the joints in the arm.  Note that there
+  # Plot tracking / error from the joints in the arm. Note that there
   # will not by any 'error' in tracking for position and velocity, since
   # this example only commands effort.
   hebi.util.plot_logs(hebi_log, 'position')
   hebi.util.plot_logs(hebi_log, 'velocity')
   hebi.util.plot_logs(hebi_log, 'effort')
 
-  # Plot the end-effectory trajectory and error
+  # Plot the end-effector trajectory and error
   kinematics_analysis(hebilog, kin)
 
   # Put more plotting code here
