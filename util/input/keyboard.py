@@ -1,5 +1,7 @@
 import sys
-
+from threading import Lock, Condition, Thread
+from sdl2 import *
+from ctypes import c_char_p
 
 # ------------------------------------------------------------------------------
 # getch API
@@ -18,50 +20,81 @@ class _Getch:
 
   def getch_blocking(self): return self.impl.getch_blocking()
   def getch_non_blocking(self): return self.impl.getch_non_blocking()
+  def wait_for_next(self): self.impl.wait_for_next()
 
 
 class _GetchUnix:
   def __init__(self):
     import select
-    from termios import tcgetattr, tcsetattr, TCSADRAIN
-    from tty import setraw
+    from termios import tcgetattr, tcsetattr, TCSADRAIN, ICANON, ECHO, TCSAFLUSH
+    from tty import setcbreak, setraw
 
-    self._kbhit = lambda: select.select([sys.stdin], [], [], 0)[0] != []
+    self._kbhit_nb = lambda: select.select([sys.stdin], [], [], 0)[0] != []
+    self._kbhit = lambda: select.select([sys.stdin], [], [])[0]
     self._getch = lambda: sys.stdin.read(1)
 
+    old_settings = tcgetattr(sys.stdin.fileno())
+
+    term_attrs = tcgetattr(sys.stdin.fileno())
+    term_attrs[3] = (term_attrs[3] & ~ICANON & ~ECHO)
+    tcsetattr(sys.stdin.fileno(), TCSAFLUSH, term_attrs)
 
     def push_terminal_unbuffered(term_attrs):
-      term_attrs[3] = (term_attrs[3] & ~termios.ICANON & ~termios.ECHO)
-      termios.tcsetattr(sys.stdin.fileno(), termios.TCSAFLUSH, term_attrs)
+      term_attrs[3] = (term_attrs[3] & ~ICANON & ~ECHO)
+      tcsetattr(sys.stdin.fileno(), TCSAFLUSH, term_attrs)
 
 
     self._get_terminal_settings = lambda: tcgetattr(sys.stdin.fileno())
     self._push_terminal_unbuffered = push_terminal_unbuffered
-    self._pop_terminal_unbuffered = lambda term_attrs: termios.tcsetattr(sys.stdin.fileno(), termios.TCSAFLUSH, term_attrs)
-    self._push_terminal_raw = lambda: setraw(sys.stdin.fileno())
-    self._pop_terminal_raw = lambda settings: tcsetattr(sys.stdin.fileno(), TCSADRAIN, settings)
+    self._pop_terminal_unbuffered = lambda term_attrs: tcsetattr(sys.stdin.fileno(), TCSAFLUSH, term_attrs)
+    self._push_terminal_raw = lambda: setcbreak(sys.stdin.fileno())
+    #self._pop_terminal_raw = lambda settings: tcsetattr(sys.stdin.fileno(), TCSADRAIN, settings)
+    self._pop_terminal_raw = lambda settings: tcsetattr(sys.stdin.fileno(), TCSAFLUSH, settings)
 
   def getch_blocking(self):
     old_settings = self._get_terminal_settings()
+    # Call again so we don't modify the previous settings
+    self._push_terminal_raw()
     ch = ''
     try:
-      self._push_terminal_raw()
+      hit = self._kbhit()
+      if hit != []:
+        ch = self._getch()
+    finally:
+      self._pop_terminal_raw(old_settings)
+    return ch
+    # old_settings = self._get_terminal_settings()
+    # ch = ''
+    # try:
+    #   self._push_terminal_raw()
+    #   ch = self._getch()
+    # finally:
+    #   self._pop_terminal_raw(old_settings)
+    # return ch
+
+  def getch_non_blocking(self):
+    # old_settings = self._get_terminal_settings()
+    # # Call again so we don't modify the previous settings
+    # self._push_terminal_unbuffered(self._get_terminal_settings())
+    # ch = ''
+    # try:
+    #   if self._kbhit_nb():
+    #     ch = self._getch()
+    # finally:
+    #   self._pop_terminal_unbuffered(old_settings)
+    # return ch
+    old_settings = self._get_terminal_settings()
+    self._push_terminal_raw()
+    ch = ''
+    try:
       ch = self._getch()
     finally:
       self._pop_terminal_raw(old_settings)
     return ch
 
-  def getch_non_blocking(self):
-    old_settings = self._get_terminal_settings()
-    # Call again so we don't modify the previous settings
+  def wait_for_next(self):
     self._push_terminal_unbuffered(self._get_terminal_settings())
-    ch = ''
-    try:
-      if self._kbhit():
-        ch = self._getch()
-    finally:
-      self._pop_terminal_unbuffered(old_settings)
-    return ch
+    self._kbhit()
 
 
 class _GetchWindows:
@@ -115,12 +148,58 @@ class _GetchMacCarbon:
 
 # Singleton
 _getch = _Getch()
+__current_char_lock = Lock()
+__current_char_cvar = Condition(__current_char_lock)
+__current_char = None
+__dispatch_event = None
+
+from time import time as _time
+
+
+def __dispatch_keydown_event(key_str):
+  event = SDL_Event()
+  event.type = SDL_KEYDOWN
+  event.timestamp = _time() # TODO: Do we need to do this?
+  event.state = SDL_PRESSED
+  key_ctypes = c_char_p(bytes(key_str, "utf8"))
+  key_code = SDL_GetKeyFromName(key_ctypes)
+  scan_code = SDL_GetScancodeFromName(key_ctypes)
+
+  event.key.keysym.scancode = scan_code
+  event.key.keysym.sym = key_code
+  # TODO: event.mod ?
+
+  __dispatch_event(event)
+
+
+def __get_char_background_proc():
+  global __current_char
+  global __dispatch_event
+
+  from .event_handler import inject_event
+  __dispatch_event = inject_event
+
+  while True:
+    _getch.wait_for_next()
+    __current_char_cvar.acquire()
+    ch = _getch.getch_non_blocking()
+    __current_char = ch
+    __dispatch_keydown_event(ch)
+    __current_char_cvar.notify_all()
+    __current_char_cvar.release()
+
+
+__current_char_proc_thread = Thread(target=__get_char_background_proc)
 
 
 def getch(blocking=True):
   if blocking:
-    return _getch.getch_blocking()
-  return _getch.getch_non_blocking()
+    __current_char_cvar.acquire()
+    __current_char_cvar.wait()
+    val = __current_char
+    __current_char_cvar.release()
+    return val
+  return __current_char
 
 
 # ------------------------------------------------------------------------------
@@ -141,7 +220,7 @@ class _Keyboard:
     if keystr in self.__kbd_event_map:
       handlers = self.__kbd_event_map[keystr]
       for handler in handlers:
-        handler(ts, state == sdl2.SDL_PRESSED, repeat)
+        handler(ts, state == SDL_PRESSED, repeat)
 
   def add_key_event_handler(self, keystr, handler):
     if not callable(handler):
@@ -177,7 +256,7 @@ __space_listener = _ButtonNoop()
 
 def _listen_for_esc():
   global __esc_listener
-  if __esc_listener is not None:
+  if type(__esc_listener) is not _ButtonNoop:
     # already listening - return
     return
 
@@ -193,6 +272,7 @@ def _listen_for_esc():
 
     def event_handler(self, ts, pressed, repeat):
       self._has_been_pressed = pressed or self._has_been_pressed
+      print(f"<ESC> input: {pressed}; current: {self._has_been_pressed}")
 
     @property
     def has_been_pressed(self):
@@ -212,7 +292,7 @@ def _has_esc_been_pressed():
 
 def _listen_for_space():
   global __space_listener
-  if __space_listener is not None:
+  if type(__space_listener) is not _ButtonNoop:
     # already listening - return
     return
 
@@ -244,3 +324,6 @@ def _clear_space_state():
 
 def _has_space_been_pressed():
   return __space_listener.has_been_pressed
+
+
+__current_char_proc_thread.start()

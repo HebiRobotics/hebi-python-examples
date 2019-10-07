@@ -54,7 +54,7 @@ while not has_esc_been_pressed():
   gravity_vec = params.gravity_vec
 
   # Calculate required torques to negate gravity at current position
-  cmd.effort = get_grav_comp_efforts(kin, fbk.position, gravity_vec) + effort_offset
+  cmd.effort = get_grav_comp_efforts(kin, fbk.position, -gravity_vec) + effort_offset
 
   # Send to robot
   group.send_command(cmd)
@@ -69,8 +69,5 @@ if enable_logging:
   hebi.util.plot_logs(hebi_log, 'position')
   hebi.util.plot_logs(hebi_log, 'velocity')
   hebi.util.plot_logs(hebi_log, 'effort')
-
-  # Plot the end-effectory trajectory and error
-  kinematics_analysis(hebilog, kin)
 
   # Put more plotting code here

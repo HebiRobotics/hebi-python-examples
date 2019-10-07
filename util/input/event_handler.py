@@ -4,6 +4,10 @@ import threading
 
 from time import sleep, time
 
+SDL_InitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC)
+SDL_JoystickEventState(SDL_ENABLE)
+SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, b"1")
+
 
 class SDLEventHandler(object):
 
@@ -24,8 +28,8 @@ class SDLEventHandler(object):
     hooks[SDL_CONTROLLERBUTTONUP] = [_joystick_button_event]
     hooks[SDL_CONTROLLERDEVICEADDED] = [_joystick_added]
     hooks[SDL_CONTROLLERDEVICEREMOVED] = [_joystick_removed]
-    hooks[SDL_KEYDOWN] = [_keyboard_event]
-    hooks[SDL_KEYUP] = [_keyboard_event]
+    hooks[SDL_KEYDOWN] = [lambda event: _keyboard_event(event, True)]
+    hooks[SDL_KEYUP] = [lambda event: _keyboard_event(event, False)]
 
     self.__event_hooks = hooks
     self.__loop_mutex = threading.Lock()
@@ -138,10 +142,10 @@ def _joystick_button_event(sdl_event):
 
 from .keyboard import _kbd_instance as KeyboardController
 
-def _keyboard_event(sdl_event):
+def _keyboard_event(sdl_event, key_down):
   ts = sdl_event.timestamp
   #window_id = sdl_event.windowID
-  state = sdl_event.state
+  state = SDL_PRESSED if key_down else 0
   repeat = sdl_event.repeat
   keysym = sdl_event.keysym
   KeyboardController._on_key_event(ts, state, repeat, keysym)
@@ -150,6 +154,10 @@ def _keyboard_event(sdl_event):
 # ------------------------------------------------------------------------------
 # Application-wide State
 # ------------------------------------------------------------------------------
+
+
+def inject_event(event):
+  SDL_PushEvent(event)
 
 
 _singleton = SDLEventHandler()

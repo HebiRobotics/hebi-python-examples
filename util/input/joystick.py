@@ -2,10 +2,6 @@ from sdl2 import *
 from threading import Lock, Condition
 from ..type_utils import assert_callable, assert_type, assert_prange
 
-SDL_InitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC)
-SDL_JoystickEventState(SDL_ENABLE)
-SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, b"1")
-
 
 # ------------------------------------------------------------------------------
 # Misc

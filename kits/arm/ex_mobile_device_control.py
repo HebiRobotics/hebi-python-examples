@@ -244,7 +244,4 @@ if enable_logging:
   hebi.util.plot_logs(hebi_log, 'velocity')
   hebi.util.plot_logs(hebi_log, 'effort')
 
-  # Plot the end-effector trajectory and error
-  kinematics_analysis(hebilog, kin)
-
   # Put more plotting code here

@@ -12,7 +12,7 @@ sys.path = [root_path] + sys.path
 # ------------------------------------------------------------------------------
 
 
-from util.input import listen_for_escape_key, has_esc_been_pressed, listen_for_space_bar, has_space_been_pressed
+from util.input import listen_for_escape_key, has_esc_been_pressed, listen_for_space_bar, has_space_been_pressed, clear_esc_state, clear_space_state
 from util.math_utils import get_grav_comp_efforts, rot2axisangle
 from util.arm import setup_arm_params
 
@@ -29,7 +29,8 @@ has_gas_spring = False
 
 group, kin, params = setup_arm_params(arm_name, arm_family, has_gas_spring)
 
-gravity_vec = params.gravity_vec
+gravity_vec = params.gravity_vec.copy()
+effort_offset = params.effort_offset
 local_dir = params.local_dir
 
 # Increase feedback frequency since we're calculating velocities at the
@@ -65,9 +66,14 @@ spring_gains = np.asarray([500, 500, 0, 5, 5, 5])
 
 fbk = group.get_next_feedback(reuse_fbk=fbk)
 
+# FIXME: Fix the hellish broadcasting shape issues
+
 # Error terms
 pos_error = np.zeros(fbk.size)
 vel_error = np.zeros(fbk.size)
+
+xyz_error = np.zeros((3, 1))
+rot_error_vec = np.zeros((3, 1))
 
 spring_wrench = np.zeros((6, 1))
 damper_wrench = np.zeros((6, 1))
@@ -78,7 +84,7 @@ grav_effort = np.zeros((6, 1))
 
 # Velocity commands
 arm_cmd_joint_angs = fbk.position
-arm_cmd_joint_vels = np.zeros(1, numDoF)
+arm_cmd_joint_vels = np.zeros((1, fbk.size))
 
 arm_tip_fk = kin.get_end_effector(arm_cmd_joint_angs)
 J_arm_tip = kin.get_jacobian_end_effector(arm_cmd_joint_angs)
@@ -98,10 +104,10 @@ while not has_esc_been_pressed():
 
   # Update gravity vector the base module of the arm
   params.update_gravity(fbk)
-  gravity_vec = params.gravity_vec
+  gravity_vec[:] = -params.gravity_vec
 
   # Calculate required torques to negate gravity at current position
-  get_grav_comp_efforts(kin, fbk_position, gravity_vec, output=grav_effort)
+  grav_effort = get_grav_comp_efforts(kin, fbk_position, gravity_vec) + effort_offset
 
   if controller_on:
     # Get Updated Forward Kinematics and Jacobians
@@ -111,37 +117,37 @@ while not has_esc_been_pressed():
     # Calculate Impedence Control Wrenches and Appropraite Joint Torque
     spring_wrench[:] = 0
     damper_wrench[:] = 0
-    wrench_cumulative[:] = 0
 
     # Linear error is easy
-    xyz_error = end_effector_XYZ - arm_tip_fk[0:2, 3]
+    xyz_error[0:3] = (end_effector_XYZ - arm_tip_fk[0:3, 3]).reshape(3, 1)
 
     # Rotational error involves calculating axis-angle from the
     # resulting error in S03 and providing a torque around that axis.
-    error_rot_mat = end_effector_rot_mat * arm_tip_fk[0:2, 0:2].T
+    error_rot_mat = end_effector_rot_mat * arm_tip_fk[0:3, 0:3].T
     axis, angle = rot2axisangle(error_rot_mat)
-    rot_error_vec = angle * axis
+    rot_error_vec[:, 0] = angle * axis
 
     if gains_in_end_effector_frame:
-      xyz_error = arm_tip_fk[0:2, 0:2].T * xyz_error
-      rot_error_vec = arm_tip_fk[0:2, 0:2].T * rot_error_vec
+      xyz_error[0:3] = arm_tip_fk[0:3, 0:3].T * xyz_error.reshape((3, 1))
+      rot_error_vec[0:3] = arm_tip_fk[0:3, 0:3].T * rot_error_vec
 
-    pos_error[0:2] = xyz_error
-    pos_error[3:5] = rot_error_vec
-    vel_error = J_arm_tip * (arm_cmd_joint_vels - fbk.velocity).T
+    pos_error[0:3] = xyz_error.flat
+    pos_error[3:6] = rot_error_vec.flat
+    vel_error[0:6] = (J_arm_tip * (arm_cmd_joint_vels - fbk.velocity).T).flat
 
     # spring_wrench = spring_gains *. pos_error
-    np.multiply(spring_gains, pos_error, out=spring_wrench)
+    spring_wrench[:, 0] = spring_gains * pos_error.flatten()
 
     if gains_in_end_effector_frame:
-      spring_wrench[0:2] = arm_tip_fk[0:2, 0:2] * spring_wrench[0:2]
-      spring_wrench[3:5] = arm_tip_fk[0:2, 0:2] * spring_wrench[3:5]
+      spring_wrench[0:3] = arm_tip_fk[0:3, 0:3] * spring_wrench[0:3]
+      spring_wrench[3:6] = arm_tip_fk[0:3, 0:3] * spring_wrench[3:6]
 
     # damper_wrench = damper_gains *. vel_error
-    np.multiply(damper_gains, vel_error, out=damper_wrench)
+    damper_wrench[:, 0] = damper_gains * vel_error.flatten()
 
-    impedance_effort = J_arm_tip.T * (spring_wrench + damper_wrench)
-    cmd.effort = grav_effort + impedance_effort
+    impedance_effort[:, 0] = (J_arm_tip.T * (spring_wrench + damper_wrench)).T
+    grav_effort[:] = grav_effort + impedance_effort.flatten()
+    cmd.effort = grav_effort
   else:
     cmd.effort = grav_effort
 
@@ -154,6 +160,10 @@ while not has_esc_been_pressed():
     controller_on = not controller_on
     clear_space_state()
 
+    # Update the EE position
+    end_effector_XYZ = arm_tip_fk[0:3,3].copy()
+    end_effector_rot_mat = arm_tip_fk[0:3,0:3].copy()
+
 
 if enable_logging:
   hebi_log = group.stop_log()
@@ -164,8 +174,5 @@ if enable_logging:
   hebi.util.plot_logs(hebi_log, 'position')
   hebi.util.plot_logs(hebi_log, 'velocity')
   hebi.util.plot_logs(hebi_log, 'effort')
-
-  # Plot the end-effector trajectory and error
-  kinematics_analysis(hebilog, kin)
 
   # Put more plotting code here
