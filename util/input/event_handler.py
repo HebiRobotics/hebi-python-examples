@@ -4,6 +4,10 @@ import threading
 
 from time import sleep, time
 
+SDL_InitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC)
+SDL_JoystickEventState(SDL_ENABLE)
+SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, b"1")
+
 
 class SDLEventHandler(object):
 
@@ -13,7 +17,9 @@ class SDLEventHandler(object):
     SDL_CONTROLLERBUTTONUP : "cbutton",
     SDL_CONTROLLERDEVICEADDED : "cdevice",
     SDL_CONTROLLERDEVICEREMOVED : "cdevice",
-    SDL_CONTROLLERDEVICEREMAPPED : "cdevice"}
+    SDL_CONTROLLERDEVICEREMAPPED : "cdevice",
+    SDL_KEYDOWN : "key",
+    SDL_KEYUP : "key"}
 
   def __init__(self):
     hooks = dict()
@@ -22,6 +28,8 @@ class SDLEventHandler(object):
     hooks[SDL_CONTROLLERBUTTONUP] = [_joystick_button_event]
     hooks[SDL_CONTROLLERDEVICEADDED] = [_joystick_added]
     hooks[SDL_CONTROLLERDEVICEREMOVED] = [_joystick_removed]
+    hooks[SDL_KEYDOWN] = [lambda event: _keyboard_event(event, True)]
+    hooks[SDL_KEYUP] = [lambda event: _keyboard_event(event, False)]
 
     self.__event_hooks = hooks
     self.__loop_mutex = threading.Lock()
@@ -82,7 +90,7 @@ class SDLEventHandler(object):
 
 
 # ------------------------------------------------------------------------------
-# Events
+# Joystick Events
 # ------------------------------------------------------------------------------
 
 
@@ -127,5 +135,32 @@ def _joystick_button_event(sdl_event):
   JoystickController.at_index(joystick_id)._on_button_event(ts, button, value)
 
 
+# ------------------------------------------------------------------------------
+# Keyboard Events
+# ------------------------------------------------------------------------------
+
+
+from .keyboard import _kbd_instance as KeyboardController
+
+def _keyboard_event(sdl_event, key_down):
+  ts = sdl_event.timestamp
+  #window_id = sdl_event.windowID
+  state = SDL_PRESSED if key_down else 0
+  repeat = sdl_event.repeat
+  keysym = sdl_event.keysym
+  KeyboardController._on_key_event(ts, state, repeat, keysym)
+
+
+# ------------------------------------------------------------------------------
+# Application-wide State
+# ------------------------------------------------------------------------------
+
+
+def inject_event(event):
+  SDL_PushEvent(event)
+
+
 _singleton = SDLEventHandler()
 _singleton.start()
+
+

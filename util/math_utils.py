@@ -172,6 +172,32 @@ def quat2rot(quaternion, output=None):
   return output
 
 
+def gravity_from_quaternion(quaternion, output=None):
+  """
+  Retrieve the gravity vector from the given quaternion
+  """
+  if output is None:
+    output = np.empty(3, dtype=np.float32)
+
+  X = quaternion[1]
+  Y = quaternion[2]
+  Z = quaternion[3]
+  W = quaternion[0]
+
+  xx = X*X
+  xz = X*Z
+  xw = X*W
+  yy = Y*Y
+  yz = Y*Z
+  yw = Y*W
+
+  output[0] = -2.0*(xz-yw)
+  output[1] = -2.0*(yz+xw)
+  output[2] = -1.0+2.0*(xx+yy)
+
+  return output
+
+
 def rot2ea(R, output=None):
   """
   Retrieve the Euler angle from the input rotation matrix
@@ -210,6 +236,20 @@ def rot2ea(R, output=None):
   output[1] = y
   output[2] = z
   return output
+
+
+def rot2axisangle(R):
+  """
+  Retrieves the axis + angle from the input rotation matrix
+  """
+  axis = np.empty(3, np.float64)
+  axis[0] = R[2, 1] - R[1, 2]
+  axis[1] = R[0, 2] - R[2, 0]
+  axis[2] = R[1, 0] - R[0, 1]
+
+  y = np.hypot(axis[0], np.hypot(axis[1], axis[2]))
+  axis = axis / y
+  return axis, atan2(y, R[:3, :3].diagonal().sum()-1)
 
 
 def get_grav_comp_efforts(robot, positions, gravity, output=None):
@@ -288,7 +328,7 @@ def get_dynamic_comp_efforts(fbk_positions, cmd_positions, cmd_velocities, cmd_a
     accel = ((lastv+nextv)-(2*nowv))*dt_s_inv
 
     # Set translational part of wrench vector (rotational stays zero)
-    wrench[0:3] = accel*masses[module]
+    wrench[0:3] = np.reshape(accel*masses[module], (3,))
 
     # compEffort = J' * wrench
     efforts += jacobians[module].T*np.reshape(wrench, (6, 1))

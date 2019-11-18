@@ -76,6 +76,7 @@ class State(object):
 
 
 def build_trajectory(state):
+  # Using the current state object, replan through the waypoints using the trajectory generator
   num_modules = state.arm.group.size
 
   # Reuse the first waypoint as the last one by adding it to the end.
@@ -98,6 +99,7 @@ def build_trajectory(state):
 
 
 def command_proc(state):
+  # The background thread in which communication with the modules occur
   group = state.arm.group
   group.feedback_frequency = 100.0
 
@@ -141,6 +143,7 @@ def command_proc(state):
     elif current_mode == 'training' and prev_mode != 'training':
       # Clear old position commands
       command.position = None
+      command.velocity = None
     group.send_command(command)
     state.unlock()
     prev_mode = current_mode
