@@ -18,7 +18,7 @@ If you are assembling Daisy, you can follow the assembly instructions found at:
 http://docs.hebi.us/resources/kits/assyInstructions/X-Series_Hexapod.pdf
 
 Gains, control parameters, and kinematic information are all set automatically in the demo code. If you want to view or change these parameters you can refer to the files below.  
-- Actuator gains can be found in [daisyLeg-Gains.xml](resources/gains18.xml).
+- Actuator gains can be found in [gains18.xml](resources/gains18.xml).
 - The HRDF files that define the kinematics of the robot can be found in the [resources/](resources/) folder.
 
 ## Running
