@@ -61,7 +61,7 @@ def rotate_x(angle, dtype=np.float64, output=None):
   :type output:  np.ndarray, NoneType
 
   :return: 3x3 rotation matrix
-  :rtype:  np.matrix
+  :rtype:  np.ndarray
   """
   c = cos(angle)
   s = sin(angle)
@@ -87,7 +87,7 @@ def rotate_y(angle, dtype=np.float64, output=None):
   :type output:  np.ndarray, NoneType
 
   :return: 3x3 rotation matrix
-  :rtype:  np.matrix
+  :rtype:  np.ndarray
   """
   c = cos(angle)
   s = sin(angle)
@@ -113,15 +113,15 @@ def rotate_z(angle, dtype=np.float64, output=None):
   :type output:  np.ndarray, NoneType
 
   :return: 3x3 rotation matrix
-  :rtype:  np.matrix
+  :rtype:  np.ndarray
   """
   c = cos(angle)
   s = sin(angle)
   if output is None:
     output = np.empty((3, 3), dtype=dtype)
   output[0, 0] = c
-  output[0, 1] = s
-  output[1, 0] = -s
+  output[0, 1] = -s
+  output[1, 0] = s
   output[1, 1] = c
   output[2, 2] = 1.0
   output[2, 0:2] = output[0:2, 2] = 0.0
@@ -270,7 +270,7 @@ def get_grav_comp_efforts(robot, positions, gravity, output=None):
 
   jacobians = robot.get_jacobians('CoM', positions)
   if output is None:
-    comp_torque = np.zeros((robot.dof_count, 1))
+    comp_torque = np.zeros(robot.dof_count)
   else:
     comp_torque = output
   wrench = np.zeros(6)
@@ -281,10 +281,9 @@ def get_grav_comp_efforts(robot, positions, gravity, output=None):
   for i in range(num_frames):
     # Add the torques for each joint to support the mass at this frame
     wrench[0:3] = gravity*masses[i]
-    comp_torque += jacobians[i].T*np.reshape(wrench, (6, 1))
+    comp_torque += jacobians[i].T @ wrench
 
-  ret = np.squeeze(comp_torque)
-  return ret
+  return comp_torque
 
 
 def get_dynamic_comp_efforts(fbk_positions, cmd_positions, cmd_velocities, cmd_accels, robot, dt=1e-3):
@@ -314,7 +313,7 @@ def get_dynamic_comp_efforts(fbk_positions, cmd_positions, cmd_velocities, cmd_a
   cmd_frames_next = [entry[:3, 3] for entry in robot.get_forward_kinematics('CoM', cmd_positions_next)]
 
   # Build wrench vector and calculate compensatory torques
-  efforts = np.zeros((robot.dof_count, 1))
+  efforts = np.zeros(robot.dof_count)
   jacobians = robot.get_jacobians('CoM', fbk_positions)
   masses = robot.masses
   wrench = np.zeros(6)
@@ -328,10 +327,10 @@ def get_dynamic_comp_efforts(fbk_positions, cmd_positions, cmd_velocities, cmd_a
     accel = ((lastv+nextv)-(2*nowv))*dt_s_inv
 
     # Set translational part of wrench vector (rotational stays zero)
-    wrench[0:3] = np.reshape(accel*masses[module], (3,))
+    wrench[0:3] = accel * masses[module]
 
     # compEffort = J' * wrench
-    efforts += jacobians[module].T*np.reshape(wrench, (6, 1))
+    efforts += jacobians[module].T @ wrench
 
-  return np.squeeze(efforts)
+  return efforts
 

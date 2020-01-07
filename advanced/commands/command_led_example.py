@@ -31,8 +31,7 @@ group.send_command(group_command)
 
 sleep(3)
 
-# Set the LED to "module control" mode; the first three digits are ignored
-# if the 'alpha' value is zero.
+# Set the LED to "module control" mode
 group_command.led.color = 'transparent'
 group.send_command(group_command)
 
@@ -45,6 +44,6 @@ group.send_command(group_command)
 
 sleep(3)
   
-# Set the LED to module control.
+# Set the LED back to module control.
 group_command.led.color = 'transparent'
 group.send_command(group_command)

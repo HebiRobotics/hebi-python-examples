@@ -23,7 +23,7 @@ group_command  = hebi.GroupCommand(group.size)
 group_feedback = hebi.GroupFeedback(group.size)
 
 # Start logging in the background
-group.start_log('logs')
+group.start_log('logs', mkdirs=True)
 
 freq_hz = 0.5                 # [Hz]
 freq    = freq_hz * 2.0 * pi  # [rad / sec]

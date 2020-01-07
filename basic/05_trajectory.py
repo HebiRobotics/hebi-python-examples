@@ -40,7 +40,7 @@ time_vector = [0, 3, 6]
 trajectory = hebi.trajectory.create_trajectory(time_vector, positions)
 
 # Start logging in the background
-group.start_log('logs')
+group.start_log('logs', mkdirs=True)
 
 group_command = hebi.GroupCommand(num_joints)
 duration = trajectory.duration

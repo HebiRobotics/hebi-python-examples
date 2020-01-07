@@ -62,16 +62,6 @@ def r(low, high):
 
 def generate_waypoints(model, current_pos):
   return [r(-.4, .4), r(0.25, 1.2), r(0.75, 2.0), r(-1.5, 1.5), r(-1.5, 1.5), r(-0.75, 0.75)]
-"""
-  tip_down = hebi.robot_model.endeffector_tipaxis_objective([0.0, 0.0, -1.0])
-
-  new_target_xyz = [random.random() * 0.2 + 0.2, random.random() * 0.4 - 0.2, random.random() * 0.25]
-  print new_target_xyz
-  objective = hebi.robot_model.endeffector_position_objective(new_target_xyz)
-
-  ik = model.solve_inverse_kinematics(current_pos, objective)
-  print ik
-  return ik"""
 
 
 def get_fbk(group):

@@ -26,7 +26,7 @@ position_command = hebi.GroupCommand(group.size)
 group_feedback = hebi.GroupFeedback(group.size)
 
 # Start logging in the background
-group.start_log('logs')
+group.start_log('logs', mkdirs=True)
 
 # Parameters for step function
 step_period    = 1.0                  # sec

@@ -80,7 +80,7 @@ except Exception as e:
   exit(1)
 
 # Go to the XYZ positions at four corners of the box.
-xyz_targets = np.matrix([[0.20, 0.40, 0.40, 0.20], [0.30, 0.30, -0.30, -0.30], [0.10, 0.10, 0.10, 0.10]])
+xyz_targets = np.array([[0.20, 0.40, 0.40, 0.20], [0.30, 0.30, -0.30, -0.30], [0.10, 0.10, 0.10, 0.10]])
 xyz_cols = xyz_targets.shape[1]
 # Convert these to joint angle waypoints using IK solutions for each of the xyz locations. Copy the initial waypoint
 # at the end so we close the square.
@@ -98,7 +98,7 @@ joint_targets[:, xyz_cols] = joint_targets[:, 0]
 
 # Set up feedback object, and start logging 
 feedback = hebi.GroupFeedback(group.size)
-group.start_log("logs")
+group.start_log("logs", mkdirs=True)
 
 # Get a trajectory from the current position to the first corner of the box: 
 waypoints = np.empty((group.size, 2))
