@@ -1,0 +1,15 @@
+[Unit]
+Description=HEBI Demo (Daisy)
+Requires=network.target
+After=multi-user.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/hebi
+ExecStart=/home/hebi/launch_demo
+StartLimitInterval=0
+User=hebi
+StandardOutput=syslog
+
+[Install]
+WantedBy=multi-user.target
