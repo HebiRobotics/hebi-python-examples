@@ -9,9 +9,9 @@ class Leg(PeripheralBody):
   Represents a leg (and wheel)
   """
 
-  damper_gains = np.matrix([2.0, 0.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float64).T
-  spring_gains = np.matrix([400.0, 0.0, 100.0, 0.0, 0.0, 0.0], dtype=np.float64).T
-  roll_gains = np.matrix([0.0, 0.0, 10.0, 0.0, 0.0, 0.0], dtype=np.float64).T
+  damper_gains = np.array([2.0, 0.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+  spring_gains = np.array([400.0, 0.0, 100.0, 0.0, 0.0, 0.0], dtype=np.float64)
+  roll_gains = np.array([0.0, 0.0, 10.0, 0.0, 0.0, 0.0], dtype=np.float64)
 
   def __init__(self, val_lock, name, group_indices):
     assert name == 'Left' or name == 'Right'
@@ -30,6 +30,7 @@ class Leg(PeripheralBody):
     kin.add_link('X5', extension=0.375, twist=np.pi)
     kin.add_actuator('X5-4')
     kin.add_link('X5', extension=0.325, twist=np.pi)
+    kin.add_end_effector('custom')
 
     home_knee_angle = np.deg2rad(130)
     home_hip_angle = (np.pi+home_knee_angle)*0.5
@@ -56,13 +57,13 @@ class Leg(PeripheralBody):
     output_frame_count = kin.get_frame_count('output')
     com_frame_count = kin.get_frame_count('CoM')
 
-    self._current_xyz = np.asmatrix(np.zeros((3, com_frame_count), dtype=np.float64))
+    self._current_xyz = np.zeros((3, com_frame_count), dtype=np.float64)
 
     for i in range(output_frame_count):
-      self._current_fk.append(np.asmatrix(np.zeros((4, 4), dtype=np.float64)))
+      self._current_fk.append(np.zeros((4, 4), dtype=np.float64))
 
     for i in range(com_frame_count):
-      self._current_coms.append(np.asmatrix(np.zeros((4, 4), dtype=np.float64)))
+      self._current_coms.append(np.zeros((4, 4), dtype=np.float64))
 
     # Calculate home FK
     self._hip_angle = home_hip_angle
@@ -71,10 +72,10 @@ class Leg(PeripheralBody):
     self._user_commanded_knee_velocity = 0.0
     self._knee_angle_max = 2.65
     self._knee_angle_min = 0.65
-    self._e_term = np.asmatrix(np.empty((6, 1), dtype=np.float64))
+    self._e_term = np.empty(6, dtype=np.float64)
 
     # Additionally calculate commanded endeffector position
-    self._current_cmd_tip_fk = np.asmatrix(np.zeros((4, 4), dtype=np.float64))
+    self._current_cmd_tip_fk = np.zeros((4, 4), dtype=np.float64)
 
   def integrate_step(self, dt, knee_velocity):
     """
@@ -153,8 +154,8 @@ class Leg(PeripheralBody):
     np.dot(self.current_j_actual.T, self._impedance_err, out=self._impedance_torque)
     np.multiply(self._impedance_torque, soft_start, out=self._impedance_torque)
 
-    hip_cmd.effort = self._impedance_torque[0, 0]
-    knee_cmd.effort = self._impedance_torque[1, 0]
+    hip_cmd.effort = self._impedance_torque[0]
+    knee_cmd.effort = self._impedance_torque[1]
 
   @property
   def hip_angle(self):
