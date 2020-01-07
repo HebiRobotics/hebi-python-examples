@@ -11,7 +11,7 @@ if group is None:
 
 command = hebi.GroupCommand(group.size)
 # Set the control strategy for all the modules
-command.control_strategy = 'strategy2'
+command.control_strategy = 'Strategy2'
 
 if group.send_command_with_acknowledgement(command, 100):
   print('Got acknowledgement')

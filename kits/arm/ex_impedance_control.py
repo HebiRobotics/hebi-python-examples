@@ -48,7 +48,7 @@ enable_logging = True
 
 # Start background logging 
 if enable_logging:
-  log_file_dir = group.start_log('dir', os.path.join(local_dir, 'logs')) 
+  log_file_dir = group.start_log('dir', os.path.join(local_dir, 'logs'), mkdirs=True) 
 
 # Gravity compensated mode
 cmd = hebi.GroupCommand(group.size)

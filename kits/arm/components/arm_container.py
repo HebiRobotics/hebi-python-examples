@@ -38,16 +38,16 @@ class ArmContainer(object):
     jacobians = self._robot.get_jacobians('com', feedback.position)
 
     masses = self._masses
-    comp_torque = np.asmatrix(np.zeros((num_dof, 1), dtype=np.float64))
-    wrench_vec = np.zeros((6, 1), dtype=np.float64)
+    comp_torque = np.zeros(num_dof, dtype=np.float64)
+    wrench_vec = np.zeros(6, dtype=np.float64)
 
     for i in range(num_frames):
       # Set translational part
       for j in range(3):
         wrench_vec[j, 0] = -gravity[j] * masses[i]
-      comp_torque += jacobians[i].T * wrench_vec
+      comp_torque += jacobians[i].T @ wrench_vec
 
-    return comp_torque.A1
+    return comp_torque
 
 
 def create_3_dof():

@@ -6,7 +6,19 @@ This repository contains examples to go with the [online documentation](http://d
 
 All examples require the `hebi-py` pip package in order to run. You can install it through pip (_i.e._, `pip install hebi-py`).
 
+It is expected that you have a `hebi-py` version of at least `2.1.0` for this repo.
+
+**Note that this revision does not support Python 2!**
+
 Additionally, some of the kits examples require the [PySDL2 Package](https://pypi.org/project/PySDL2/). You will need the `SDL2` shared library for this to work. For Windows, this library is included for you in this repository.
+
+### Nightly API
+
+If you want access to the newest API, you can download one of our nightly builds by doing:
+
+`pip install http://docs.hebi.us/download/python/hebi-py-{version}.tar.gz`
+
+Visit http://docs.hebi.us/download/python to see which specific versions are available for download, as they may change.
 
 ## Basic Examples
 
@@ -36,14 +48,10 @@ These API features and concepts are documented in more detail at:
 
 This folder contains example code for various preconfigured kits. Additional documentation is available in the corresponding kit directories.
 
-
-|---------------|
 | Kit | Comment |
-| [Arms](kits/arm) |
-* A variety of arm configurations, from 4-DoF to 6-DoF.
-| [Igor](kits/igor2) |
-* A 2-wheel, 2-arm, dynamic balancing mobile robot
-
+|-----|---------|
+| [Arms](kits/arm) | A variety of arm configurations, from 4-DoF to 6-DoF. |
+| [Igor](kits/igor2) | A 2-wheel, 2-arm, dynamic balancing mobile robot |
 
 ## Advanced Examples
 

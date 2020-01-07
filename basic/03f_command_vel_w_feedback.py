@@ -22,7 +22,7 @@ group_command  = hebi.GroupCommand(group.size)
 group_feedback = hebi.GroupFeedback(group.size)
 
 # Start logging in the background
-group.start_log('logs')
+group.start_log('logs', mkdirs=True)
 
 print('  Move the module to make the output move...')
 

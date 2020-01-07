@@ -192,6 +192,14 @@ def __get_char_background_proc():
 __current_char_proc_thread = Thread(target=__get_char_background_proc)
 
 
+def _start_char_proc_thread_if_needed():
+  if not __current_char_proc_thread.is_alive():
+    try:
+      __current_char_proc_thread.start()
+    except:
+      pass
+
+
 def getch(blocking=True):
   if blocking:
     __current_char_cvar.acquire()
@@ -223,6 +231,7 @@ class _Keyboard:
         handler(ts, state == SDL_PRESSED, repeat)
 
   def add_key_event_handler(self, keystr, handler):
+    _start_char_proc_thread_if_needed()
     if not callable(handler):
       # TODO: use util.assert_callable
       raise TypeError
@@ -325,5 +334,3 @@ def _clear_space_state():
 def _has_space_been_pressed():
   return __space_listener.has_been_pressed
 
-
-__current_char_proc_thread.start()

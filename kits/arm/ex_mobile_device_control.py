@@ -110,12 +110,12 @@ while not abort_flag:
 
   # Start background logging
   if enable_logging:
-    group.start_log(os.path.join(local_dir, 'logs'))
-    phone_group.start_log(os.path.join(local_dir, 'logs'))
+    group.start_log(os.path.join(local_dir, 'logs'), mkdirs=True)
+    phone_group.start_log(os.path.join(local_dir, 'logs'), mkdirs=True)
 
   ik_pos = get_ik(xyz_target_init, rot_mat_target_init, ik_seed_pos)
 
-  arm_traj = create_trajectory([0, arm_traj_min_duration], np.asmatrix([fbk.position, ik_pos]).T)
+  arm_traj = create_trajectory([0, arm_traj_min_duration], np.array([fbk.position, ik_pos]).T)
   fbk_time = fbk.receive_time
   t0 = fbk_time.min()
   t = 0
@@ -228,7 +228,7 @@ while not abort_flag:
     if toc(phone_fbk_timer) > phone_period:
       arm_trajStartTime = time_now
       phone_fbk_timer = tic
-      arm_traj = create_trajectory([0, arm_traj_min_duration], np.asmatrix([pos, ik_pos]).T, np.asmatrix([vel, end_velocities]).T, np.asmatrix([accel, end_accels]).T)  
+      arm_traj = create_trajectory([0, arm_traj_min_duration], np.array([pos, ik_pos]).T, np.array([vel, end_velocities]).T, np.array([accel, end_accels]).T)  
 
     # Send to robot
     group.send_command(cmd)
