@@ -14,10 +14,10 @@ class BaseBody(object):
   def __init__(self, val_lock, mass=0.0, com=[0.0, 0.0, 0.0]):
     self.__val_lock = val_lock
     self._mass = mass
-    self._com = np.matrix(np.zeros((3, 1), dtype=np.float64))
-    self._com[0, 0] = com[0]
-    self._com[1, 0] = com[1]
-    self._com[2, 0] = com[2]
+    self._com = np.zeros(3, dtype=np.float64)
+    self._com[0] = com[0]
+    self._com[1] = com[1]
+    self._com[2] = com[2]
 
   def _set_mass(self, mass):
     """
@@ -29,7 +29,7 @@ class BaseBody(object):
     """
     Called by subclasses to update the center of mass
     """
-    self._com[0:3, 0] = com
+    self._com[0:3] = com
 
   def acquire_value_lock(self):
     """
@@ -55,7 +55,7 @@ class BaseBody(object):
   def com(self):
     """
     :return: The center of mass (in meters) of this body component in 3D Euclidean space
-    :rtype:  np.matrix
+    :rtype:  np.ndarray
     """
     return self._com
 
@@ -78,43 +78,34 @@ class PeripheralBody(BaseBody):
     num_modules = len(group_indices)
     # ----------------------------------
     # Everything here is a column vector
-    self._fbk_position = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float64))
-    self._fbk_position_cmd = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float64))
-    self._fbk_velocity = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float32))
-    self._fbk_velocity_err = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float32))
-    self._xyz_error = np.asmatrix(np.zeros((3, 1), dtype=np.float64))
-    self._pos_error = np.asmatrix(np.zeros((6, 1), dtype=np.float64))
-    self._vel_error = np.asmatrix(np.zeros((6, 1), dtype=np.float32))
-    self._impedance_err = np.asmatrix(np.zeros((6, 1), dtype=np.float64))
-    self._impedance_torque = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float64))
-    self._home_angles = np.asmatrix(np.zeros((num_modules, 1), dtype=np.float64))
+    self._fbk_position = np.zeros(num_modules, dtype=np.float64)
+    self._fbk_position_cmd = np.zeros(num_modules, dtype=np.float64)
+    self._fbk_velocity = np.zeros(num_modules, dtype=np.float32)
+    self._fbk_velocity_err = np.zeros(num_modules, dtype=np.float32)
+    self._xyz_error = np.zeros(3, dtype=np.float64)
+    self._pos_error = np.zeros(6, dtype=np.float64)
+    self._vel_error = np.zeros(6, dtype=np.float32)
+    self._impedance_err = np.zeros(6, dtype=np.float64)
+    self._impedance_torque = np.zeros(num_modules, dtype=np.float64)
+    self._home_angles = np.zeros(num_modules, dtype=np.float64)
     self._masses = None
 
     # Subclass populates these two empty list fields
     self._current_coms = list()
     self._current_fk = list()
-    self._current_tip_fk = np.asmatrix(np.zeros((4, 4), dtype=np.float64))
-    self._current_j_actual = np.asmatrix(np.zeros((6, num_modules), dtype=np.float64))
-    self._current_j_actual_f = np.asmatrix(np.zeros((6, num_modules), dtype=np.float32))
-    self._current_j_expected = np.asmatrix(np.zeros((6, num_modules), dtype=np.float64))
-    self._current_j_expected_f = np.asmatrix(np.zeros((6, num_modules), dtype=np.float32))
+    self._current_tip_fk = np.zeros((4, 4), dtype=np.float64)
+    self._current_j_actual = np.zeros((6, num_modules), dtype=np.float64)
+    self._current_j_actual_f = np.zeros((6, num_modules), dtype=np.float32)
+    self._current_j_expected = np.zeros((6, num_modules), dtype=np.float64)
+    self._current_j_expected_f = np.zeros((6, num_modules), dtype=np.float32)
     # Subclass populates this as size of (3, numOfCoMFrames)
     self._current_xyz = None
 
-    # Because a `numpy.matrix` and `numpy.ndarray` are different types,
-    # calling `A1` on a `numpy.matrix` incurs a surprising amount of overhead.
-    # Due to this, we cache the `ndarray` views into certain numpy matrices.
-    self._home_angles__flat = self._home_angles.A1
-    self._fbk_position__flat = self._fbk_position.A1
-    self._fbk_position_cmd__flat = self._fbk_position_cmd.A1
-    self._fbk_velocity__flat = self._fbk_velocity.A1
-    self._fbk_velocity_err__flat = self._fbk_velocity_err.A1
-
   def _set_masses(self, masses):
     length = len(masses)
-    self._masses = np.asmatrix(np.empty((length, 1), dtype=np.float64))
-    masses__flat = self._masses.A1
-    np.copyto(masses__flat, masses)
+    dst_masses = np.empty(length, dtype=np.float64)
+    np.copyto(dst_masses, masses)
+    self._masses = dst_masses
 
   @property
   def _robot(self):
@@ -138,7 +129,7 @@ class PeripheralBody(BaseBody):
 
   @home_angles.setter
   def home_angles(self, value):
-    np.copyto(self._home_angles__flat, value)
+    np.copyto(self._home_angles, value)
 
   @property
   def group_indices(self):
@@ -194,10 +185,10 @@ class PeripheralBody(BaseBody):
     Called by the Igor class when new feedback has been received.
     """
     indices = self._group_indices
-    np.copyto(self._fbk_position__flat, position[indices])
-    np.copyto(self._fbk_position_cmd__flat, position_command[indices])
-    np.copyto(self._fbk_velocity__flat, velocity[indices])
-    np.copyto(self._fbk_velocity_err__flat, velocity_error[indices])
+    np.copyto(self._fbk_position, position[indices])
+    np.copyto(self._fbk_position_cmd, position_command[indices])
+    np.copyto(self._fbk_velocity, velocity[indices])
+    np.copyto(self._fbk_velocity_err, velocity_error[indices])
 
   def get_grav_comp_efforts(self, positions, gravity):
     """
@@ -245,7 +236,7 @@ class PeripheralBody(BaseBody):
     accel = vel
 
     pos[:, 0] = current_positions
-    pos[:, 1] = home_angles.A1
+    pos[:, 1] = home_angles
 
     return hebi.trajectory.create_trajectory(times, pos, vel, accel)
 
@@ -253,8 +244,8 @@ class PeripheralBody(BaseBody):
     """
     Update kinematics from feedback
     """
-    positions = self._fbk_position__flat
-    commanded_positions = self._fbk_position_cmd__flat
+    positions = self._fbk_position
+    commanded_positions = self._fbk_position_cmd
 
     robot = self._robot
     robot.get_forward_kinematics('com', positions, output=self._current_coms)
@@ -294,10 +285,3 @@ class PeripheralBody(BaseBody):
 
     if self._current_xyz is not None:
       self._current_xyz.fill(0)
-
-    # TODO: is this necessary?
-    self._home_angles__flat = self._home_angles.A1
-    self._fbk_position__flat = self._fbk_position.A1
-    self._fbk_position_cmd__flat = self._fbk_position_cmd.A1
-    self._fbk_velocity__flat = self._fbk_velocity.A1
-    self._fbk_velocity_err__flat = self._fbk_velocity_err.A1

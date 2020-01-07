@@ -61,7 +61,7 @@ def load_gains(igor):
     else:
       gains_command.read_gains(igor.config.gains_no_camera_xml)
   except Exception as e:
-    print('Warning - Could not load gains: {0}'.format(e))
+    print(f'Warning - Could not load gains: {e}')
     return
 
   # Send gains multiple times
@@ -248,8 +248,8 @@ class Igor(object):
     np.copyto(imu_frames[9], l_arm.current_fk[5])
     np.copyto(imu_frames[13], r_arm.current_fk[5])
 
-    q_rot = np.asmatrix(np.empty((3, 3), dtype=np.float64))
-    imu_rotation = np.asmatrix(np.empty((3, 3), dtype=np.float64))
+    q_rot = np.empty((3, 3), dtype=np.float64)
+    imu_rotation = np.empty((3, 3), dtype=np.float64)
     pose_tmp = self._pose_tmp
     rpy_modules = self._rpy
     quaternion_tmp = self._quaternion_tmp
@@ -334,7 +334,7 @@ class Igor(object):
     self._height_com = np.linalg.norm(self._line_com)
 
     # Using the line center of mass, find the feedback lean angle
-    self._feedback_lean_angle = degrees(atan2(self._line_com[0, 0], self._line_com[2, 0]))
+    self._feedback_lean_angle = degrees(atan2(self._line_com[0], self._line_com[2]))
 
     # Update Igor's center of mass by applying the transforms in the following order:
     #  1) pitch rotation
@@ -556,6 +556,7 @@ class Igor(object):
                                              self._height_com, self._feedback_lean_angle_velocity,
                                              self._mass, self._feedback_lean_angle)
 
+    #bc = False
     if bc:  # bc
       leanP = Igor.Lean_P
       leanI = Igor.Lean_I
@@ -755,8 +756,8 @@ class Igor(object):
 
     # --------------------------------------------
     # Cached fields for center of mass calculation
-    self._com = np.asmatrix(np.empty((3, 1), dtype=np.float64))
-    self._coms = np.asmatrix(np.zeros((3, 5), dtype=np.float64))
+    self._com = np.empty(3, dtype=np.float64)
+    self._coms = np.zeros((3, 5), dtype=np.float64)
     # This CoM is constant
     self._coms[0:3, 4] = chassis.com
 
@@ -764,7 +765,7 @@ class Igor(object):
     # Cached fields for pose estimation
     imu_frames = list()
     for i in range(0, 15):
-      imu_frames.append(np.asmatrix(np.identity(4, dtype=np.float64)))
+      imu_frames.append(np.identity(4, dtype=np.float64))
 
     # These frames are constant
     np.copyto(imu_frames[2], l_leg._robot.base_frame)
@@ -776,30 +777,30 @@ class Igor(object):
     # All of the leg modules, plus the wheel modules
     self._imu_modules = [0, 1, 2, 3, 4, 5]
 
-    self._pose_gyros = np.asmatrix(np.zeros((3, num_dofs), dtype=np.float64))
+    self._pose_gyros = np.zeros((3, num_dofs), dtype=np.float64)
     self._pose_gyros_mean = None
 
     # Roll-Pitch-Yaw
-    self._rpy = np.asmatrix(np.zeros((3, num_dofs), dtype=np.float64))
+    self._rpy = np.zeros((3, num_dofs), dtype=np.float64)
 
-    self._pose_transform = np.asmatrix(np.identity(4, dtype=np.float64))
+    self._pose_transform = np.identity(4, dtype=np.float64)
 
     # ----------------------------------------
     # Cached fields for lean angle calculation
     self._roll_angle = 0.0
-    self._roll_rot = np.asmatrix(np.zeros((3, 3), dtype=np.float64))
+    self._roll_rot = np.zeros((3, 3), dtype=np.float64)
     self._pitch_angle = 0.0
-    self._pitch_rot = np.asmatrix(np.zeros((3, 3), dtype=np.float64))
+    self._pitch_rot = np.zeros((3, 3), dtype=np.float64)
     self._feedback_lean_angle_velocity = 0.0
     # These are used for chassis velocity controller
     self._height_com = 0.0
-    self._line_com = np.asmatrix(np.zeros((3, 1), dtype=np.float64))
-    self._ground_point = np.asmatrix(np.zeros((3, 1), dtype=np.float64))
+    self._line_com = np.zeros(3, dtype=np.float64)
+    self._ground_point = np.zeros(3, dtype=np.float64)
     self._feedback_lean_angle = 0.0
 
-    self._pose_tmp = np.asmatrix(np.zeros((3, 1), dtype=np.float64))
+    self._pose_tmp = np.zeros(3, dtype=np.float64)
     self._quaternion_tmp = np.zeros(4, dtype=np.float64)
-    self._T_pose_rot = np.asmatrix(np.zeros((3, 3), dtype=np.float64))
+    self._T_pose_rot = np.zeros((3, 3), dtype=np.float64)
 
     # --------------------------
     # Cached fields for feedback
