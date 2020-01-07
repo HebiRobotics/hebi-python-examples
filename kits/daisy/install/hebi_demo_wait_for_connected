@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+# Change this to the network interface connected to the subnet containing the modules of your robot.
+DEPLOY_IFACE=eno1
+
+# Wait for connection to come up, if it is not already
+IF_ATTRS=$(ip a show $DEPLOY_IFACE 2>/dev/null | head -n1 | awk '{ print substr($3, 2, length($3)-2) }' | tr ',' ' ')
+iface_up=$(echo $IF_ATTRS | grep -e "[[:space:]]UP[[:space:]]" | wc -l)
+
+if [ $iface_up != 0 ]; then
+  # Interface is up - we can exit
+  exit 0;
+fi
+
+while [ 1 ]; do
+  echo "Waiting for network interface '$DEPLOY_IFACE' to come up..."
+  sleep 3
+
+  IF_ATTRS=$(ip a show $DEPLOY_IFACE 2>/dev/null | head -n1 | awk '{ print substr($3, 2, length($3)-2) }' | tr ',' ' ')
+  iface_up=$(echo $IF_ATTRS | grep -e "[[:space:]]UP[[:space:]]" | wc -l)
+
+  if [ $iface_up != 0 ]; then
+    # Interface is up - we can exit
+    exit 0;
+  fi
+done
