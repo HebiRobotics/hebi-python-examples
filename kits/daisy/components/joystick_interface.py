@@ -95,7 +95,7 @@ def toggle_mode_event(hexapod, ts, pressed):
     return
 
   _last_toggle_value = pressed
-  if pressed and hexapod.started:
+  if hexapod.started:
     hexapod.update_mode(None)
 
 
