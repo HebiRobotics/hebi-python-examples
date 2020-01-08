@@ -517,7 +517,7 @@ class Hexapod:
     s[2, 2] = sign(product_det)
 
     ret = np.identity(4)
-    ret[0:3, 0:3] = vh @ s @ u.T
+    ret[0:3, 0:3] = vh.T @ s @ u.T
     ret[0:3, 3] = feet_xyz_com - base_xyz_com
 
     return ret
