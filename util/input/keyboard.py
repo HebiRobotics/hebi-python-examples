@@ -32,12 +32,14 @@ class _GetchUnix:
     self._kbhit_nb = lambda: select.select([sys.stdin], [], [], 0)[0] != []
     self._kbhit = lambda: select.select([sys.stdin], [], [])[0]
     self._getch = lambda: sys.stdin.read(1)
+    try:
+      old_settings = tcgetattr(sys.stdin.fileno())
 
-    old_settings = tcgetattr(sys.stdin.fileno())
-
-    term_attrs = tcgetattr(sys.stdin.fileno())
-    term_attrs[3] = (term_attrs[3] & ~ICANON & ~ECHO)
-    tcsetattr(sys.stdin.fileno(), TCSAFLUSH, term_attrs)
+      term_attrs = tcgetattr(sys.stdin.fileno())
+      term_attrs[3] = (term_attrs[3] & ~ICANON & ~ECHO)
+      tcsetattr(sys.stdin.fileno(), TCSAFLUSH, term_attrs)
+    except Exception:
+      pass
 
     def push_terminal_unbuffered(term_attrs):
       term_attrs[3] = (term_attrs[3] & ~ICANON & ~ECHO)

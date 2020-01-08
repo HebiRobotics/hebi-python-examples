@@ -28,7 +28,7 @@ parser.add_argument('--mobile-io-name', type=str, default=None, dest='mobile_io_
 args = parser.parse_args()
 
 io_fam = args.mobile_io_family or 'HEBI'
-io_name = args.mobile_io_name or 'Mobile IO'
+io_name = args.mobile_io_name or 'mobileIO'
 
 from components.configuration import HexapodConfig, Parameters
 daisy_config = HexapodConfig(args.imitation)
