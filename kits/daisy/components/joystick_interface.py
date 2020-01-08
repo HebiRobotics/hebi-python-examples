@@ -142,7 +142,7 @@ def _set_mobile_io_gui_state(hexapod, controller_mapping):
 
   a_bank.set_float(body_height_pin, 0.001) # Use a small value as opposed to 0.0 to work around bug in older versions of Mobile IO app
   b_bank.set_int(toggle_mode_pin, 1) # Set to toggle mode
-  e_bank.set_int(body_height_pin, 1) # Highlight
+  e_bank.set_int(toggle_mode_pin, 1) # Highlight
   e_bank.set_int(quit_pin, 1)        # Highlight
 
   hexapod.joystick.group.send_command(cmd)
@@ -169,7 +169,7 @@ def _add_event_handlers(hexapod, controller, controller_mapping):
 
     a_bank.set_float(body_height_pin, None)
     b_bank.set_int(toggle_mode_pin, 0)
-    e_bank.set_int(body_height_pin, 0)
+    e_bank.set_int(toggle_mode_pin, 0)
     e_bank.set_int(quit_pin, 0)
 
     hexapod.joystick.group.send_command(cmd)
