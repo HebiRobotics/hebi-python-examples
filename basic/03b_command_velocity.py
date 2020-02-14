@@ -9,7 +9,7 @@ lookup = hebi.Lookup()
 # Wait 2 seconds for the module list to populate
 sleep(2.0)
 
-family_name = "Test Family"
+family_name = "Test Family" 
 module_name = "Test Actuator"
 
 group = lookup.get_group_from_names([family_name], [module_name])
@@ -29,7 +29,7 @@ freq_hz = 0.5                 # [Hz]
 freq    = freq_hz * 2.0 * pi  # [rad / sec]
 amp     = 1.0                 # [rad] (45 degrees)
 
-duration = 10.0               # [sec]
+duration = 4              # [sec]
 start = time()
 t = time() - start
 

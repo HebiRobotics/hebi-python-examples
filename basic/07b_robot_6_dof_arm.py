@@ -2,6 +2,7 @@ import hebi
 from math import pi
 from time import sleep, time
 import numpy as np
+from matplotlib import pyplot as plt
 
 
 # Add the root folder of the repository to the search path for modules
@@ -13,8 +14,8 @@ from util import math_utils
 
 # A helper function to create a group from named modules, and set specified gains on the modules in that group.
 def get_group():
-  families = ['Test Family']
-  names = ['Base', 'Shoulder', 'Elbow', 'Wrist1', 'Wrist2', 'Wrist3']
+  families = ['HEBI']
+  names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
   lookup = hebi.Lookup()
   sleep(2.0)
   group = lookup.get_group_from_names(families, names)
@@ -84,7 +85,7 @@ except Exception as e:
 # that has the end effector point straight forward.
 xyz_targets = np.array([[0.20, 0.40, 0.40, 0.20, ], [0.30, 0.30, -0.30, -0.30, ], [0.10, 0.10, 0.10, 0.10]])
 xyz_cols = xyz_targets.shape[1]
-rotation_target = math_utils.rotate_y(pi / 2.0)
+rotation_target = math_utils.rotate_y(pi/2)
 
 # Convert these to joint angle waypoints using IK solutions for each of the xyz locations
 # as well as the desired orientation of the end effector. Copy the initial waypoint at the end so we close the square.
@@ -98,6 +99,7 @@ for col in range(xyz_cols):
   ee_position_objective = hebi.robot_model.endeffector_position_objective(xyz_targets[:, col])
   ik_res_angles = model.solve_inverse_kinematics(elbow_up_angles, so3_objective, ee_position_objective)
   joint_targets[:, col] = ik_res_angles
+  elbow_up_angles = ik_res_angles # reset seed after each loop
 joint_targets[:, xyz_cols] = joint_targets[:, 0]
 
 # Set up feedback object, and start logging
@@ -125,6 +127,41 @@ for col in range(xyz_cols - 1):
 
 # Stop logging
 log_file = group.stop_log()
-hebi.util.plot_logs(log_file, 'position', figure_spec=101)
-hebi.util.plot_logs(log_file, 'velocity', figure_spec=102)
-hebi.util.plot_logs(log_file, 'effort', figure_spec=103)
+
+time = []
+position = []
+velocity = []
+effort = []
+# iterate through log
+for entry in log_file.feedback_iterate:
+    time.append(entry.transmit_time)
+    position.append(entry.position)
+    velocity.append(entry.velocity)
+    effort.append(entry.effort)
+
+
+# Offline Visualization
+# Plot the logged position feedback
+plt.figure(101)
+plt.plot(time, position)
+plt.title('Position')
+plt.xlabel('time (sec)')
+plt.ylabel('position (rad)')
+plt.grid(True)
+
+# Plot the logged velocity feedback
+plt.figure(102)
+plt.plot(time, velocity)
+plt.title('Velocity')
+plt.xlabel('time (sec)')
+plt.ylabel('velocity (rad/sec)')
+plt.grid(True)
+
+# Plot the logged effort feedback
+plt.figure(103)
+plt.plot(time, effort)
+plt.title('Effort')
+plt.xlabel('time (sec)')
+plt.ylabel('effort (N*m)')
+plt.grid(True)
+

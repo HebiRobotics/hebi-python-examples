@@ -2,13 +2,14 @@
 
 import hebi
 from time import sleep, time
+from matplotlib import pyplot as plt
 
 lookup = hebi.Lookup()
 
 # Wait 2 seconds for the module list to populate
 sleep(2.0)
 
-family_name = "Test Family"
+family_name = "Test Family" 
 module_name = "Test Actuator"
 
 group = lookup.get_group_from_names([family_name], [module_name])
@@ -26,7 +27,7 @@ group.start_log('logs', mkdirs=True)
 
 print('  Move the module to make the output move...')
 
-duration = 15.0 # [sec]
+duration = 4 # [sec]
 start = time()
 t = time() - start
 
@@ -42,5 +43,31 @@ while t < duration:
 
 # Stop logging. `log_file` contains the contents of the file
 log_file = group.stop_log()
-hebi.util.plot_logs(log_file, 'velocity', figure_spec=101)
-hebi.util.plot_logs(log_file, 'gyroZ', figure_spec=102)
+
+time = []
+velocity = []
+gyroZ = []
+# iterate through log
+for entry in log_file.feedback_iterate:
+    time.append(entry.transmit_time)
+    velocity.append(entry.velocity)
+    gyroZ.append(entry.gyro[0][2])
+
+
+# Offline Visualization
+# Plot the logged velocity feedback
+plt.figure(101)
+plt.plot(time, velocity)
+plt.title('Velocity')
+plt.xlabel('time (sec)')
+plt.ylabel('velocity (rad/sec)')
+plt.grid(True)
+
+# Plot the logged position feedback
+plt.figure(102)
+plt.plot(time, gyroZ)
+plt.title('GyroZ')
+plt.xlabel('time (sec)')
+plt.ylabel('velocity (rad/sec)')
+plt.grid(True)
+
