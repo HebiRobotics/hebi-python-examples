@@ -13,8 +13,9 @@ class MobileIO():
     
     
     def __init__(self, family="HEBI", name="Mobile IO"):
-        # Create some stuff
+        # lookup modules on network
         self.lookup = hebi.Lookup()
+        # wait 2 seconds for list to populate
         sleep(2)
         print(self.lookup)
         self.grp = self.lookup.get_group_from_names([family], [name])
@@ -80,6 +81,7 @@ class MobileIO():
     def getDiff(self): 
         self.prev_fbk = list(self.current_button_state)
         self.getState()
+        # compares current button states to previous button states
         for i in range(self.num_buttons):
             if (self.prev_fbk[i] == 0) & (self.current_button_state[i] == 0):
                 self.btn_states[i] = "off"
