@@ -20,6 +20,11 @@ from util.math_utils import get_grav_comp_efforts, get_dynamic_comp_efforts, qua
 from util.arm import setup_arm_params
 from time import sleep, perf_counter, time
 
+# Add the root folder of the repository to the search path for modules
+import os, sys
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path = [root_path] + sys.path
+from util import math_utils
 
 enable_logging = False
 enable_effort_comp = True
@@ -42,6 +47,7 @@ print('Waiting for Mobile IO device to come online...')
 m = mbio.MobileIO(phone_family, phone_name)
 state = m.getState()
 m.setButtonMode(1, 1)
+
 # Arm Setup
 arm_name = '6-DoF'
 arm_family = 'Example Arm'
@@ -86,6 +92,7 @@ cmd = hebi.GroupCommand(group.size)
 # Move to current coordinates
 xyz_target_init = np.asarray([0.5, 0.0, 0.1])
 rot_mat_target_init = rotate_y(np.pi)
+
 
 
 def get_ik(xyz_target, rot_target, ik_seed):
@@ -180,17 +187,34 @@ while not abort_flag:
     cmd.effort = None
     cmd.position = None
     cmd.velocity = None
-
-    # Check for restart command
-    if state[0][reset_pose_button] == 0:
-      
-      break
-
+    
+    
     # Check for quit command
     if state[0][quit_demo_button] == 1:
       
       abort_flag = True
       break
+    
+    # Check for restart command
+    elif state[0][reset_pose_button] == 0:
+      print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+      joint_targets = get_ik(xyz_target_init, rot_mat_target_init, fbk.position)
+      waypoints = np.empty((group.size, 2))
+      waypoints[:, 0] = fbk.position
+      waypoints[:, 1] = joint_targets
+      print(joint_targets)
+      time_vector = [0, 10]  # Seconds for the motion - do this slowly
+      trajectory = hebi.trajectory.create_trajectory(time_vector, waypoints)
+      # Get new commands from the trajectory
+      pos_cmd, vel_cmd, acc_cmd = trajectory.get_state(t2)
+      eff_cmd = math_utils.get_grav_comp_efforts(kin, fbk.position, [0, 0, 1])
+      
+      cmd.position = pos_cmd
+      cmd.velocity = vel_cmd
+      cmd.effort = eff_cmd
+      continue
+
+    
 
     if params.has_gripper:
       gripper_cmd.effort = grip_force_scale * state[1][grip_force_slider] + grip_force_shift
@@ -254,7 +278,7 @@ while not abort_flag:
     
     print("check 4")
     # Send to robot
-    #group.send_command(cmd)
+    group.send_command(cmd)
 
 
 if enable_logging:

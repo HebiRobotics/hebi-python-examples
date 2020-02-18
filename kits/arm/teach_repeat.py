@@ -15,7 +15,7 @@ from components import arm_container
 from components import trajectory_time_heuristic
 
 #from util.input.keyboard import getch
-import mobile_io_2 as mbio
+import mobile_io  as mbio
 
 
 class Waypoint(object):

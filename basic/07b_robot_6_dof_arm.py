@@ -14,7 +14,7 @@ from util import math_utils
 
 # A helper function to create a group from named modules, and set specified gains on the modules in that group.
 def get_group():
-  families = ['HEBI']
+  families = ['Example Arm']
   names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
   lookup = hebi.Lookup()
   sleep(2.0)
@@ -111,7 +111,13 @@ waypoints = np.empty((group.size, 2))
 group.get_next_feedback(reuse_fbk=feedback)
 waypoints[:, 0] = feedback.position
 waypoints[:, 1] = joint_targets[:, 0]
+print("joint targets")
+print(joint_targets)
+print("jt 2")
+print(joint_targets[:, 0])
 time_vector = [0, 5]  # Seconds for the motion - do this slowly
+print("waypoints")
+print(waypoints)
 trajectory = hebi.trajectory.create_trajectory(time_vector, waypoints)
 
 # Call helper function to execute this motion on the robot
