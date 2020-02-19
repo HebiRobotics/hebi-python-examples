@@ -124,7 +124,6 @@ while not abort_flag:
         waypoints[:, 1] = joint_targets
         time_vector = [0, 5]  # Seconds for the motion - do this slowly
         trajectory = hebi.trajectory.create_trajectory(time_vector, waypoints)
-        #ik_seed_pos = fbk.position
         
         duration = trajectory.duration
         start = time()

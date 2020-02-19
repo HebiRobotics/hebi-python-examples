@@ -76,20 +76,18 @@ class MobileIO():
             elif self.fbk.io.a.has_float(i+1):
                 self.current_slider_state[i] = float(self.fbk.io.a.get_float(i+1))
         
-        return (self.current_button_state, self.current_slider_state)
+        return (list(self.current_button_state), list(self.current_slider_state))
     
     
-    def getDiff(self): 
-        self.prev_fbk = list(self.current_button_state)
-        self.getState()
+    def getDiff(self, prev, curr): 
         for i in range(self.num_buttons):
-            if (self.prev_fbk[i] == 0) & (self.current_button_state[i] == 0):
+            if (prev[0][i] == 0) & (curr[0][i] == 0):
                 self.btn_states[i] = "off"
-            elif (self.prev_fbk[i] == 1) & (self.current_button_state[i] == 0):
+            elif (prev[0][i] == 1) & (curr[0][i] == 0):
                 self.btn_states[i] = "falling"
-            elif (self.prev_fbk[i] == 0) & (self.current_button_state[i] == 1):
+            elif (prev[0][i] == 0) & (curr[0][i] == 1):
                 self.btn_states[i] = "rising"
-            elif (self.prev_fbk[i] == 1) & (self.current_button_state[i] == 1):
+            elif (prev[0][i] == 1) & (curr[0][i] == 1):
                 self.btn_states[i] = "on"
         return self.btn_states
         
