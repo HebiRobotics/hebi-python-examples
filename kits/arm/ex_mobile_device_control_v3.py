@@ -19,6 +19,9 @@ control
         find phone orientation
         plot course from current arm pos to mobile pos and orientation
 
+
+
+arm moving to last commanded pos right before current pos on first attempt causing a jitter when switching to control mode
 """
 
 import hebi
@@ -36,7 +39,7 @@ sys.path = [root_path] + sys.path
 
 from hebi.trajectory import create_trajectory
 from hebi.robot_model import endeffector_position_objective, endeffector_so3_objective, custom_objective
-from util.math_utils import get_grav_comp_efforts, get_dynamic_comp_efforts, quat2rot, rotate_y
+from util.math_utils import get_grav_comp_efforts, get_dynamic_comp_efforts, quat2rot, rotate_x
 from util.arm import setup_arm_params
 from time import sleep, perf_counter, time
 from util import math_utils
@@ -111,7 +114,7 @@ cmd = hebi.GroupCommand(group.size)
 
 # Startup coordinates
 xyz_target_init = np.asarray([0.5, 0.0, 0.1])
-rot_mat_target_init = rotate_y(np.pi)
+rot_mat_target_init = rotate_x(np.pi)
 
 
 mobile_pos_offset = [0, 0, 0]
@@ -135,8 +138,8 @@ def get_ik(xyz_target, rot_target, ik_seed):
     log = []
     #logger = custom_objective(1, logger_cb)
     """
-    return kin.solve_inverse_kinematics(ik_seed, endeffector_position_objective(xyz_target), endeffector_so3_objective(rot_target))
-    #return kin.solve_inverse_kinematics(ik_seed, endeffector_position_objective(xyz_target), logger)
+    #return kin.solve_inverse_kinematics(ik_seed, endeffector_position_objective(xyz_target), endeffector_so3_objective(rot_target))
+    return kin.solve_inverse_kinematics(ik_seed, endeffector_position_objective(xyz_target))
 
 fbk_time = fbk.receive_time
 t0 = fbk_time.min()
@@ -171,13 +174,13 @@ while not abort_flag:
         # Set led to yellow
         m.setLedColor("yellow")
         
-        joint_targets = get_ik(xyz_target_init, rot_mat_target_init, ik_seed_pos)
+        joint_targets = get_ik(xyz_target_init, rot_mat_target_init, params.ik_seed_pos)
         waypoints = np.empty((group.size, 2))
         waypoints[:, 0] = fbk.position
         waypoints[:, 1] = joint_targets
         time_vector = [0, 5]  # Seconds for the motion - do this slowly
         trajectory = hebi.trajectory.create_trajectory(time_vector, waypoints)
-        ik_seed_pos = fbk.position
+        #ik_seed_pos = fbk.position
         
         duration = trajectory.duration
         start = time()
@@ -210,7 +213,7 @@ while not abort_flag:
             cmd.velocity = vel_cmd
             cmd.effort = eff_cmd
             group.send_command(cmd)
-            print(pos_cmd)
+            #print(pos_cmd)
         
         # Update run mode
         run_mode = "standby"
@@ -229,6 +232,13 @@ while not abort_flag:
             print("Following phone")
             # Set phone zero pos
             mobile_pos_offset = xyz_target_init - fbk_mobile.ar_position[0]
+            # Reset timers
+            fbk_time = fbk.receive_time
+            t0 = fbk_time.min()
+            first_run = True
+            t1 = 0
+            arm_trajStartTime = t0
+            phone_fbk_timer = perf_counter()
             continue
         # Hold arm in place
         joint_targets = get_ik(xyz_target_init, rot_mat_target_init, params.ik_seed_pos)
@@ -247,7 +257,7 @@ while not abort_flag:
             continue
         
         
-        time_now = fbk.transmit_time
+        time_now = fbk.receive_time
 
         
         # Get state of current trajectory
@@ -255,7 +265,7 @@ while not abort_flag:
             pos_cmd = fbk.position_command
             vel_cmd = end_velocities
             accel_cmd = end_accels
-            first_run = False
+            
         else:
             t1 = (time_now - arm_trajStartTime)[0]
             #print("t1: " + str(t1))
@@ -265,6 +275,9 @@ while not abort_flag:
             dynamics_comp = get_dynamic_comp_efforts(fbk.position, pos_cmd, vel_cmd, accel_cmd, kin)
             grav_comp = get_grav_comp_efforts(kin, fbk.position, gravity_vec)
             cmd.effort = dynamics_comp + grav_comp + effort_offset
+            
+            print(cmd.effort)
+            #cmd.effort = grav_comp + effort_offset
         """
         t = time()
         pos_cmd, vel_cmd, acc_cmd = trajectory.get_state(time()-t)
@@ -280,14 +293,14 @@ while not abort_flag:
         
         current_time = perf_counter()
         
-        if (current_time - phone_fbk_timer) > phone_period:
-            print("new traj")
+        if ((current_time - phone_fbk_timer) > phone_period) or first_run:
+            #print("new traj")
             arm_trajStartTime = time_now
             phone_fbk_timer = current_time
             
             # Find current phone pos
             phone_target_xyz = fbk_mobile.ar_position[0] + mobile_pos_offset
-            print("phone target")
+            print("phone target: ")
             print(phone_target_xyz)
             #phone_target_xyz = np.asarray([0.5, 0.0, 0.3])
             joint_targets = get_ik(phone_target_xyz, rot_mat_target_init, fbk.position)
@@ -303,12 +316,13 @@ while not abort_flag:
             accels[:, 0] = accel_cmd
             accels[:, 1] = end_accels
             trajectory = hebi.trajectory.create_trajectory(time_vector, waypoints, velocities, accels)
-        
+            
+            first_run = False
         
         group.send_command(cmd)
         
         array = np.zeros(6)
         fbk.get_position_command(array)
-        print(pos_cmd)
+        #print(pos_cmd)
         #print(fbk.position)
         
