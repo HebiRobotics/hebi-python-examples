@@ -1,6 +1,6 @@
 import hebi
-from time import sleep, time
-import numpy as np
+from time import sleep
+
 
 
 class MobileIO():

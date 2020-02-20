@@ -2,7 +2,8 @@ import hebi
 import numpy as np
 import os
 import sys
-import math
+import threading
+
 
 # ------------------------------------------------------------------------------
 # Add the root folder of the repository to the search path for modules
@@ -25,7 +26,7 @@ run_mode = "startup"
 
 enable_logging = True
 enable_effort_comp = True
-enable_ar_smoothing = True
+enable_ar_smoothing = False
 
 # Mobile device setup
 phone_family = 'HEBI'
@@ -94,29 +95,48 @@ if enable_logging:
     group.start_log("logs", mkdirs=True)
 
 
+
+state = m.getState()
+fbk_mobile = m.fbk
+diff = ["", "", "", "", "", "", "", ""]
+
+def getMobileState(quit_demo_button):
+    global state
+    global fbk_mobile
+    global diff
+    global abort_flag
+    m.setLedColor("yellow")
+    while not diff[quit_demo_button] == "rising":
+        prev_state = state
+        state = m.getState()
+        diff = m.getDiff(prev_state, state)
+        fbk_mobile = m.fbk
+        if diff[0] == "falling":
+            m.setLedColor("yellow")
+        if run_mode == "standby":
+            m.setLedColor("green")
+        if diff[0] == "rising":
+            m.setLedColor("blue")
+    m.setLedColor("red")
+    abort_flag = True
+    return
+
+t1 = threading.Thread(target=getMobileState, args=(quit_demo_button,))
+t1.start()
+
+
 # Main run loop
 while not abort_flag:
-    # Update mobile io state
-    state = m.getState()
-    fbk_mobile = m.fbk
-    
+
     # Update arm state
     group.get_next_feedback(reuse_fbk=fbk)
-    
-    
-    # Check for abort
-    if state[0][quit_demo_button] == 1:
-        abort_flag = True
-        # Set led to red
-        m.setLedColor("red")
-        continue
     
     # Check run mode
     if run_mode == "startup":
         # Move to starting pos
         print("Starting up")
         # Set led to yellow
-        m.setLedColor("yellow")
+        # m.setLedColor("yellow")
         
         joint_targets = get_ik(xyz_target_init, params.ik_seed_pos)
         waypoints = np.empty((group.size, 2))
@@ -129,14 +149,7 @@ while not abort_flag:
         start = time()
         t = time() - start
         
-        while t < duration:
-            state = m.getState()
-            # Check for abort
-            if state[0][quit_demo_button] == 1:
-                abort_flag = True
-                # Set led to red
-                m.setLedColor("red")
-                break
+        while (t < duration) and not abort_flag:
             # Get feedback and update the timer
             group.get_next_feedback(reuse_fbk=fbk)
             t = time() - start
@@ -166,13 +179,14 @@ while not abort_flag:
     elif run_mode == "standby":
         # Hold pos and wait for input
         # Set led to green
-        m.setLedColor("green")
+        # m.setLedColor("green")
         # Check if mode toggle requested
         if state[0][control_mode_toggle] == 1:
             # Change run mode
             run_mode = "control"
             print("Following phone")
             # Set phone zero pos
+            # TODO:  LOCK
             mobile_pos_offset = xyz_target_init - fbk_mobile.ar_position[0]
             # Reset timers
             fbk_time = fbk.receive_time
@@ -190,7 +204,7 @@ while not abort_flag:
     elif run_mode == "control":
         # Follow phones movement
         # Set led to blue
-        m.setLedColor("blue")
+        # m.setLedColor("blue")
         # Check if mode toggle requested
         if state[0][control_mode_toggle] == 0:
             # Change run mode
@@ -224,7 +238,7 @@ while not abort_flag:
             ar_pos.append(fbk_mobile.ar_position[0] + mobile_pos_offset)
         
         # Start new trajectory at the current state        
-        phone_hz = 10
+        phone_hz = 50
         phone_period = 1 / phone_hz
         
         current_time = perf_counter()
@@ -242,6 +256,7 @@ while not abort_flag:
                     phone_target_xyz = ar_pos[0]
                 ar_pos = []
             else:
+               # TODO:  LOCK
                 phone_target_xyz = fbk_mobile.ar_position[0] + mobile_pos_offset
             joint_targets = get_ik(phone_target_xyz, fbk.position)
             
@@ -264,9 +279,11 @@ while not abort_flag:
             first_run = False
         
         group.send_command(cmd)
+
+
+
         
-
-
+m.setLedColor("red")
 
 if enable_logging:        
     # Stop logging
