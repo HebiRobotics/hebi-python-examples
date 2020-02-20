@@ -21,7 +21,7 @@ import mobile_io as mbio
 
 
 # set up our mobile io interface
-m = mbio.MobileIO()
+m = mbio.MobileIO("HEBI", "Phone Name")
 state = m.getState()
 m.setButtonMode(1, 0)
 m.setButtonMode(2, 1)
@@ -116,17 +116,18 @@ while not state[0][0] == 1:
 
   # Calculate required torques to negate gravity at current position
   grav_effort = get_grav_comp_efforts(kin, fbk_position, gravity_vec) + effort_offset
-  
+  kin.get_end_effector(fbk_position, output=arm_tip_fk)
   # If in grav comp mode set led green
   if not controller_on:
       m.setLedColor("green")
+      end_effector_XYZ = arm_tip_fk[0:3,3].copy()
+      end_effector_rot_mat = arm_tip_fk[0:3,0:3].copy()
   
   if controller_on:
     # If in impedance mode set led blue
     m.setLedColor("blue")
     
     # Get Updated Forward Kinematics and Jacobians
-    kin.get_end_effector(fbk_position, output=arm_tip_fk)
     kin.get_jacobian_end_effector(fbk_position, output=J_arm_tip)
 
     # Calculate Impedence Control Wrenches and Appropraite Joint Torque

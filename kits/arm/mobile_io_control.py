@@ -22,14 +22,12 @@ import mobile_io as mbio
 run_mode = "points"
 
 first_run = True
-enable_effort_comp = True
 
 # Mobile device setup
 phone_family = 'HEBI'
-phone_name = "Cal's iPhone"
+phone_name = "Phone Name"
 
 quit_demo_button = 7
-
 
 print('Waiting for Mobile IO device to come online...')
 m = mbio.MobileIO(phone_family, phone_name)

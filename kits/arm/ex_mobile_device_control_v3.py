@@ -32,7 +32,7 @@ enable_effort_comp = True
 
 # Mobile device setup
 phone_family = 'HEBI'
-phone_name = "Cal's iPhone"
+phone_name = "Phone Name"
 
 control_mode_toggle = 0
 quit_demo_button = 7

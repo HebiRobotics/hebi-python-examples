@@ -193,7 +193,7 @@ def run():
   print_and_cr("When in playback mode, 'b6' resumes training, and 'b1' quits.")
   
   
-  m = mbio.MobileIO()
+  m = mbio.MobileIO("HEBI", "Phone Name")
   
   res = m.getState()
   
