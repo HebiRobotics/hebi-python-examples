@@ -134,10 +134,6 @@ while not abort_flag:
     # Check run mode
     if run_mode == "startup":
         # Move to starting pos
-        print("Starting up")
-        # Set led to yellow
-        # m.setLedColor("yellow")
-        
         joint_targets = get_ik(xyz_target_init, params.ik_seed_pos)
         waypoints = np.empty((group.size, 2))
         waypoints[:, 0] = fbk.position
@@ -178,8 +174,6 @@ while not abort_flag:
         
     elif run_mode == "standby":
         # Hold pos and wait for input
-        # Set led to green
-        # m.setLedColor("green")
         # Check if mode toggle requested
         if state[0][control_mode_toggle] == 1:
             # Change run mode
@@ -203,8 +197,6 @@ while not abort_flag:
     
     elif run_mode == "control":
         # Follow phones movement
-        # Set led to blue
-        # m.setLedColor("blue")
         # Check if mode toggle requested
         if state[0][control_mode_toggle] == 0:
             # Change run mode
