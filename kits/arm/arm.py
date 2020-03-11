@@ -27,51 +27,60 @@ class ArmParams(object):
 class Arm():
     
     def __init__(self, params):
-        # Create arm
+        # Create arm from lookup
         self.lookup = hebi.Lookup()
         sleep(2)
         print(self.lookup)
         self.grp = self.lookup.get_group_from_names([params.family], params.moduleNames)
         print(self.grp)
         
-        self.goal = "grav comp"
+        # Create robot model
         try:
             self.model = hebi.robot_model.import_from_hrdf(params.hrdf)
         except Exception as e:
-          print('Could not load HRDF: {0}'.format(e))
-          sys.exit()
+            print('Could not load HRDF: {0}'.format(e))
+            sys.exit()
         
+        # Create comand and feedback
         self.cmd = hebi.GroupCommand(self.grp.size)
         self.fbk = hebi.GroupFeedback(self.grp.size)
         self.prev_fbk = self.fbk
         self.grp.get_next_feedback(reuse_fbk=self.fbk)
         
+        # Zero our initial comand setting vars
         self.pos_cmd = self.fbk.position
         self.vel_cmd = np.zeros(self.grp.size)
         self.accel_cmd = np.zeros(self.grp.size)
         self.eff_cmd = np.zeros(self.grp.size)
         
+        # Setup gravity vector
         self.gravity_vec = [0, 0, 1]
         gravity_from_quaternion(self.fbk.orientation[0], output=self.gravity_vec)
         self.gravity_vec = np.array(self.gravity_vec)
+        
+        # Zero times
         self.time_now = time()
-        self.at_goal = True
         self.traj_start_time = self.time_now
         self.duration = 0
-        self.set_goal_first = True
         self.t_traj = 0
         
+        self.set_goal_first = True
+        self.at_goal = True
+        self.goal = "grav comp"
+        
     
+    # Loads gains from given gains file    
     def loadGains(self, gains_file):
         try:
-          self.cmd.read_gains(gains_file)
-          if not self.grp.send_command_with_acknowledgement(self.cmd):
-            raise RuntimeError('Did not receive ack from group.')
-          print('Successfully read gains from file and sent to module.')
+            self.cmd.read_gains(gains_file)
+            if not self.grp.send_command_with_acknowledgement(self.cmd):
+              raise RuntimeError('Did not receive ack from group.')
+            print('Successfully read gains from file and sent to module.')
         except Exception as e:
-          print('Problem reading gains from file or sending to module: {0}'.format(e))
+            print('Problem reading gains from file or sending to module: {0}'.format(e))
     
     
+    # Updates feedback and generates the basic command for this timestep
     def update(self):
         self.prev_fbk = list(self.fbk)
         self.grp.get_next_feedback(reuse_fbk=self.fbk)
@@ -82,7 +91,6 @@ class Arm():
                 self.at_goal = True
         # Create command
         if self.goal == "grav comp":
-            # Grav comp mode
             # Calculate required torques to negate gravity at current position
             nan_array = np.empty(self.grp.size)
             nan_array[:] = np.nan
@@ -106,8 +114,8 @@ class Arm():
         self.grp.send_command(self.cmd)
         return
 
-
-    def setGoal(self, durration, position):
+    
+    def setGoal(self, position, durration=None, velocity=None, accel=None, flow=None):
         # Create trajectory to target position
         self.at_goal = False
         
@@ -117,19 +125,63 @@ class Arm():
             self.vel_cmd = self.fbk.velocity
             self.accel_cmd = np.zeros(self.grp.size)
         
-        waypoints = np.empty((self.grp.size, 2))
+        waypoints = np.empty((self.grp.size, len(position)+1))
         waypoints[:, 0] = self.pos_cmd
-        waypoints[:, 1] = position
+        for i in range(len(position)):
+            waypoints[:, i+1] = position[i]
         
-        velocities = np.empty((self.grp.size, 2))
-        velocities[:, 0] = self.vel_cmd
-        velocities[:, 1] = np.zeros(self.grp.size)
+        if flow == None:
+            if velocity == None:
+                velocities = np.empty((self.grp.size, len(position)+1))
+                velocities[:, 0] = self.vel_cmd
+                for i in range(len(position)):
+                    velocities[:, i+1] = np.zeros(self.grp.size)
+            else:
+                velocities = np.empty((self.grp.size, len(position)+1))
+                velocities[:, 0] = self.vel_cmd
+                for i in range(len(position)):
+                    velocities[:, i+1] = velocity[i]
+            
+            if accel == None:
+                accels = np.empty((self.grp.size, len(position)+1))
+                accels[:, 0] = self.accel_cmd
+                for i in range(len(position)):
+                    accels[:, i+1] = np.zeros(self.grp.size)
+            else:
+                accels = np.empty((self.grp.size, len(position)+1))
+                accels[:, 0] = self.accel_cmd
+                for i in range(len(position)):
+                    accels[:, i+1] = accel[i]
+        else:
+            nan_array = np.empty(self.grp.size)
+            nan_array[:] = np.nan
+            
+            velocities = np.empty((self.grp.size, len(position)+1))
+            velocities[:, 0] = self.vel_cmd
+            for i in range(len(position)):
+                if flow[i]:
+                    velocities[:, i+1] = nan_array
+                else:
+                    velocities[:, i+1] = np.zeros(self.grp.size)
+
+            accels = np.empty((self.grp.size, len(position)+1))
+            accels[:, 0] = self.accel_cmd
+            for i in range(len(position)):
+                if flow[i]:
+                    accels[:, i+1] = nan_array
+                else:
+                    accels[:, i+1] = np.zeros(self.grp.size)           
         
-        accels = np.empty((self.grp.size, 2))
-        accels[:, 0] = self.accel_cmd
-        accels[:, 1] = np.zeros(self.grp.size)
+        time_vector = []
+        if durration == None:
+            time_vector.append(0)
+            for i in range(len(position)):
+                time_vector.append(5+time_vector[i])
+        else:
+            time_vector.append(0)
+            for i in range(len(position)):
+                time_vector.append(durration[i]+time_vector[i])
         
-        time_vector = [0, durration]
         self.trajectory = hebi.trajectory.create_trajectory(time_vector, waypoints, velocities, accels)
         self.duration = self.trajectory.duration
         self.traj_start_time = self.time_now
@@ -143,7 +195,7 @@ class Arm():
         
       
     def goalProgress(self):
-        # Return progress through trajectory
+        # Return progress of the arm through the trajectory
         if not self.at_goal:
             return self.t_traj/self.duration
         else:
