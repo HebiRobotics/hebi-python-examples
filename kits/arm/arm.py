@@ -116,6 +116,8 @@ class Arm():
 
     
     def createMotionArray(self, size, prev_cmd, array=None, flow=None):
+        # Helper function to create arrays for things like waypoints, velocities, and accelerations that are used in creating a trajectory
+        # Note flow overrides any array passed (used for vel and accel, should never pass flow and positions)
         mArray = np.empty((self.grp.size, size+1))
         mArray[:, 0] = prev_cmd
         if flow == None:
@@ -137,7 +139,7 @@ class Arm():
         return mArray
     
     
-    def setGoal(self, position, durration=None, velocity=None, accel=None, flow=None):
+    def createGoal(self, position, durration=None, velocity=None, accel=None, flow=None):
         # Create trajectory to target position
         self.at_goal = False
         
@@ -148,65 +150,16 @@ class Arm():
             self.accel_cmd = np.zeros(self.grp.size)
         
         waypoints = self.createMotionArray(len(position), self.pos_cmd, array=position)
-        """
-        waypoints = np.empty((self.grp.size, len(position)+1))
-        waypoints[:, 0] = self.pos_cmd
-        for i in range(len(position)):
-            waypoints[:, i+1] = position[i]
-        """
+        
+        # If flow is given it overwrites vel and accels given
         if flow == None:
             velocities = self.createMotionArray(len(position), self.vel_cmd, array=velocity)
-            """
-            if velocity == None:
-                velocities = np.empty((self.grp.size, len(position)+1))
-                velocities[:, 0] = self.vel_cmd
-                for i in range(len(position)):
-                    velocities[:, i+1] = np.zeros(self.grp.size)
-            else:
-                velocities = np.empty((self.grp.size, len(position)+1))
-                velocities[:, 0] = self.vel_cmd
-                for i in range(len(position)):
-                    velocities[:, i+1] = velocity[i]
-            """
             accels = self.createMotionArray(len(position), self.accel_cmd, array=accel)
-            """
-            if accel == None:
-                accels = np.empty((self.grp.size, len(position)+1))
-                accels[:, 0] = self.accel_cmd
-                for i in range(len(position)):
-                    accels[:, i+1] = np.zeros(self.grp.size)
-            else:
-                accels = np.empty((self.grp.size, len(position)+1))
-                accels[:, 0] = self.accel_cmd
-                for i in range(len(position)):
-                    accels[:, i+1] = accel[i]
-            """
         else:
-            
             velocities = self.createMotionArray(len(position), self.vel_cmd, flow=flow)
-            """
-            nan_array = np.empty(self.grp.size)
-            nan_array[:] = np.nan
-            """
-            """
-            velocities = np.empty((self.grp.size, len(position)+1))
-            velocities[:, 0] = self.vel_cmd
-            for i in range(len(position)):
-                if flow[i]:
-                    velocities[:, i+1] = nan_array
-                else:
-                    velocities[:, i+1] = np.zeros(self.grp.size)
-            """
             accels = self.createMotionArray(len(position), self.accel_cmd, flow=flow)
-            """
-            accels = np.empty((self.grp.size, len(position)+1))
-            accels[:, 0] = self.accel_cmd
-            for i in range(len(position)):
-                if flow[i]:
-                    accels[:, i+1] = nan_array
-                else:
-                    accels[:, i+1] = np.zeros(self.grp.size)           
-            """
+        
+        # Create time vector from durrations given
         time_vector = []
         if durration == None:
             time_vector.append(0)
@@ -217,7 +170,17 @@ class Arm():
             for i in range(len(position)):
                 time_vector.append(durration[i]+time_vector[i])
         
-        self.trajectory = hebi.trajectory.create_trajectory(time_vector, waypoints, velocities, accels)
+        # Create trajectory
+        self.trajectory_plan = hebi.trajectory.create_trajectory(time_vector, waypoints, velocities, accels)
+        return self.trajectory_plan
+    
+    
+    def setGoal(self, goal=None):
+        # If no goal is passed we use the last goal created by createGoal, otherwise set trajectory given and zero times
+        if goal == None:
+            self.trajectory = self.trajectory_plan
+        else:
+            self.trajectory = goal
         self.duration = self.trajectory.duration
         self.traj_start_time = self.time_now
         return
