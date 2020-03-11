@@ -66,7 +66,7 @@ def getMobileState(quit_demo_button):
     return
 
 # Start mobile io thread
-t1 = threading.Thread(target=getMobileState, args=(quit_demo_button,))
+t1 = threading.Thread(target=getMobileState, args=(quit_demo_button,), daemon=True)
 t1.start()
 
 def get_ik(xyz_target, ik_seed):
@@ -86,7 +86,7 @@ while not abort_flag:
     if run_mode == "startup":
         # Move to starting pos
         joint_targets = get_ik(xyz_target_init, ik_seed_pos)
-        a.setGoal(5, joint_targets)
+        a.setGoal([joint_targets])
         run_mode = "moving to start pos"
     
     if run_mode == "moving to start pos":
@@ -103,6 +103,6 @@ while not abort_flag:
         # Follow phone's motion in 3D space
         phone_target_xyz = fbk_mobile.ar_position[0] + mobile_pos_offset
         joint_targets = get_ik(phone_target_xyz, a.fbk.position)
-        a.setGoal(1, joint_targets)
+        a.setGoal([joint_targets], durration=[1])
     
     a.send()

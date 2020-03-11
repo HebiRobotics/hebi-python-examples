@@ -1,14 +1,4 @@
-# -*- coding: utf-8 -*-
-import hebi
-from time import sleep, time
-import numpy as np
-
-# Add the root folder of the repository to the search path for modules
-import os, sys
-root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path = [root_path] + sys.path
-
-from hebi.robot_model import endeffector_position_objective
+from time import  time
 import arm
 
 

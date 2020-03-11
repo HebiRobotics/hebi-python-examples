@@ -39,17 +39,17 @@ while not abort_flag:
     # B1 point 1
     if mobile_io_diff[0] == "rising":
         positions = (0, 0, 0, 0, 0, 0)
-        a.setGoal(4, positions)
+        a.setGoal([positions], durration=[4])
     
     # B2 point 2    
     if mobile_io_diff[1] == "rising":
         positions = np.asarray([np.pi/4, np.pi/3, 2*np.pi/3, np.pi/3, np.pi/4, 0])
-        a.setGoal(4, positions)
+        a.setGoal([positions], durration=[4])
     
     # B3 point 3
     if mobile_io_diff[2] == "rising":
         positions = np.asarray([-np.pi/4, np.pi/3, 2*np.pi/3, np.pi/3, 3*np.pi/4, 0])
-        a.setGoal(4, positions)
+        a.setGoal([positions], durration=[4])
     
     # B6 grav comp    
     if mobile_io_diff[5] == "rising":

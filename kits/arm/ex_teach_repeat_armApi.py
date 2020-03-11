@@ -20,6 +20,8 @@ state = m.getState()
 abort_flag = False
 
 waypoints = []
+flow = []
+durrations = []
 run_mode = "training"
 curr_waypoint_num = 0
 
@@ -29,6 +31,7 @@ while not abort_flag:
     prev_state = state
     state = m.getState()
     diff = m.getDiff(prev_state, state)
+    slider3 = state[1][2]
     
     # Check for quit
     if diff[7] == "rising":
@@ -36,13 +39,22 @@ while not abort_flag:
         break
     
     if run_mode == "training":
-        # B1 add waypoint
+        # B1 add waypoint (stop)
         if diff[0] == "rising":
             print("Waypoint added")
             waypoints.append(a.fbk.position)
+            flow.append(False)
+            durrations.append(slider3 + 4)
         
-        # B2 toggle training/playback
+        # B1 add waypoint (flow)
         if diff[1] == "rising":
+            print("Waypoint added")
+            waypoints.append(a.fbk.position)
+            flow.append(True)
+            durrations.append(slider3 + 4)
+        
+        # B3 toggle training/playback
+        if diff[2] == "rising":
             # Check for more than 2 waypoints
             if len(waypoints) > 1:
                 run_mode = "playback"
@@ -56,21 +68,19 @@ while not abort_flag:
         if diff[4] == "rising":
             print("Waypoints cleared")
             waypoints = []
+            flow = []
+            durrations = []
             
     if run_mode == "playback":
-        # B2 toggle training/playback
-        if diff[1] == "rising":
+        # B3 toggle training/playback
+        if diff[2] == "rising":
             run_mode = "training"
             a.cancelGoal()
         
         # When at a waypoint, go to the next one
         if a.at_goal:
-            target = waypoints[curr_waypoint_num]
-            a.setGoal(4, target)
-            if curr_waypoint_num < len(waypoints) - 1:
-                curr_waypoint_num += 1
-            else:
-                curr_waypoint_num = 0
+            a.setGoal(waypoints, flow=flow, durration=durrations)
+            
     
     
     a.send()
