@@ -35,6 +35,7 @@ quit_demo_button = 7
 abort_flag = False
 run_mode = "startup"
 
+# Mobile io function to be run in another thread to prevent main loop stalling on long feedbacks
 def getMobileState(quit_demo_button):
     global state
     global fbk_mobile
@@ -42,12 +43,14 @@ def getMobileState(quit_demo_button):
     global abort_flag
     global run_mode
     global mobile_pos_offset
+   
     m.setLedColor("yellow")
     while not diff[quit_demo_button] == "rising":
         prev_state = state
         state = m.getState()
         diff = m.getDiff(prev_state, state)
         fbk_mobile = m.fbk
+        # Check for button presses and control state accordingly
         if diff[0] == "falling":
             run_mode = "startup"
             m.setLedColor("yellow")
@@ -62,6 +65,7 @@ def getMobileState(quit_demo_button):
     abort_flag = True
     return
 
+# Start mobile io thread
 t1 = threading.Thread(target=getMobileState, args=(quit_demo_button,))
 t1.start()
 
@@ -80,19 +84,23 @@ while not abort_flag:
     a.update()
     
     if run_mode == "startup":
+        # Move to starting pos
         joint_targets = get_ik(xyz_target_init, ik_seed_pos)
         a.setGoal(5, joint_targets)
         run_mode = "moving to start pos"
     
     if run_mode == "moving to start pos":
+        # When at startup pos, switch to standby mode
         if a.at_goal:
             run_mode = "standby"
     
     if run_mode == "standby":
+        # Wait for mobile io input while holding arm in place
         a.send()
         continue
     
     if run_mode == "control":
+        # Follow phone's motion in 3D space
         phone_target_xyz = fbk_mobile.ar_position[0] + mobile_pos_offset
         joint_targets = get_ik(phone_target_xyz, a.fbk.position)
         a.setGoal(1, joint_targets)
