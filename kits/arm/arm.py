@@ -115,6 +115,28 @@ class Arm():
         return
 
     
+    def createMotionArray(self, size, prev_cmd, array=None, flow=None):
+        mArray = np.empty((self.grp.size, size+1))
+        mArray[:, 0] = prev_cmd
+        if flow == None:
+            for i in range(size):
+                if array == None:
+                    mArray[:, i+1] = np.zeros(self.grp.size)
+                else:
+                    mArray[:, i+1] = array[i]
+        else:
+            nan_array = np.empty(self.grp.size)
+            nan_array[:] = np.nan
+            for i in range(size):
+                if flow[i]:
+                    mArray[:, i+1] = nan_array
+                else:
+                    mArray[:, i+1] = np.zeros(self.grp.size)
+        
+        
+        return mArray
+    
+    
     def setGoal(self, position, durration=None, velocity=None, accel=None, flow=None):
         # Create trajectory to target position
         self.at_goal = False
@@ -125,12 +147,16 @@ class Arm():
             self.vel_cmd = self.fbk.velocity
             self.accel_cmd = np.zeros(self.grp.size)
         
+        waypoints = self.createMotionArray(len(position), self.pos_cmd, array=position)
+        """
         waypoints = np.empty((self.grp.size, len(position)+1))
         waypoints[:, 0] = self.pos_cmd
         for i in range(len(position)):
             waypoints[:, i+1] = position[i]
-        
+        """
         if flow == None:
+            velocities = self.createMotionArray(len(position), self.vel_cmd, array=velocity)
+            """
             if velocity == None:
                 velocities = np.empty((self.grp.size, len(position)+1))
                 velocities[:, 0] = self.vel_cmd
@@ -141,7 +167,9 @@ class Arm():
                 velocities[:, 0] = self.vel_cmd
                 for i in range(len(position)):
                     velocities[:, i+1] = velocity[i]
-            
+            """
+            accels = self.createMotionArray(len(position), self.accel_cmd, array=accel)
+            """
             if accel == None:
                 accels = np.empty((self.grp.size, len(position)+1))
                 accels[:, 0] = self.accel_cmd
@@ -152,10 +180,15 @@ class Arm():
                 accels[:, 0] = self.accel_cmd
                 for i in range(len(position)):
                     accels[:, i+1] = accel[i]
+            """
         else:
+            
+            velocities = self.createMotionArray(len(position), self.vel_cmd, flow=flow)
+            """
             nan_array = np.empty(self.grp.size)
             nan_array[:] = np.nan
-            
+            """
+            """
             velocities = np.empty((self.grp.size, len(position)+1))
             velocities[:, 0] = self.vel_cmd
             for i in range(len(position)):
@@ -163,7 +196,9 @@ class Arm():
                     velocities[:, i+1] = nan_array
                 else:
                     velocities[:, i+1] = np.zeros(self.grp.size)
-
+            """
+            accels = self.createMotionArray(len(position), self.accel_cmd, flow=flow)
+            """
             accels = np.empty((self.grp.size, len(position)+1))
             accels[:, 0] = self.accel_cmd
             for i in range(len(position)):
@@ -171,7 +206,7 @@ class Arm():
                     accels[:, i+1] = nan_array
                 else:
                     accels[:, i+1] = np.zeros(self.grp.size)           
-        
+            """
         time_vector = []
         if durration == None:
             time_vector.append(0)
