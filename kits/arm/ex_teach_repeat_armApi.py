@@ -25,6 +25,15 @@ durrations = []
 run_mode = "training"
 curr_waypoint_num = 0
 
+print("")
+print("B1 - Add waypoint (stop)")
+print("B2 - Add waypoint (flow)")
+print("A3 - Up/down for longer/shorter time to waypoint")
+print("B3 - Toggle training/playback")
+print("B4 - Clear waypoints")
+print("B8 - Quit")
+print("")
+
 while not abort_flag:
     # Update arm and mobile io
     a.update()
@@ -41,14 +50,14 @@ while not abort_flag:
     if run_mode == "training":
         # B1 add waypoint (stop)
         if diff[0] == "rising":
-            print("Waypoint added")
+            print("Stop waypoint added")
             waypoints.append(a.fbk.position)
             flow.append(False)
             durrations.append(slider3 + 4)
         
-        # B1 add waypoint (flow)
+        # B2 add waypoint (flow)
         if diff[1] == "rising":
-            print("Waypoint added")
+            print("Flow waypoint added")
             waypoints.append(a.fbk.position)
             flow.append(True)
             durrations.append(slider3 + 4)
@@ -77,7 +86,7 @@ while not abort_flag:
             run_mode = "training"
             a.cancelGoal()
         
-        # When at a waypoint, go to the next one
+        # When not running through waypoints, run through the waypoints
         if a.at_goal:
             a.createGoal(waypoints, flow=flow, durration=durrations)
             a.setGoal()
