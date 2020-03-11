@@ -86,7 +86,8 @@ while not abort_flag:
     if run_mode == "startup":
         # Move to starting pos
         joint_targets = get_ik(xyz_target_init, ik_seed_pos)
-        a.setGoal([joint_targets])
+        a.createGoal([joint_targets])
+        a.setGoal()
         run_mode = "moving to start pos"
     
     if run_mode == "moving to start pos":
@@ -96,6 +97,7 @@ while not abort_flag:
     
     if run_mode == "standby":
         # Wait for mobile io input while holding arm in place
+        
         a.send()
         continue
     
@@ -103,6 +105,7 @@ while not abort_flag:
         # Follow phone's motion in 3D space
         phone_target_xyz = fbk_mobile.ar_position[0] + mobile_pos_offset
         joint_targets = get_ik(phone_target_xyz, a.fbk.position)
-        a.setGoal([joint_targets], durration=[1])
+        a.createGoal([joint_targets], durration=[1])
+        a.setGoal()
     
     a.send()

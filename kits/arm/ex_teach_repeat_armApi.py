@@ -79,7 +79,8 @@ while not abort_flag:
         
         # When at a waypoint, go to the next one
         if a.at_goal:
-            a.setGoal(waypoints, flow=flow, durration=durrations)
+            a.createGoal(waypoints, flow=flow, durration=durrations)
+            a.setGoal()
             
     
     
