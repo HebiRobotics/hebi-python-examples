@@ -141,7 +141,7 @@ class Arm():
     
     def createGoal(self, position, durration=None, velocity=None, accel=None, flow=None):
         # Create trajectory to target position
-        # Position should be an array of positions
+        # Position should be an array of joint positions
         # Durration should be an array of durrations (if passed)
         # Velocity should be an array of joint velocities of the same length as the amount of positions (if passed)
         # Accel should be an array of joint accelerations of the same length as the amount of positions (if passed)
@@ -167,12 +167,8 @@ class Arm():
         waypoints = self.createMotionArray(len(position), self.pos_cmd, array=position)
         
         # If flow is given it overwrites vel and accels given
-        if flow == None:
-            velocities = self.createMotionArray(len(position), self.vel_cmd, array=velocity)
-            accels = self.createMotionArray(len(position), self.accel_cmd, array=accel)
-        else:
-            velocities = self.createMotionArray(len(position), self.vel_cmd, flow=flow)
-            accels = self.createMotionArray(len(position), self.accel_cmd, flow=flow)
+        velocities = self.createMotionArray(len(position), self.vel_cmd, array=velocity, flow=flow)
+        accels = self.createMotionArray(len(position), self.accel_cmd, array=accel, flow=flow)
         
         # Create time vector from durrations given
         time_vector = []
@@ -191,7 +187,7 @@ class Arm():
     
     
     def setGoal(self, goal=None):
-        # If no goal is passed we use the last goal created by createGoal, otherwise set trajectory given and zero times
+        # If no goal is passed we use the last goal created by createGoal, otherwise set trajectory passed as goal and zero times
         # Goal passed should be a trajectory not a target
         if goal == None:
             self.trajectory = self.trajectory_plan
