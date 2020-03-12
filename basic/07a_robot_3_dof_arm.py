@@ -14,7 +14,7 @@ from util import math_utils
 # A helper function to create a group from named modules, and set specified gains on the modules in that group.
 def get_group():
   families = ['Test Family']
-  names = ["Base", "Shoulder", "Elbow"]
+  names = ["J1_base", "J2_shoulder", "J3_elbow"]
   lookup = hebi.Lookup()
   sleep(2.0)
   group = lookup.get_group_from_names(families, names)

@@ -15,41 +15,36 @@ sys.path = [root_path] + sys.path
 
 from hebi.trajectory import create_trajectory
 from hebi.robot_model import endeffector_position_objective, endeffector_so3_objective
-from util.input import listen_for_escape_key, has_esc_been_pressed, create_mobile_io_controller
+import mobile_io as mbio
 from util.math_utils import get_grav_comp_efforts, get_dynamic_comp_efforts, quat2rot, rotate_y
 from util.arm import setup_arm_params
-from time import sleep
+from time import sleep, perf_counter, time
 
 
-enable_logging = True
+enable_logging = False
 enable_effort_comp = True
 
 # Mobile Device Setup
 phone_family = 'HEBI'
-phone_name = 'Mobile IO'
+phone_name = "Cal's iPhone"
 
-reset_pose_button = 'b1'
-quit_demo_button = 'b8'
-translation_scale_slider = 'a3'
-grip_force_slider = 'a6'
+reset_pose_button = 0
+quit_demo_button = 7
+translation_scale_slider = 2
+grip_force_slider = 5
 
 abort_flag = False
 lookup = hebi.Lookup()
 sleep(2)
 
-while True:
-  print('Waiting for Mobile IO device to come online...')
-  phone_group = lookup.get_group_from_names([phone_family], [phone_name])        
-  if phone_group is not None:
-    print('Phone Found. Starting up')
-    mobile_io_controller = create_mobile_io_controller(phone_group)
-    break
-  sleep(2)
 
-
+print('Waiting for Mobile IO device to come online...')
+m = mbio.MobileIO(phone_family, phone_name)
+state = m.getState()
+m.setButtonMode(1, 1)
 # Arm Setup
-arm_name = '6-DoF + gripper'
-arm_family = 'Arm'
+arm_name = '6-DoF'
+arm_family = 'Example Arm'
 has_gas_spring = False # If you attach a gas spring to the shoulder for extra payload, set this to True.
 
 group, kin, params = setup_arm_params(arm_name, arm_family, has_gas_spring, lookup=lookup)
@@ -98,8 +93,18 @@ def get_ik(xyz_target, rot_target, ik_seed):
   return kin.solve_inverse_kinematics(ik_seed_pos, endeffector_position_objective(xyz_target), endeffector_so3_objective(rot_target))
 
 
+
+
+counter = 0
 # Startup
 while not abort_flag:
+  # Update mobile io state
+  state = m.getState()
+  print("counter: " + str(counter))
+  print("state: " + str(state))
+  counter += 1
+  if counter % 100 == 0:
+      print("counter: " + str(counter))
   group.get_next_feedback(reuse_fbk=fbk)
 
   cmd.position = None
@@ -111,23 +116,26 @@ while not abort_flag:
   # Start background logging
   if enable_logging:
     group.start_log(os.path.join(local_dir, 'logs'), mkdirs=True)
-    phone_group.start_log(os.path.join(local_dir, 'logs'), mkdirs=True)
+    #phone_group.start_log(os.path.join(local_dir, 'logs'), mkdirs=True)
 
   ik_pos = get_ik(xyz_target_init, rot_mat_target_init, ik_seed_pos)
 
   arm_traj = create_trajectory([0, arm_traj_min_duration], np.array([fbk.position, ik_pos]).T)
   fbk_time = fbk.receive_time
   t0 = fbk_time.min()
+  t_start = time()
   t = 0
-
+  #t = 0
+  print("check 1")
   while t < arm_traj.duration:
+
     group.get_next_feedback(reuse_fbk=fbk)
-    t = min((fbk_time - t0).min(), arm_traj.duration)
+    t = time() - t_start
+    #t = min((fbk_time - t0).min(), arm_traj.duration)
 
     pos, vel, accel = arm_traj.get_state(t)
     cmd.position = pos
     cmd.velocity = vel
-
     if enable_effort_comp:
       fbk_position = fbk.position
       dynamics_comp = get_dynamic_comp_efforts(fbk_position, pos, vel, accel, kin)
@@ -135,9 +143,9 @@ while not abort_flag:
       cmd.effort = dynamics_comp + grav_comp + effort_offset
 
     group.send_command(cmd)
-
+  
   # Grab initial pose
-  fbk_mobile = mobile_io_controller.current_feedback
+  fbk_mobile = m.fbk
 
   q = fbk_mobile.ar_orientation[0]
   R_init = quat2rot(q)
@@ -145,23 +153,28 @@ while not abort_flag:
   xyz_init = fbk_mobile.ar_position[0]
   xyz_phone_new = xyz_init
 
-  end_velocities = np.zeros((1, arm_dof_count))
-  end_accels = np.zeros((1, arm_dof_count))
+  end_velocities = np.zeros(arm_dof_count)
+  end_accels = np.zeros(arm_dof_count)
 
-  max_demo_time = inf % sec
-  phone_fbk_timer = tic
+  phone_fbk_timer = perf_counter()
 
   time_last = t0
   arm_trajStartTime = t0
 
-  first_run = true
-
+  first_run = True
+  
+  print("check 2")
   while not abort_flag:
+    # Update mobile io state
+    state = m.getState()
+    print("check 3")
+    print("state: ")
+    print(state)
     group.get_next_feedback(reuse_fbk=fbk)
-
-    time_now = fbk.time
+    
+    time_now = fbk.transmit_time
     dt = time_now - time_last
-    time_last = fbk.time
+    time_last = fbk.transmit_time
 
     # Reset the Command Struct
     cmd.effort = None
@@ -169,40 +182,42 @@ while not abort_flag:
     cmd.velocity = None
 
     # Check for restart command
-    if mobile_io_controller.get_button(reset_pose_button):
+    if state[0][reset_pose_button] == 0:
+      
       break
 
     # Check for quit command
-    if mobile_io_controller.get_button(quit_demo_button):
-      abort_flag = true
+    if state[0][quit_demo_button] == 1:
+      
+      abort_flag = True
       break
 
     if params.has_gripper:
-      gripper_cmd.effort = grip_force_scale * mobile_io_controller.get_slider(grip_force_slider) + grip_force_shift
+      gripper_cmd.effort = grip_force_scale * state[1][grip_force_slider] + grip_force_shift
       gripper_group.send_command(gripper_cmd)
 
     # Parameter to limit XYZ Translation of the arm if a slider is pulled down.  
     # Pulling all the way down resets translation.
-    phone_control_scale = mobile_io_controller.get_slider(translation_scale_slider)
+    phone_control_scale = state[1][translation_scale_slider]
     if phone_control_scale < 0:
       xyz_init = xyz_phone_new
 
     # Pose Information for Arm Control
     xyz_phone_new = fbk_mobile.ar_position[0]
-    xyz_target = xyz_target_init + (np.multiply(phone_control_scale * xyz_scale, R_init.T * (xyz_phone_new - xyz_init)))
-
+    xyz_target = xyz_target_init + (np.multiply(phone_control_scale * xyz_scale, R_init.T @ (xyz_phone_new - xyz_init)))
     q = fbk_mobile.ar_orientation[0]
-    rot_mat_target = R_init.T * quat2rot(q) * rot_mat_target_init
+    rot_mat_target = R_init.T @ quat2rot(q) @ rot_mat_target_init
 
     # Get state of current trajectory
     if first_run:
       pos = fbk.position_command
       vel = end_velocities
       accel = end_accels
-      first_run = false
+      first_run = False
     else:
-      t = time_now - arm_trajStartTime
+      t = (time_now - arm_trajStartTime)[0]
       pos, vel, accel = arm_traj.get_state(t)
+    
 
     cmd.position = pos
     cmd.velocity = vel
@@ -210,7 +225,8 @@ while not abort_flag:
     fbk_position = fbk.position
 
     if enable_effort_comp:
-      dynamics_comp = get_dynamic_comp_efforts(fbk_position, pos, vel, accel, robot)
+
+      dynamics_comp = get_dynamic_comp_efforts(fbk_position, pos, vel, accel, kin)
       grav_comp = get_grav_comp_efforts(kin, fbk_position, gravity_vec)
       cmd.effort = dynamics_comp + grav_comp + effort_offset
 
@@ -224,14 +240,21 @@ while not abort_flag:
     # Start new trajectory at the current state        
     phone_hz = 10
     phone_period = 1 / phone_hz
-
-    if toc(phone_fbk_timer) > phone_period:
+    
+    current_time = perf_counter()
+    
+    if (current_time - phone_fbk_timer) > phone_period:
       arm_trajStartTime = time_now
-      phone_fbk_timer = tic
-      arm_traj = create_trajectory([0, arm_traj_min_duration], np.array([pos, ik_pos]).T, np.array([vel, end_velocities]).T, np.array([accel, end_accels]).T)  
-
+      phone_fbk_timer = current_time
+      a = [0, arm_traj_min_duration]
+      b = np.array([pos, ik_pos]).T
+      c = np.array([vel, end_velocities]).T
+      d = np.array([accel, end_accels]).T
+      arm_traj = create_trajectory(a, b, c, d)  
+    
+    print("check 4")
     # Send to robot
-    group.send_command(cmd)
+    #group.send_command(cmd)
 
 
 if enable_logging:
