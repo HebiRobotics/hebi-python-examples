@@ -149,8 +149,8 @@ class Arm():
         # Note flow overrides any velocities or accelerations passed
         """
         EX:
-            3dof arm
-            position = [[angle1, angle2, angle3], [angle4, angle5, angle6]]
+            3dof arm with a 2 point trajectory
+            position = [[pos1, pos2, pos3], [pos4, pos5, pos6]]
             durration = [time1, time2]
             velocity = [[vel1, vel2, vel3], [vel4, vel5, vel6]]
             accel = [[accel1, accel2, accel3], [accel4, accel5, accel6]]
