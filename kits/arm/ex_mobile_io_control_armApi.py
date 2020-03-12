@@ -15,7 +15,7 @@ a = arm.Arm(p)
 # Set up our mobile io interface
 print('Waiting for Mobile IO device to come online...')
 phone_family = "HEBI"
-phone_name = "Cal's iPhone"
+phone_name = "Mobile IO"
 m = mbio.MobileIO(phone_family, phone_name)
 state = m.getState()
 

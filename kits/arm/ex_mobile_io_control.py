@@ -25,7 +25,7 @@ first_run = True
 
 # Mobile device setup
 phone_family = 'HEBI'
-phone_name = "Cal's iPhone"
+phone_name = "Mobile IO"
 
 quit_demo_button = 7
 

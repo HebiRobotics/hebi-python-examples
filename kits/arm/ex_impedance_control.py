@@ -21,7 +21,7 @@ import mobile_io as mbio
 
 
 # set up our mobile io interface
-m = mbio.MobileIO("HEBI", "Phone Name")
+m = mbio.MobileIO("HEBI", "Mobiel IO")
 state = m.getState()
 m.setButtonMode(1, 0)
 m.setButtonMode(2, 1)

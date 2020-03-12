@@ -30,7 +30,7 @@ enable_ar_smoothing = False
 
 # Mobile device setup
 phone_family = 'HEBI'
-phone_name = "Cal's iPhone"
+phone_name = "Mobile IO"
 
 control_mode_toggle = 0
 quit_demo_button = 7
