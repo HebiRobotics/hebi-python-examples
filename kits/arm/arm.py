@@ -53,7 +53,7 @@ class Arm():
         self.accel_cmd = np.zeros(self.grp.size)
         self.eff_cmd = np.zeros(self.grp.size)
         
-        # Setup gravity vector
+        # Setup gravity vector for grav comp
         self.gravity_vec = [0, 0, 1]
         gravity_from_quaternion(self.fbk.orientation[0], output=self.gravity_vec)
         self.gravity_vec = np.array(self.gravity_vec)
@@ -74,7 +74,7 @@ class Arm():
         try:
             self.cmd.read_gains(gains_file)
             if not self.grp.send_command_with_acknowledgement(self.cmd):
-              raise RuntimeError('Did not receive ack from group.')
+                raise RuntimeError('Did not receive ack from group.')
             print('Successfully read gains from file and sent to module.')
         except Exception as e:
             print('Problem reading gains from file or sending to module: {0}'.format(e))
@@ -141,6 +141,21 @@ class Arm():
     
     def createGoal(self, position, durration=None, velocity=None, accel=None, flow=None):
         # Create trajectory to target position
+        # Position should be an array of positions
+        # Durration should be an array of durrations (if passed)
+        # Velocity should be an array of joint velocities of the same length as the amount of positions (if passed)
+        # Accel should be an array of joint accelerations of the same length as the amount of positions (if passed)
+        # Flow ahould be an array of True/False of the same length as the amount of positions (if passed)
+        # Note flow overrides any velocities or accelerations passed
+        """
+        EX:
+            3dof arm
+            position = [[angle1, angle2, angle3], [angle4, angle5, angle6]]
+            durration = [time1, time2]
+            velocity = [[vel1, vel2, vel3], [vel4, vel5, vel6]]
+            accel = [[accel1, accel2, accel3], [accel4, accel5, accel6]]
+            flow = [bool1, bool2]
+        """
         self.at_goal = False
         
         if self.goal == "grav comp":
@@ -177,6 +192,7 @@ class Arm():
     
     def setGoal(self, goal=None):
         # If no goal is passed we use the last goal created by createGoal, otherwise set trajectory given and zero times
+        # Goal passed should be a trajectory not a target
         if goal == None:
             self.trajectory = self.trajectory_plan
         else:
