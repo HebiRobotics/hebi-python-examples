@@ -20,7 +20,7 @@ from matplotlib import pyplot as plt
 import mobile_io as mbio
 
 
-m = mbio.MobileIO("HEBI", "Phone Name")
+m = mbio.MobileIO("HEBI", "Mobiel IO")
 state = m.getState()
 
 
