@@ -12,17 +12,20 @@ sys.path = [root_path] + sys.path
 # ------------------------------------------------------------------------------
 
 
-from util.input import listen_for_escape_key, has_esc_been_pressed
 from util.math_utils import get_grav_comp_efforts
 from util.arm import setup_arm_params
 
+from matplotlib import pyplot as plt
 
-# Listens for `ESC` being pressed
-listen_for_escape_key()
+import mobile_io as mbio
 
 
-arm_name = '6-DoF + gripper'
-arm_family = 'Arm'
+m = mbio.MobileIO("HEBI", "Mobiel IO")
+state = m.getState()
+
+
+arm_name = '6-DoF'
+arm_family = 'Example Arm'
 # If you attach a gas spring to the shoulder for extra payload, set this to True
 has_gas_spring = False
 
@@ -36,16 +39,20 @@ enable_logging = True
 
 # Start background logging 
 if enable_logging:
-  log_file_dir = group.start_log('dir', os.path.join(local_dir, 'logs'), mkdirs=True)
+  group.start_log('dir', 'logs', mkdirs=True)
+  
 
 # Gravity compensated mode
 cmd = hebi.GroupCommand(group.size)
 fbk = hebi.GroupFeedback(group.size)
 
 print('Commanded gravity-compensated zero torques to the arm.')
-print('Press ESC to stop.')
+print('Press b1 to stop.')
 
-while not has_esc_been_pressed():
+while not state[0][0] == 1:
+  # update mobile io state
+  state = m.getState()
+    
   # Gather sensor data from the arm
   group.get_next_feedback(reuse_fbk=fbk)
 
@@ -61,13 +68,43 @@ while not has_esc_been_pressed():
 
 
 if enable_logging:
-  hebi_log = group.stop_log()
-
-  # Plot tracking / error from the joints in the arm.  Note that there
-  # will not by any 'error' in tracking for position and velocity, since
-  # this example only commands effort.
-  hebi.util.plot_logs(hebi_log, 'position')
-  hebi.util.plot_logs(hebi_log, 'velocity')
-  hebi.util.plot_logs(hebi_log, 'effort')
-
-  # Put more plotting code here
+    hebi_log = group.stop_log()
+    
+    # Plot tracking / error from the joints in the arm.
+    time = []
+    position = []
+    velocity = []
+    effort = []
+    # iterate through log
+    for entry in hebi_log.feedback_iterate:
+        time.append(entry.transmit_time)
+        position.append(entry.position)
+        velocity.append(entry.velocity)
+        effort.append(entry.effort)
+    
+    
+    # Offline Visualization
+    # Plot the logged position feedback
+    plt.figure(101)
+    plt.plot(time, position)
+    plt.title('Position')
+    plt.xlabel('time (sec)')
+    plt.ylabel('position (rad)')
+    plt.grid(True)
+    
+    # Plot the logged velocity feedback
+    plt.figure(102)
+    plt.plot(time, velocity)
+    plt.title('Velocity')
+    plt.xlabel('time (sec)')
+    plt.ylabel('velocity (rad/sec)')
+    plt.grid(True)
+    
+    # Plot the logged effort feedback
+    plt.figure(103)
+    plt.plot(time, effort)
+    plt.title('Effort')
+    plt.xlabel('time (sec)')
+    plt.ylabel('effort (N*m)')
+    plt.grid(True)
+    # Put more plotting code here

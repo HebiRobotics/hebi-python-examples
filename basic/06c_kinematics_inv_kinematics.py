@@ -9,7 +9,7 @@ lookup = hebi.Lookup()
 sleep(2.0)
 
 family_name = "Test Family"
-module_names = ["Base", "Shoulder", "Elbow"]
+module_names = ["J1_base", "J2_shoulder", "J3_elbow"]
 
 group = lookup.get_group_from_names([family_name], module_names)
 
