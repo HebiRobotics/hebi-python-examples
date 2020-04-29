@@ -13,7 +13,6 @@ sys.path = [root_path] + sys.path
 
 
 from hebi.robot_model import endeffector_position_objective
-
 import arm
 import mobile_io as mbio
 

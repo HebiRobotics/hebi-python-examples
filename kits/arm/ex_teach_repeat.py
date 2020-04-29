@@ -3,6 +3,7 @@
 import os
 import sys
 
+
 # ------------------------------------------------------------------------------
 # Add the root folder of the repository to the search path for modules
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -12,13 +13,9 @@ sys.path = [root_path] + sys.path
 
 import numpy as np
 import hebi
-
 from time import time
-
 from components import arm_container
 from components import trajectory_time_heuristic
-
-#from util.input.keyboard import getch
 import mobile_io  as mbio
 
 
@@ -32,7 +29,7 @@ class Waypoint(object):
   @property
   def position(self):
     return self._position
-  
+
   @property
   def velocity(self):
     return self._velocity
@@ -40,7 +37,7 @@ class Waypoint(object):
   @property
   def acceleration(self):
     return self._acceleration
-  
+
 
 class State(object):
 
@@ -60,7 +57,7 @@ class State(object):
   @property
   def mode(self):
     return self._mode
-  
+
   @property
   def arm(self):
     return self._arm
@@ -68,7 +65,7 @@ class State(object):
   @property
   def current_position(self):
     return self._current_position
-  
+
   @property
   def number_of_waypoints(self):
     return len(self._waypoints)

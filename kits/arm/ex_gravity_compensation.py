@@ -14,9 +14,7 @@ sys.path = [root_path] + sys.path
 
 from util.math_utils import get_grav_comp_efforts
 from util.arm import setup_arm_params
-
 from matplotlib import pyplot as plt
-
 import mobile_io as mbio
 
 

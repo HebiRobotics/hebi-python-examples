@@ -17,7 +17,6 @@ from util.math_utils import get_grav_comp_efforts
 from util.arm import setup_arm_params
 from time import sleep, time
 from util import math_utils
-
 import mobile_io as mbio
 
 run_mode = "points"

@@ -20,7 +20,6 @@ from util.arm import setup_arm_params
 from time import sleep, perf_counter, time
 from util import math_utils
 from matplotlib import pyplot as plt
-
 import mobile_io as mbio
 
 
