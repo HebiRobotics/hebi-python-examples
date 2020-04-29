@@ -1,9 +1,13 @@
+#!/usr/bin/env python3
+
 import os
 import sys
 
+# ------------------------------------------------------------------------------
 # Add the root folder of the repository to the search path for modules
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path = [root_path] + sys.path
+# ------------------------------------------------------------------------------
 
 
 import numpy as np
@@ -191,14 +195,11 @@ def run():
 
   print_and_cr("Press 'b2' to add waypoint ('b3' for stopping at this waypoint), 'b4' to clear waypoints, 'b5' to playback, and 'b1' to quit.")
   print_and_cr("When in playback mode, 'b6' resumes training, and 'b1' quits.")
-  
-  
+
   m = mbio.MobileIO("HEBI", "Mobile IO")
-  
   res = m.getState()
-  
+
   while res[0][0] != 1:
-    #print_and_cr('')
     state.lock()
 
     current_mode = state.mode
@@ -223,7 +224,7 @@ def run():
 
     state.unlock()
     res = m.getState()
-  
+
   m.setLedColor("red")
   state._quit = True
   print_and_cr('')

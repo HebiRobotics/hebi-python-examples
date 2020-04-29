@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import hebi
 from time import sleep, time
 from matplotlib import pyplot as plt
@@ -45,3 +47,4 @@ while current_time < end_time:
   plt.pause(0.00001)
 
   current_time = time()
+  

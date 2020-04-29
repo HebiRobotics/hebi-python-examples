@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import hebi
 from time import sleep, time
 from matplotlib import pyplot as plt
@@ -48,7 +50,7 @@ while current_time < end_time:
         sliders[i] = fbk.io.a.get_int(i+1)
     elif fbk.io.a.has_float(i+1):
         sliders[i] = fbk.io.a.get_float(i+1)
-  
+
   plt.clf()
   plt.figure(101)
   plt.ylim([-1, 1])
@@ -67,9 +69,6 @@ while current_time < end_time:
   plt.ylabel('velocity (rad/sec)')
   plt.bar(x2_ticks, gyro)
   plt.grid(True)
-  
+
   plt.pause(0.01)
 print('All done!')
-
-
-

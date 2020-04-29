@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import hebi
 from time import sleep
 
@@ -14,6 +16,3 @@ print('  The listing above should show the information for all the modules')
 print('  on the local network. If this is empty make sure that the modules')
 print('  are connected, powered on, and that the status LEDs are displaying')
 print('  a green soft-fade.')
-
-
-

@@ -1,4 +1,5 @@
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
+
 import hebi
 from time import sleep, time, perf_counter
 import numpy as np

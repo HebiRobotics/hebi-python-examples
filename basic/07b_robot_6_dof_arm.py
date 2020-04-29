@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import hebi
 from math import pi
 from time import sleep, time

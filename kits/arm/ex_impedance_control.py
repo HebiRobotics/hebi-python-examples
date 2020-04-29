@@ -21,14 +21,13 @@ import mobile_io as mbio
 
 
 # set up our mobile io interface
-m = mbio.MobileIO("HEBI", "Mobiel IO")
+m = mbio.MobileIO("HEBI", "mobileIO")
 state = m.getState()
 m.setButtonMode(1, 0)
 m.setButtonMode(2, 1)
 
-
-arm_name = '6-DoF + gripper'
 arm_family = 'Example Arm'
+arm_name   = '6-DoF + gripper'
 # If you attach a gas spring to the shoulder for extra payload, set this to True
 has_gas_spring = False
 
@@ -176,50 +175,46 @@ while not state[0][0] == 1:
     controller_on = True
   else:
     controller_on = False
-    
-
-
 
 m.setLedColor("red")
 
 if enable_logging:
-    hebi_log = group.stop_log()
-    
-    # Plot tracking / error from the joints in the arm.  
-    time = []
-    position = []
-    velocity = []
-    effort = []
-    # iterate through log
-    for entry in hebi_log.feedback_iterate:
-        time.append(entry.transmit_time)
-        position.append(entry.position)
-        velocity.append(entry.velocity)
-        effort.append(entry.effort)
-    
-    
-    # Offline Visualization
-    # Plot the logged position feedback
-    plt.figure(101)
-    plt.plot(time, position)
-    plt.title('Position')
-    plt.xlabel('time (sec)')
-    plt.ylabel('position (rad)')
-    plt.grid(True)
-    
-    # Plot the logged velocity feedback
-    plt.figure(102)
-    plt.plot(time, velocity)
-    plt.title('Velocity')
-    plt.xlabel('time (sec)')
-    plt.ylabel('velocity (rad/sec)')
-    plt.grid(True)
-    
-    # Plot the logged effort feedback
-    plt.figure(103)
-    plt.plot(time, effort)
-    plt.title('Effort')
-    plt.xlabel('time (sec)')
-    plt.ylabel('effort (N*m)')
-    plt.grid(True)
-    # Put more plotting code here
+  hebi_log = group.stop_log()
+
+  # Plot tracking / error from the joints in the arm.  
+  time = []
+  position = []
+  velocity = []
+  effort = []
+  # iterate through log
+  for entry in hebi_log.feedback_iterate:
+    time.append(entry.transmit_time)
+    position.append(entry.position)
+    velocity.append(entry.velocity)
+    effort.append(entry.effort)
+
+  # Offline Visualization
+  # Plot the logged position feedback
+  plt.figure(101)
+  plt.plot(time, position)
+  plt.title('Position')
+  plt.xlabel('time (sec)')
+  plt.ylabel('position (rad)')
+  plt.grid(True)
+
+  # Plot the logged velocity feedback
+  plt.figure(102)
+  plt.plot(time, velocity)
+  plt.title('Velocity')
+  plt.xlabel('time (sec)')
+  plt.ylabel('velocity (rad/sec)')
+  plt.grid(True)
+
+  # Plot the logged effort feedback
+  plt.figure(103)
+  plt.plot(time, effort)
+  plt.title('Effort')
+  plt.xlabel('time (sec)')
+  plt.ylabel('effort (N*m)')
+  plt.grid(True)
+  # Put more plotting code here
