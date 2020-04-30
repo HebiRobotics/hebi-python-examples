@@ -14,8 +14,10 @@ sys.path = [root_path] + sys.path
 from util import math_utils
 
 
-# A helper function to create a group from named modules, and set specified gains on the modules in that group.
 def get_group():
+  """
+  Helper function to create a group from named modules, and set specified gains on the modules in that group.
+  """
   families = ['Example Arm']
   names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
   lookup = hebi.Lookup()
@@ -38,9 +40,10 @@ def get_group():
   return group
 
 
-# A helper function to actually execute the trajectory on a group of modules
 def execute_trajectory(group, model, trajectory, feedback):
-  # Set up command object, timing variables, and other necessary variables
+  """
+  Helper function to actually execute the trajectory on a group of modules
+  """
   num_joints = group.size
   command = hebi.GroupCommand(num_joints)
   duration = trajectory.duration
@@ -85,7 +88,7 @@ except Exception as e:
 
 # Go to the XYZ positions at four corners of the box, and create a rotation matrix
 # that has the end effector point straight forward.
-xyz_targets = np.array([[0.20, 0.40, 0.40, 0.20, ], [0.30, 0.30, -0.30, -0.30, ], [0.10, 0.10, 0.10, 0.10]])
+xyz_targets = np.array([[0.20, 0.40, 0.40, 0.20], [0.30, 0.30, -0.30, -0.30], [0.10, 0.10, 0.10, 0.10]])
 xyz_cols = xyz_targets.shape[1]
 rotation_target = math_utils.rotate_y(pi/2)
 
@@ -113,13 +116,7 @@ waypoints = np.empty((group.size, 2))
 group.get_next_feedback(reuse_fbk=feedback)
 waypoints[:, 0] = feedback.position
 waypoints[:, 1] = joint_targets[:, 0]
-print("joint targets")
-print(joint_targets)
-print("jt 2")
-print(joint_targets[:, 0])
 time_vector = [0, 5]  # Seconds for the motion - do this slowly
-print("waypoints")
-print(waypoints)
 trajectory = hebi.trajectory.create_trajectory(time_vector, waypoints)
 
 # Call helper function to execute this motion on the robot
@@ -142,11 +139,10 @@ velocity = []
 effort = []
 # iterate through log
 for entry in log_file.feedback_iterate:
-    time.append(entry.transmit_time)
-    position.append(entry.position)
-    velocity.append(entry.velocity)
-    effort.append(entry.effort)
-
+  time.append(entry.transmit_time)
+  position.append(entry.position)
+  velocity.append(entry.velocity)
+  effort.append(entry.effort)
 
 # Offline Visualization
 # Plot the logged position feedback
@@ -172,4 +168,3 @@ plt.title('Effort')
 plt.xlabel('time (sec)')
 plt.ylabel('effort (N*m)')
 plt.grid(True)
-
