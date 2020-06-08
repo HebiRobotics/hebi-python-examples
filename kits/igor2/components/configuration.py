@@ -195,13 +195,13 @@ class Igor2Config(object):
   """
 
   def __init__(self, imitation=False):
-    self.__module_names = ['wheel1', 'wheel2',
-                           'hip1', 'knee1',
-                           'hip2', 'knee2',
-                           'base1', 'shoulder1', 'elbow1', 'wrist1',
-                           'base2', 'shoulder2', 'elbow2', 'wrist2',
+    self.__module_names = ['L1_J3_wheel', 'L2_J3_wheel',
+                           'L1_J1_hip', 'L1_J2_knee',
+                           'L2_J1_hip', 'L2_J2_knee',
+                           'A1_J1_base', 'A1_J2_shoulder', 'A1_J3_elbow', 'A1_J4_wrist',
+                           'A2_J1_base', 'A2_J2_shoulder', 'A2_J3_elbow', 'A2_J4_wrist',
                            'camTilt']
-    self.__family = 'Igor II'
+    self.__family = 'Igor'
     resource_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'resources'))
     self.__default_gains = os.path.join(resource_path, 'igorGains.xml')
     self.__default_gains_no_cam = os.path.join(resource_path, 'igorGains_noCamera.xml')

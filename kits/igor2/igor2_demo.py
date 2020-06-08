@@ -36,10 +36,10 @@ has_io = not args.joystick
 if has_io:
   if not has_io_fam:
     # Mobile IO default family
-    io_fam = 'HEBI'
+    io_fam = 'Igor'
   if not has_io_name:
     # Mobile IO default name
-    io_name = 'Mobile IO'
+    io_name = 'mobileIO'
 
 from components.configuration import Igor2Config
 igor_config = Igor2Config(args.imitation)
