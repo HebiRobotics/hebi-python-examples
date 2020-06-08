@@ -11,7 +11,7 @@ USER_HOME_DIR=/home/$DEMO_USER
 # make sure current working directory is where this script resides and hide output
 pushd $(readlink -f $(dirname $0)) >/dev/null 2>&1
 
-cp hebi-demo.service /usr/lib/systemd/system/
+cp hebi-demo.service /etc/systemd/system/
 # Reload all service files (scanning for new ones as well)
 systemctl daemon-reload
 # Check that systemd found the service
