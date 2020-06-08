@@ -22,9 +22,9 @@ Simply run the `igor2_demo.py` file located at `kits/igor2`. You can run this in
 python3 igor2_demo.py
 ```
 
-Both Python 2 and 3 are supported, but note that Python 2 upstream will become [unsupported 1 Jan 2020.](https://pythonclock.org/).
+Both Python 2 and 3 are supported, but note that Python 2 upstream is end of life.
 
-**Note:** By default, the demo will look for a Mobile IO device with family `HEBI` and name `Mobile IO`. You must provide `--joystick` if you want to control Igor using a USB gamecontroller.
+**Note:** By default, the demo will look for a Mobile IO device with family `Igor` and name `Mobile IO`. You must provide `--joystick` if you want to control Igor using a USB gamecontroller.
 
 ## Controls
 

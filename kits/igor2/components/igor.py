@@ -365,6 +365,26 @@ class Igor(object):
 
     from time import sleep
 
+    joy = self._joy
+    if joy.controller_type == 'MobileIO':
+      joy_group = joy.group
+      joy_cmd = hebi.GroupCommand(1)
+      joy_cmd.io.a.set_int(3, 0)    # Set to snap
+      joy_cmd.io.a.set_int(6, 0)    # Set to snap
+      joy_cmd.io.e.set_int(3, 1)    # Highlight start button
+      joy_cmd.io.e.set_int(4, 0)    # Don't highlight stop button
+      joy_cmd.io.f.set_float(5, -1) # Gains slider all the way down
+      joy_cmd.led.color = 'blue'
+
+      success = False
+      for _ in range(10):
+        success = joy_group.send_command_with_acknowledgement(joy_cmd)
+        if success:
+          break
+
+      if not success:
+        raise RuntimeError('Could not communicate with Mobile IO device')
+
     if self._num_spins > 0:
       # This is not the first time we have been in the idle state. We will clear
       # the state of the body objects before beginning the loop below.
@@ -392,6 +412,23 @@ class Igor(object):
     # Let module control the LED color
     group_command.led.color = 'transparent'
     group.send_command(group_command)
+
+    if joy.controller_type == 'MobileIO':
+      joy_group = joy.group
+      joy_cmd = hebi.GroupCommand(1)
+      joy_cmd.io.e.set_int(3, 0)    # Make button 'b3' not highlight
+      joy_cmd.io.e.set_int(4, 1)    # Make button 'b4' highlight, so we know it quits.
+      joy_cmd.io.f.set_float(5, -1) # Gains slider all the way down
+      joy_cmd.led.color = 'green'
+
+      success = False
+      for _ in range(10):
+        success = joy_group.send_command_with_acknowledgement(joy_cmd)
+        if success:
+          break
+
+      if not success:
+        raise RuntimeError('Could not communicate with Mobile IO device')
 
   def _soft_startup(self):
     """
