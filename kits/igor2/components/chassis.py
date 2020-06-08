@@ -38,6 +38,8 @@ class Chassis(BaseBody):
     self._cmd_chassis_vel_last = 0.0
     self._fbk_chassis_vel_last = 0.0
 
+    self._i_term_adjust = -1.0
+
     self._calculated_lean_angle = 0.0
 
     # ---------------
@@ -130,6 +132,10 @@ class Chassis(BaseBody):
     :param fbk_lean_angle:
     """
     velP = Chassis.Velocity_P
+    # For calibrating Igor (finding the ideal I term for the individual kit), uncomment this out and find a good value from the `a5` slider (Mobile IO only)
+    # BE CAREFUL! adjusting the I term too quickly can cause the balance controller to command a very fast rotation to the wheels,
+    # possibly causing Igor to fall forwards/backwards without anybody to support the kit.
+    #velI = Chassis.Velocity_I * (self._i_term_adjust + 1.0)
     velI = Chassis.Velocity_I
     velD = Chassis.Velocity_D
 
@@ -277,6 +283,10 @@ class Chassis(BaseBody):
     """
     return self._velocities[3:6, 0]
 
+  @property
+  def i_term_adjust(self):
+    return self._i_term_adjust
+
 # ------------------------------------------------------------------------------
 # User Commanded mutators
 # ------------------------------------------------------------------------------
@@ -299,6 +309,11 @@ class Chassis(BaseBody):
     self._user_commanded_yaw_velocity = velocity
     self.release_value_lock()
 
+  def set_i_term_adjustment(self, value):
+    self.acquire_value_lock()
+    self._i_term_adjust = value
+    self.release_value_lock()
+
   def reset_state(self):
     self._user_commanded_directional_velocity = 0.0
     self._user_commanded_yaw_velocity = 0.0
@@ -312,3 +327,4 @@ class Chassis(BaseBody):
     self._cmd_chassis_vel_last = 0.0
     self._fbk_chassis_vel_last = 0.0
     self._calculated_lean_angle = 0.0
+    self._i_term_adjust = -1.0

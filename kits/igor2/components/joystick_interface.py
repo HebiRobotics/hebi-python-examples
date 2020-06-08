@@ -151,6 +151,10 @@ def chassis_yaw_event(igor, vel_calc, ts, value):
   igor.chassis.set_yaw_velocity(vel_calc(value))
 
 
+def chassis_i_term_event(igor, ts, value):
+  igor.chassis.set_i_term_adjustment(value)
+
+
 # ------------------------------------------------------------------------------
 # Misc Event Handlers
 # ------------------------------------------------------------------------------
@@ -258,6 +262,10 @@ def _add_event_handlers(igor, controller, controller_mapping):
 
   controller.add_axis_event_handler(controller_mapping.chassis_vel, bind_to_method(chassis_velocity_event, igor, chassis_vel_calc))
   controller.add_axis_event_handler(controller_mapping.chassis_yaw, bind_to_method(chassis_yaw_event, igor, chassis_yaw_calc))
+
+  # Only set for Mobile IO
+  if controller_mapping.i_term_adjust is not None:
+    controller.add_axis_event_handler(controller_mapping.i_term_adjust, bind_to_method(chassis_i_term_event, igor))
 
   controller.add_button_event_handler(controller_mapping.soft_shutdown, bind_to_method(soft_shutdown_event, igor, igor_state))
 
