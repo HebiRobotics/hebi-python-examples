@@ -75,11 +75,11 @@ class IgorControllerMapping(object):
   __slots__ = ('_arm_vel_x', '_arm_vel_y', '_stance_height', '_wrist_vel',
     '_chassis_yaw', '_chassis_vel', '_exit_idle_modle', '_quit', '_balance_controller_toggle',
     '_soft_shutdown', '_lower_arm', '_raise_arm', '_stance_height_control_strategy', 
-    '_wrist_velocity_control_strategy')
+    '_wrist_velocity_control_strategy', '_i_term_adjust')
 
   def __init__(self, arm_vel_x, arm_vel_y, stance_height, wrist_vel, chassis_yaw,
     chassis_vel, exit_idle_modle, quit, balance_controller_toggle, soft_shutdown,
-    lower_arm, raise_arm, stance_height_control_strategy, wrist_velocity_control_strategy):
+    lower_arm, raise_arm, stance_height_control_strategy, wrist_velocity_control_strategy, i_term_adjust=None):
 
     self._arm_vel_x = arm_vel_x
     self._arm_vel_y = arm_vel_y
@@ -113,6 +113,7 @@ class IgorControllerMapping(object):
   
     self._wrist_velocity_control_strategy = wrist_velocity_control_strategy
     self._stance_height_control_strategy = stance_height_control_strategy
+    self._i_term_adjust = i_term_adjust
 
   @property
   def arm_vel_x(self):
@@ -170,9 +171,13 @@ class IgorControllerMapping(object):
   def wrist_velocity_control_strategy(self):
     return self._wrist_velocity_control_strategy
 
+  @property
+  def i_term_adjust(self):
+    return self._i_term_adjust
+
 
 _default_joystick_mapping = IgorControllerMapping('LEFT_STICK_Y', 'LEFT_STICK_X', ('L2', 'R2'), ('DPAD_DOWN', 'DPAD_UP'), 'RIGHT_STICK_X', 'RIGHT_STICK_Y', 'L3', 'SHARE', 'TOUCHPAD', 'OPTIONS', 'L1', 'R1', 'TRIGGERS', 'BUTTONS')
-_default_mobile_io_mapping = IgorControllerMapping('a2', 'a1', 'a3', 'a6', 'a7', 'a8', 'b3', 'b1', 'b2', 'b4', 'b8', 'b6', 'SLIDER', 'SLIDER')
+_default_mobile_io_mapping = IgorControllerMapping('a2', 'a1', 'a3', 'a6', 'a7', 'a8', 'b3', 'b1', 'b2', 'b4', 'b8', 'b6', 'SLIDER', 'SLIDER', 'a5')
 
 
 # ------------------------------------------------------------------------------
