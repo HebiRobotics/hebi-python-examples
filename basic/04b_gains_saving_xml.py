@@ -14,8 +14,7 @@ module_name = "Test Actuator"
 group = lookup.get_group_from_names([family_name], [module_name])
 
 if group is None:
-  print('Group not found! Check that the family and name of a module on the network')
-  print('matches what is given in the source file.')
+  print('Group not found: Did you forget to set the module family and name above?')
   exit(1)
 
 # Get the gains that are currently active on the actuator and save them

@@ -11,3 +11,5 @@ __pycache__/
 
 # Ignore hebilog files
 *.hebilog
+
+**/logs

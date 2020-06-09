@@ -9,7 +9,7 @@ lookup = hebi.Lookup()
 sleep(2.0)
 
 family_name = "HEBI" 
-module_names = ["Mobile IO", "Mobile IO 2", "Actuator 1"]
+module_names = ["mobileIO", "Actuator 1"]
 
 group = lookup.get_group_from_names([family_name], module_names)
 
