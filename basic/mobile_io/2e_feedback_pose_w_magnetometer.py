@@ -91,18 +91,5 @@ while current_time < end_time:
   plt.pause(0.01)
 print('All done!')
 
-log = group.stop_log()
-
-time = []
-position = []
-# iterate through log
-for entry in log.feedback_iterate:
-    time.append(entry.transmit_time[0])
-    position.append(entry.ar_position[0])
-
-plt.figure(101)
-plt.plot(time, position)
-plt.title('Position')
-plt.xlabel('time (sec)')
-plt.ylabel('position (xyz)')
-plt.grid(True)
+log_file = group.stop_log()
+hebi.util.plot_logs(log_file, 'position', figure_spec=101)

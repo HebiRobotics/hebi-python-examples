@@ -76,5 +76,5 @@ while current_time < end_time:
   ax.plot3D((rot_mat @ z)[0, :], (rot_mat @ z)[1, :], (rot_mat @ z)[2, :])
   
   plt.pause(0.01)
-print('All done!')
 
+print('All done!')

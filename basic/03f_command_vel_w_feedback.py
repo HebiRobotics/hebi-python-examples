@@ -43,30 +43,5 @@ while t < duration:
 # Stop logging. `log_file` contains the contents of the file
 log_file = group.stop_log()
 
-time = []
-velocity = []
-gyroZ = []
-# iterate through log
-for entry in log_file.feedback_iterate:
-    time.append(entry.transmit_time)
-    velocity.append(entry.velocity)
-    gyroZ.append(entry.gyro[0][2])
-
-
-# Offline Visualization
-# Plot the logged velocity feedback
-plt.figure(101)
-plt.plot(time, velocity)
-plt.title('Velocity')
-plt.xlabel('time (sec)')
-plt.ylabel('velocity (rad/sec)')
-plt.grid(True)
-
-# Plot the logged position feedback
-plt.figure(102)
-plt.plot(time, gyroZ)
-plt.title('GyroZ')
-plt.xlabel('time (sec)')
-plt.ylabel('velocity (rad/sec)')
-plt.grid(True)
-
+hebi.util.plot_logs(log_file, 'velocity', figure_spec=101)
+#hebi.util.plot_logs(log_file, 'gyro', figure_spec=102)

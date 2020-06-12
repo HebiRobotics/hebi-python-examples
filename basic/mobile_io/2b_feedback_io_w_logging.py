@@ -57,6 +57,5 @@ while current_time < end_time:
   plt.bar(x_ticks, buttons)
   plt.bar(x_ticks, sliders)   
   plt.pause(0.00001)
+
 print('All done!')
-
-

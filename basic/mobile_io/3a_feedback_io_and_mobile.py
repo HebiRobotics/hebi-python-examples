@@ -71,4 +71,5 @@ while current_time < end_time:
   plt.grid(True)
 
   plt.pause(0.01)
+
 print('All done!')

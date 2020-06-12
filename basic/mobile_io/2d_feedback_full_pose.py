@@ -89,4 +89,5 @@ while current_time < end_time:
   ax.plot3D(z_lineX, z_lineY, z_lineZ)
 
   plt.pause(0.01)
+
 print('All done!')
