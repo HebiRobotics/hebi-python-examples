@@ -15,8 +15,7 @@ module_name = "Test Actuator"
 group = lookup.get_group_from_names([family_name], [module_name])
 
 if group is None:
-  print('Group not found! Check that the family and name of a module on the network')
-  print('matches what is given in the source file.')
+  print('Group not found: Did you forget to set the module family and name above?')
   exit(1)
 
 group_command  = hebi.GroupCommand(group.size)
@@ -27,7 +26,7 @@ group.start_log('logs', mkdirs=True)
 
 freq_hz = 0.5                 # [Hz]
 freq    = freq_hz * 2.0 * pi  # [rad / sec]
-amp     = 1.0                 # [rad] (45 degrees)
+amp     = 1.0                 # [rad]
 
 duration = 10.0               # [sec]
 start = time()

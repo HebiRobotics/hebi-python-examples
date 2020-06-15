@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import hebi
 from math import pi
 from time import sleep, time
@@ -14,7 +16,7 @@ from util import math_utils
 # A helper function to create a group from named modules, and set specified gains on the modules in that group.
 def get_group():
   families = ['Test Family']
-  names = ["Base", "Shoulder", "Elbow"]
+  names = ["J1_base", "J2_shoulder", "J3_elbow"]
   lookup = hebi.Lookup()
   sleep(2.0)
   group = lookup.get_group_from_names(families, names)
@@ -116,7 +118,7 @@ time_vector[1] = 3.0  # seconds for the move - do this a little bit more quickly
 for col in range(xyz_cols - 1):
   waypoints[:, 0] = joint_targets[:, col]
   waypoints[:, 1] = joint_targets[:, col + 1]
-  trajectory = hebi.trajectory.create_trajectory(time, waypoints)
+  trajectory = hebi.trajectory.create_trajectory(time_vector, waypoints)
   execute_trajectory(group, model, trajectory, feedback)
 
 # Stop logging

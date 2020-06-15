@@ -6,7 +6,7 @@ This repository contains examples to go with the [online documentation](http://d
 
 All examples require the `hebi-py` pip package in order to run. You can install it through pip (_i.e._, `pip install hebi-py`).
 
-It is expected that you have a `hebi-py` version of at least `2.1.0` for this repo.
+It is expected that you have a `hebi-py` version of at least `2.2.0` for this repo.
 
 **Note that this revision does not support Python 2!**
 

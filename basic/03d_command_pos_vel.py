@@ -3,6 +3,7 @@
 import hebi
 from math import cos, pi, sin
 from time import sleep, time
+from matplotlib import pyplot as plt
 
 lookup = hebi.Lookup()
 
@@ -15,8 +16,7 @@ module_name = "Test Actuator"
 group = lookup.get_group_from_names([family_name], [module_name])
 
 if group is None:
-  print('Group not found! Check that the family and name of a module on the network')
-  print('matches what is given in the source file.')
+  print('Group not found: Did you forget to set the module family and name above?')
   exit(1)
 
 group_command  = hebi.GroupCommand(group.size)
@@ -29,7 +29,7 @@ freq_hz = 0.5                 # [Hz]
 freq    = freq_hz * 2.0 * pi  # [rad / sec]
 amp     = pi * 0.25           # [rad] (45 degrees)
 
-duration = 10.0               # [sec]
+duration = 4              # [sec]
 start = time()
 t = time() - start
 
@@ -47,5 +47,6 @@ while t < duration:
 
 # Stop logging. `log_file` contains the contents of the file
 log_file = group.stop_log()
-hebi.util.plot_logs(log_file, 'position', figure_spec=101)
-hebi.util.plot_logs(log_file, 'velocity', figure_spec=102)
+
+hebi.util.plot_logs(log_file, 'position')
+hebi.util.plot_logs(log_file, 'velocity')

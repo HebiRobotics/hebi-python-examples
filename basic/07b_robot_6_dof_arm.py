@@ -1,7 +1,10 @@
+#!/usr/bin/env python3
+
 import hebi
 from math import pi
 from time import sleep, time
 import numpy as np
+from matplotlib import pyplot as plt
 
 
 # Add the root folder of the repository to the search path for modules
@@ -11,10 +14,12 @@ sys.path = [root_path] + sys.path
 from util import math_utils
 
 
-# A helper function to create a group from named modules, and set specified gains on the modules in that group.
 def get_group():
+  """
+  Helper function to create a group from named modules, and set specified gains on the modules in that group.
+  """
   families = ['Test Family']
-  names = ['Base', 'Shoulder', 'Elbow', 'Wrist1', 'Wrist2', 'Wrist3']
+  names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
   lookup = hebi.Lookup()
   sleep(2.0)
   group = lookup.get_group_from_names(families, names)
@@ -35,9 +40,10 @@ def get_group():
   return group
 
 
-# A helper function to actually execute the trajectory on a group of modules
 def execute_trajectory(group, model, trajectory, feedback):
-  # Set up command object, timing variables, and other necessary variables
+  """
+  Helper function to actually execute the trajectory on a group of modules
+  """
   num_joints = group.size
   command = hebi.GroupCommand(num_joints)
   duration = trajectory.duration
@@ -82,9 +88,9 @@ except Exception as e:
 
 # Go to the XYZ positions at four corners of the box, and create a rotation matrix
 # that has the end effector point straight forward.
-xyz_targets = np.array([[0.20, 0.40, 0.40, 0.20, ], [0.30, 0.30, -0.30, -0.30, ], [0.10, 0.10, 0.10, 0.10]])
+xyz_targets = np.array([[0.20, 0.40, 0.40, 0.20], [0.30, 0.30, -0.30, -0.30], [0.10, 0.10, 0.10, 0.10]])
 xyz_cols = xyz_targets.shape[1]
-rotation_target = math_utils.rotate_y(pi / 2.0)
+rotation_target = math_utils.rotate_y(pi/2)
 
 # Convert these to joint angle waypoints using IK solutions for each of the xyz locations
 # as well as the desired orientation of the end effector. Copy the initial waypoint at the end so we close the square.
@@ -98,6 +104,7 @@ for col in range(xyz_cols):
   ee_position_objective = hebi.robot_model.endeffector_position_objective(xyz_targets[:, col])
   ik_res_angles = model.solve_inverse_kinematics(elbow_up_angles, so3_objective, ee_position_objective)
   joint_targets[:, col] = ik_res_angles
+  elbow_up_angles = ik_res_angles # reset seed after each loop
 joint_targets[:, xyz_cols] = joint_targets[:, 0]
 
 # Set up feedback object, and start logging

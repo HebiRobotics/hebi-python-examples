@@ -1,20 +1,22 @@
+#!/usr/bin/env python3
+
 import os
 import sys
 
+
+# ------------------------------------------------------------------------------
 # Add the root folder of the repository to the search path for modules
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path = [root_path] + sys.path
+# ------------------------------------------------------------------------------
 
 
 import numpy as np
 import hebi
-
 from time import time
-
 from components import arm_container
 from components import trajectory_time_heuristic
-
-from util.input.keyboard import getch
+import mobile_io  as mbio
 
 
 class Waypoint(object):
@@ -27,7 +29,7 @@ class Waypoint(object):
   @property
   def position(self):
     return self._position
-  
+
   @property
   def velocity(self):
     return self._velocity
@@ -35,7 +37,7 @@ class Waypoint(object):
   @property
   def acceleration(self):
     return self._acceleration
-  
+
 
 class State(object):
 
@@ -55,7 +57,7 @@ class State(object):
   @property
   def mode(self):
     return self._mode
-  
+
   @property
   def arm(self):
     return self._arm
@@ -63,7 +65,7 @@ class State(object):
   @property
   def current_position(self):
     return self._current_position
-  
+
   @property
   def number_of_waypoints(self):
     return len(self._waypoints)
@@ -188,36 +190,39 @@ def run():
                       args=(state,))
   cmd_thread.start()
 
-  print_and_cr("Press 'w' to add waypoint ('s' for stopping at this waypoint), 'c' to clear waypoints, 'p' to playback, and 'q' to quit.")
-  print_and_cr("When in playback mode, 't' resumes training, and 'q' quits.")
+  print_and_cr("Press 'b2' to add waypoint ('b3' for stopping at this waypoint), 'b4' to clear waypoints, 'b5' to playback, and 'b1' to quit.")
+  print_and_cr("When in playback mode, 'b6' resumes training, and 'b1' quits.")
 
-  res = getch()
+  m = mbio.MobileIO("HEBI", "Mobile IO")
+  res = m.getState()
 
-  while res != 'q':
-    print_and_cr('')
+  while res[0][0] != 1:
     state.lock()
 
     current_mode = state.mode
 
     if current_mode == 'training':
-      if res == 'w':
+      m.setLedColor("blue")
+      if res[0][1] == 1:
         add_waypoint(state, False)
-      elif res == 's':
+      elif res[0][2] == 1:
         add_waypoint(state, True)
-      elif res == 'c':
+      elif res[0][3] == 1:
         clear_waypoints(state)
-      elif res == 'p':
+      elif res[0][4] == 1:
         if state.number_of_waypoints > 1:
           state._mode = 'playback'
         else:
           print_and_cr('Need at least two waypoints to enter playback mode!')
     elif current_mode == 'playback':
-      if res == 't':
+      m.setLedColor("green")
+      if res[0][5] == 1:
         state._mode = 'training'
 
     state.unlock()
-    res = getch()
+    res = m.getState()
 
+  m.setLedColor("red")
   state._quit = True
   print_and_cr('')
 

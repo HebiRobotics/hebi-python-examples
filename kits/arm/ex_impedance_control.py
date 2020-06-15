@@ -12,18 +12,20 @@ sys.path = [root_path] + sys.path
 # ------------------------------------------------------------------------------
 
 
-from util.input import listen_for_escape_key, has_esc_been_pressed, listen_for_space_bar, has_space_been_pressed, clear_esc_state, clear_space_state
 from util.math_utils import get_grav_comp_efforts, rot2axisangle
 from util.arm import setup_arm_params
+from matplotlib import pyplot as plt
+import mobile_io as mbio
 
 
-# Listens for `ESC`, `SPACE` being pressed
-listen_for_escape_key()
-listen_for_space_bar()
+# set up our mobile io interface
+m = mbio.MobileIO("HEBI", "mobileIO")
+state = m.getState()
+m.setButtonMode(1, 0)
+m.setButtonMode(2, 1)
 
-
-arm_name = '6-DoF + gripper'
-arm_family = 'Arm'
+arm_family = 'Example Arm'
+arm_name   = '6-DoF + gripper'
 # If you attach a gas spring to the shoulder for extra payload, set this to True
 has_gas_spring = False
 
@@ -48,17 +50,17 @@ enable_logging = True
 
 # Start background logging 
 if enable_logging:
-  log_file_dir = group.start_log('dir', os.path.join(local_dir, 'logs'), mkdirs=True) 
+  group.start_log('dir', 'logs', mkdirs=True)
 
 # Gravity compensated mode
 cmd = hebi.GroupCommand(group.size)
 fbk = hebi.GroupFeedback(group.size)
 
 print('Commanded gravity-compensated zero force to the arm.')
-print('  SPACE - Toggles an impedance controller on/off:')
+print('  b2 - Toggles an impedance controller on/off:')
 print('          ON  - Apply controller based on current position')
 print('          OFF - Go back to gravity-compensated mode')
-print('  ESC - Exits the demo.')
+print('  b1 - Exits the demo.')
 
 gains_in_end_effector_frame = True
 damper_gains = np.asarray([10, 10, 0, .1, .1, .1])
@@ -95,10 +97,13 @@ end_effector_rot_mat = arm_tip_fk[0:3,0:3].copy()
 
 controller_on = False
 
+# while button 1 is not pressed
+while not state[0][0] == 1:
+  # Update button states
+  state = m.getState()
 
-while not has_esc_been_pressed():
   # Gather sensor data from the arm
-  fbk = group.get_next_feedback(reuse_fbk=fbk)
+  group.get_next_feedback(reuse_fbk=fbk)
 
   fbk_position = fbk.position
 
@@ -108,10 +113,18 @@ while not has_esc_been_pressed():
 
   # Calculate required torques to negate gravity at current position
   grav_effort = get_grav_comp_efforts(kin, fbk_position, gravity_vec) + effort_offset
-
+  kin.get_end_effector(fbk_position, output=arm_tip_fk)
+  # If in grav comp mode set led green
+  if not controller_on:
+      m.setLedColor("green")
+      end_effector_XYZ = arm_tip_fk[0:3,3].copy()
+      end_effector_rot_mat = arm_tip_fk[0:3,0:3].copy()
+  
   if controller_on:
+    # If in impedance mode set led blue
+    m.setLedColor("blue")
+    
     # Get Updated Forward Kinematics and Jacobians
-    kin.get_end_effector(fbk_position, output=arm_tip_fk)
     kin.get_jacobian_end_effector(fbk_position, output=J_arm_tip)
 
     # Calculate Impedence Control Wrenches and Appropraite Joint Torque
@@ -123,29 +136,29 @@ while not has_esc_been_pressed():
 
     # Rotational error involves calculating axis-angle from the
     # resulting error in S03 and providing a torque around that axis.
-    error_rot_mat = end_effector_rot_mat * arm_tip_fk[0:3, 0:3].T
+    error_rot_mat = end_effector_rot_mat @ arm_tip_fk[0:3, 0:3].T
     axis, angle = rot2axisangle(error_rot_mat)
     rot_error_vec[:, 0] = angle * axis
 
     if gains_in_end_effector_frame:
-      xyz_error[0:3] = arm_tip_fk[0:3, 0:3].T * xyz_error.reshape((3, 1))
-      rot_error_vec[0:3] = arm_tip_fk[0:3, 0:3].T * rot_error_vec
+      xyz_error[0:3] = arm_tip_fk[0:3, 0:3].T @ xyz_error.reshape((3, 1))
+      rot_error_vec[0:3] = arm_tip_fk[0:3, 0:3].T @ rot_error_vec
 
     pos_error[0:3] = xyz_error.flat
     pos_error[3:6] = rot_error_vec.flat
-    vel_error[0:6] = (J_arm_tip * (arm_cmd_joint_vels - fbk.velocity).T).flat
+    vel_error[0:6] = (J_arm_tip @ (arm_cmd_joint_vels - fbk.velocity).T).flat
 
     # spring_wrench = spring_gains *. pos_error
     spring_wrench[:, 0] = spring_gains * pos_error.flatten()
 
     if gains_in_end_effector_frame:
-      spring_wrench[0:3] = arm_tip_fk[0:3, 0:3] * spring_wrench[0:3]
-      spring_wrench[3:6] = arm_tip_fk[0:3, 0:3] * spring_wrench[3:6]
+      spring_wrench[0:3] = arm_tip_fk[0:3, 0:3] @ spring_wrench[0:3]
+      spring_wrench[3:6] = arm_tip_fk[0:3, 0:3] @ spring_wrench[3:6]
 
     # damper_wrench = damper_gains *. vel_error
     damper_wrench[:, 0] = damper_gains * vel_error.flatten()
 
-    impedance_effort[:, 0] = (J_arm_tip.T * (spring_wrench + damper_wrench)).T
+    impedance_effort[:, 0] = (J_arm_tip.T @ (spring_wrench + damper_wrench)).T
     grav_effort[:] = grav_effort + impedance_effort.flatten()
     cmd.effort = grav_effort
   else:
@@ -155,24 +168,51 @@ while not has_esc_been_pressed():
   group.send_command(cmd)
 
   # See if user requested mode toggle
-  if has_space_been_pressed():
-    # Toggle mode & clear space state
-    controller_on = not controller_on
-    clear_space_state()
+  # If button 2 is pressed set to impedance mode
+  if state[0][1] == 1:
+    controller_on = True
+  else:
+    controller_on = False
 
-    # Update the EE position
-    end_effector_XYZ = arm_tip_fk[0:3,3].copy()
-    end_effector_rot_mat = arm_tip_fk[0:3,0:3].copy()
-
+m.setLedColor("red")
 
 if enable_logging:
   hebi_log = group.stop_log()
 
-  # Plot tracking / error from the joints in the arm. Note that there
-  # will not by any 'error' in tracking for position and velocity, since
-  # this example only commands effort.
-  hebi.util.plot_logs(hebi_log, 'position')
-  hebi.util.plot_logs(hebi_log, 'velocity')
-  hebi.util.plot_logs(hebi_log, 'effort')
+  # Plot tracking / error from the joints in the arm.  
+  time = []
+  position = []
+  velocity = []
+  effort = []
+  # iterate through log
+  for entry in hebi_log.feedback_iterate:
+    time.append(entry.transmit_time)
+    position.append(entry.position)
+    velocity.append(entry.velocity)
+    effort.append(entry.effort)
 
+  # Offline Visualization
+  # Plot the logged position feedback
+  plt.figure(101)
+  plt.plot(time, position)
+  plt.title('Position')
+  plt.xlabel('time (sec)')
+  plt.ylabel('position (rad)')
+  plt.grid(True)
+
+  # Plot the logged velocity feedback
+  plt.figure(102)
+  plt.plot(time, velocity)
+  plt.title('Velocity')
+  plt.xlabel('time (sec)')
+  plt.ylabel('velocity (rad/sec)')
+  plt.grid(True)
+
+  # Plot the logged effort feedback
+  plt.figure(103)
+  plt.plot(time, effort)
+  plt.title('Effort')
+  plt.xlabel('time (sec)')
+  plt.ylabel('effort (N*m)')
+  plt.grid(True)
   # Put more plotting code here

@@ -15,8 +15,7 @@ module_name = "Test Actuator"
 group = lookup.get_group_from_names([family_name], [module_name])
 
 if group is None:
-  print('Group not found! Check that the family and name of a module on the network')
-  print('matches what is given in the source file.')
+  print('Group not found: Did you forget to set the module family and name above?')
   exit(1)
 
 # The command struct has fields for gains in addition to the basic position, velocity, and effort commands.
@@ -29,9 +28,9 @@ group_feedback = hebi.GroupFeedback(group.size)
 group.start_log('logs', mkdirs=True)
 
 # Parameters for step function
-step_period    = 1.0                  # sec
-step_amplitude = pi / 8.0             # rad
-step_duration  = step_period * 4.0    # the 4.0 multiplier gives 2 full cycles
+step_period    = 1.0                  # [sec]
+step_amplitude = pi / 8.0             # [rad]
+step_duration  = step_period * 4.0    # [sec] the 4.0 multiplier gives 2 full cycles
 
 # Make the position controller gradually stiffer.
 new_position_kp_gains = [0.2, 0.5, 10.0]

@@ -44,7 +44,7 @@ class ArmContainer(object):
     for i in range(num_frames):
       # Set translational part
       for j in range(3):
-        wrench_vec[j, 0] = -gravity[j] * masses[i]
+        wrench_vec[j] = -gravity[j] * masses[i]
       comp_torque += jacobians[i].T @ wrench_vec
 
     return comp_torque
@@ -54,8 +54,8 @@ def create_3_dof():
   lookup = hebi.Lookup()
 
   # You can modify the names here to match modules found on your network
-  module_family = 'HEBI'
-  module_names = ['base', 'shoulder', 'elbow']
+  module_family = 'Test Family'
+  module_names = ['J1_base', 'J2_shoulder', 'J3_elbow']
 
   from time import sleep
   sleep(2)
@@ -75,12 +75,12 @@ def create_3_dof():
     exit(1)
 
   model = hebi.robot_model.RobotModel()
-  model.add_actuator('X5-4')
-  model.add_bracket('X5-LightBracket', 'right')
-  model.add_actuator('X5-4')
-  model.add_link('X5', extension=0.18, twist=np.pi)
-  model.add_actuator('X5-4')
-  model.add_link('X5', extension=0.18, twist=0)
+  model.add_actuator('X8-9')
+  model.add_bracket('X5-HeavyBracket', 'right-inside')
+  model.add_actuator('X8-16')
+  model.add_link('X5', extension=0.28, twist=np.pi)
+  model.add_actuator('X8-9')
+  model.add_link('X5', extension=0.28, twist=0)
 
   assert arm.size == model.dof_count
   return ArmContainer(arm, model)
