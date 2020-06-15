@@ -13,3 +13,6 @@ __pycache__/
 *.hebilog
 
 **/logs
+
+# Example gains output by some examples
+**/my_actuator_gains.xml

@@ -31,6 +31,7 @@ def feedback_handler(group_fbk):
 
 
 group.add_feedback_handler(feedback_handler)
+group.feedback_frequency = 10.0 # Prevent printing to the screen too much
 
-# Control the robot at 100 Hz for 30 seconds
+# Control the robot at 10 Hz for 30 seconds
 sleep(30)

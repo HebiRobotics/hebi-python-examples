@@ -48,29 +48,5 @@ while t < duration:
 # Stop logging. `log_file` contains the contents of the file
 log_file = group.stop_log()
 
-time = []
-position = []
-velocity = []
-# iterate through log
-for entry in log_file.feedback_iterate:
-    time.append(entry.transmit_time)
-    position.append(entry.position)
-    velocity.append(entry.velocity)
-
-
-# Offline Visualization
-# Plot the logged position feedback
-plt.figure(101)
-plt.plot(time, position)
-plt.title('Position')
-plt.xlabel('time (sec)')
-plt.ylabel('position (rad)')
-plt.grid(True)
-
-# Plot the logged velocity feedback
-plt.figure(102)
-plt.plot(time, velocity)
-plt.title('Velocity')
-plt.xlabel('time (sec)')
-plt.ylabel('velocity (rad/sec)')
-plt.grid(True)
+hebi.util.plot_logs(log_file, 'position')
+hebi.util.plot_logs(log_file, 'velocity')

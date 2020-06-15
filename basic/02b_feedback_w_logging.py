@@ -52,9 +52,9 @@ position = []
 velocity = []
 # iterate through log
 for entry in log.feedback_iterate:
-    time.append(entry.transmit_time)
-    position.append(entry.position)
-    velocity.append(entry.velocity)
+  time.append(entry.transmit_time)
+  position.append(entry.position)
+  velocity.append(entry.velocity)
 
 
 # Offline Visualization
