@@ -36,12 +36,18 @@ duration = 10.0
 start_time = time()
 end_time = start_time + duration
 current_time = start_time
+fbk = hebi.GroupFeedback(group.size)
+
+buttons = np.zeros(8)
+sliders = np.zeros(8)
 
 while current_time < end_time:
   current_time = time()
-  fbk = group.get_next_feedback()
-  buttons = np.zeros(8)
-  sliders = np.zeros(8)
+  fbk = group.get_next_feedback(reuse_fbk=fbk)
+  if fbk is None:
+    print("Could not get feedback")
+    continue
+
   gyro = fbk.gyro[0]
   for i in range(8):
     buttons[i] = fbk.io.b.get_int(i+1)

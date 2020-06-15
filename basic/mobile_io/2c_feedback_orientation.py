@@ -32,49 +32,60 @@ print('Move it around to make the feedback interesting...')
 plt.ion()
 f = plt.figure()
 
-
-
 duration = 10.0
 start_time = time()
 end_time = start_time + duration
 current_time = start_time
+fbk = hebi.GroupFeedback(group.size)
+
+x = np.array([
+  [0, 1],
+  [0, 0],
+  [0, 0]
+])
+
+y = np.array([
+  [0, 0],
+  [0, 1],
+  [0, 0]
+])
+
+z = np.array([
+  [0, 0],
+  [0, 0],
+  [0, 1]
+])
 
 while current_time < end_time:
   current_time = time()
-  fbk = group.get_next_feedback()
+  fbk = group.get_next_feedback(reuse_fbk=fbk)
+  if fbk is None:
+    print("Could not get feedback")
+    continue
+
   orient = fbk[0].ar_orientation
-  
-  r = R.from_quat(orient)
-  rot_mat = r.as_matrix()
-  
-  x = np.array([
-      [0, 1],
-      [0, 0],
-      [0, 0]
-  ])
-  
-  y = np.array([
-      [0, 0],
-      [0, 1],
-      [0, 0]
-  ])
-  
-  z = np.array([
-      [0, 0],
-      [0, 0],
-      [0, 1]
-  ])
-  
+
+  try:
+    r = R.from_quat(orient)
+    rot_mat = r.as_matrix()
+  except:
+    # Exception can be raised if `nan` is present. Provide a fallback.
+    rot_mat = np.identity(3)
+
   plt.clf()
   ax = plt.axes(projection="3d")
   ax.set_xlim3d(-2, 2)
   ax.set_ylim3d(-2, 2)
   ax.set_zlim3d(-2, 2)
 
-  ax.plot3D((rot_mat @ x)[0, :], (rot_mat @ x)[1, :], (rot_mat @ x)[2, :])
-  ax.plot3D((rot_mat @ y)[0, :], (rot_mat @ y)[1, :], (rot_mat @ y)[2, :])
-  ax.plot3D((rot_mat @ z)[0, :], (rot_mat @ z)[1, :], (rot_mat @ z)[2, :])
-  
-  plt.pause(0.01)
+  r_x = rot_mat @ x
+  r_y = rot_mat @ y
+  r_z = rot_mat @ z
+
+  ax.plot3D((r_x)[0, :], (r_x)[1, :], (r_x)[2, :])
+  ax.plot3D((r_y)[0, :], (r_y)[1, :], (r_y)[2, :])
+  ax.plot3D((r_z)[0, :], (r_z)[1, :], (r_z)[2, :])
+
+  plt.pause(0.001)
 
 print('All done!')
