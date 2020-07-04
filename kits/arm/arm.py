@@ -18,7 +18,7 @@ from util.math_utils import gravity_from_quaternion
 
 class ArmParams(object):
     
-    def __init__(self, family, moduleNames, gripperName, hrdf):
+    def __init__(self, family, moduleNames, hrdf, gripperName=None):
         self.family = family
         self.hrdf = hrdf
         self.moduleNames = moduleNames
@@ -28,15 +28,35 @@ class ArmParams(object):
     
 class Arm():
     
-    def __init__(self, params):
-        # Create arm from lookup
-        self.lookup = hebi.Lookup()
-        sleep(2)
-        print(self.lookup)
+    def __init__(self, params, lookup = None):
+        if lookup is None:
+            # Create arm from lookup
+            self.lookup = hebi.Lookup()
+            sleep(2)
+        else:
+            self.lookup = lookup
+
+        # Lookup modules for arm
         self.grp = self.lookup.get_group_from_names([params.family], params.moduleNames)
-        print(self.grp)
-        self.gripper = self.lookup.get_group_from_names([params.family], [params.gripperName])
-        
+        if self.grp is None:
+            print("Could not find arm on network")
+            modules_on_network = [entry for entry in self.lookup.entrylist]
+            if len(modules_on_network) == 0:
+                print("No modules on network")
+            else:
+                print("modules on network:")
+                for entry in modules_on_network:
+                    print(entry)
+
+            raise RuntimeError()
+
+        # Lookup gripper on network, if gripper is used
+        if self.gripperName is not None:
+            self.gripper = self.lookup.get_group_from_names([params.family], [params.gripperName])
+            if self.gripper is None:
+                print("Could not find gripper on network")
+                raise RuntimeError()
+
         # Create robot model
         try:
             self.model = hebi.robot_model.import_from_hrdf(params.hrdf)
@@ -57,10 +77,11 @@ class Arm():
         self.eff_cmd = np.zeros(self.grp.size)
 
         # Setup gripper variables
-        self.gripper_cmd = np.zeros(self.gripper.size)
-        self.gripper_close = -2.5 # effort value
-        self.gripper_open  = 1 # effor value
-        self.gripper_states = []
+        if self.gripperName is not None:
+            self.gripper_cmd = np.zeros(self.gripper.size)
+            self.gripper_close = -2.5 # effort value
+            self.gripper_open  = 1 # effor value
+            self.gripper_states = []
 
         # Setup gravity vector for grav comp
         self.gravity_vec = [0, 0, 1]

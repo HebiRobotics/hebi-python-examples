@@ -1,22 +1,30 @@
 #!/usr/bin/env python3
 
 import arm
-import mobile_io as mbio
+import hebi
+from hebi.util import create_mobile_io
+from time import sleep
 
 
 # Set up arm
-family_name  = "Arm"
+family_name  = "Example Arm"
 module_names = ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3"]
 hrdf = "hrdf/6-DoF_arm_w_gripper.hrdf"
 p = arm.ArmParams(family_name, module_names, hrdf)
 a = arm.Arm(p)
 
-# Set up our mobile io interface
+# Mobile device setup
+phone_family = 'HEBI'
+phone_name   = "mobileIO"
+
+lookup = hebi.Lookup()
+sleep(2)
+
 print('Waiting for Mobile IO device to come online...')
-phone_family = "Arm"
-phone_name = "mobileIO"
-m = mbio.MobileIO(phone_family, phone_name)
-state = m.getState()
+m = create_mobile_io(lookup, phone_family, phone_name)
+if m is None:
+  raise RuntimeError("Could not find Mobile IO device")
+m.update()
 
 abort_flag = False
 
@@ -38,33 +46,35 @@ print("")
 while not abort_flag:
   # Update arm and mobile io
   a.update()
-  prev_state = state
-  state = m.getState()
-  diff = m.getDiff() #m.getDiff(prev_state, state)
-  slider3 = state[1][2]
+  # Update button states
+  if not m.update():
+    print("Failed to get feedback from MobileIO")
+    continue
+
+  slider3 = m.get_axis_state(3)
 
   # Check for quit
-  if diff[7] == "rising":
+  if m.get_button_diff(8) == 3: # "ToOn"
       abort_flag = True
       break
 
   if run_mode == "training":
       # B1 add waypoint (stop)
-      if diff[0] == "rising":
+      if m.get_button_diff(1) == 3: # "ToOn"
         print("Stop waypoint added")
         waypoints.append(a.fbk.position)
         flow.append(False)
         durrations.append(slider3 + 4)
 
       # B2 add waypoint (flow)
-      if diff[1] == "rising":
+      if m.get_button_diff(2) == 3: # "ToOn"
         print("Flow waypoint added")
         waypoints.append(a.fbk.position)
         flow.append(True)
         durrations.append(slider3 + 4)
 
       # B3 toggle training/playback
-      if diff[2] == "rising":
+      if m.get_button_diff(3) == 3: # "ToOn"
         # Check for more than 2 waypoints
         if len(waypoints) > 1:
           run_mode = "playback"
@@ -75,7 +85,7 @@ while not abort_flag:
           print("At least two waypoints are needed")
 
       # B4 clear waypoints
-      if diff[4] == "rising":
+      if m.get_button_diff(4) == 3: # "ToOn"
         print("Waypoints cleared")
         waypoints = []
         flow = []
@@ -83,7 +93,7 @@ while not abort_flag:
 
   if run_mode == "playback":
     # B3 toggle training/playback
-    if diff[2] == "rising":
+    if m.get_button_diff(3) == 3: # "ToOn"
       run_mode = "training"
       a.cancelGoal()
 
