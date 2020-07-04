@@ -92,39 +92,39 @@ __arm_setup_params_dict = {
               ik_seed_pos=[0.01, 1.0, 2.5, 1.5, -1.5, 0.01],
               has_gripper=True, gripper_open_effort=1, gripper_close_effort=-5,
               gripper_gains="gripper_spool_gains"),
-                      ['Base', 'Shoulder', 'Elbow', 'Wrist1', 'Wrist2', 'Wrist3']),
+                      ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3"]),
 
   '6-DoF' : (ArmParams("6-DoF_arm",
               effort_offset=[0, default_shoulder_joint_comp, 0, 0, 0, 0],
               ik_seed_pos=[0.01, 1.0, 2.5, 1.5, -1.5, 0.01]),
-            ['Base', 'Shoulder', 'Elbow', 'Wrist1', 'Wrist2', 'Wrist3']),
+            ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3"]),
 
   '5-DoF + gripper' : (ArmParams("5-DoF_arm",
               effort_offset=[0, default_shoulder_joint_comp, 0, 0, 0],
               ik_seed_pos=[0.01, 1.0, 2.5, 1.5, -1.5],
               has_gripper=True, gripper_open_effort=1, gripper_close_effort=-5,
               gripper_gains="gripper_spool_gains"),
-                      ['Base', 'Shoulder', 'Elbow', 'Wrist1', 'Wrist2']),
+                      ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2"]),
 
   '5-DoF' : (ArmParams("5-DoF_arm",
               effort_offset=[0, default_shoulder_joint_comp, 0, 0, 0],
               ik_seed_pos=[0.01, 1.0, 2.5, 1.5, -1.5]),
-            ['Base', 'Shoulder', 'Elbow', 'Wrist1', 'Wrist2']),
+            ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2"]),
 
   '4-DoF' : (ArmParams("4-DoF_arm",
               effort_offset=[0, default_shoulder_joint_comp, 0, 0],
               ik_seed_pos=[0.01, 1.0, 2.5, 1.5]),
-            ['Base', 'Shoulder', 'Elbow', 'Wrist1']),
+            ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1"]),
 
   '4-DoF SCARA' : (ArmParams("4-DoF_arm_scara",
               effort_offset=[0, default_shoulder_joint_comp, 0, 0],
               ik_seed_pos=[0.01, 1.0, 2.5, 1.5]),
-                  ['Base', 'Shoulder', 'Elbow', 'Wrist1']),
+                  ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1"]),
 
   '3-DoF' : (ArmParams("3-DoF_arm",
               effort_offset=[0, default_shoulder_joint_comp, 0],
               ik_seed_pos=[0.01, 1.0, 2.5]),
-            ['Base', 'Shoulder', 'Elbow'])
+            ["J1_base", "J2_shoulder", "J3_elbow"])
 }
 
 

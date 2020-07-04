@@ -4,6 +4,7 @@ import hebi
 import numpy as np
 import os
 import sys
+from time import sleep
 
 # ------------------------------------------------------------------------------
 # Add the root folder of the repository to the search path for modules
@@ -13,16 +14,24 @@ sys.path = [root_path] + sys.path
 
 
 from util.math_utils import get_grav_comp_efforts, rot2axisangle
+from hebi.util import create_mobile_io
 from util.arm import setup_arm_params
 from matplotlib import pyplot as plt
-import mobile_io as mbio
 
+# Set up our mobile io interface
+phone_family = "HEBI"
+phone_name = "mobileIO"
 
-# set up our mobile io interface
-m = mbio.MobileIO("HEBI", "mobileIO")
-state = m.getState()
-m.setButtonMode(1, 0)
-m.setButtonMode(2, 1)
+lookup = hebi.Lookup()
+sleep(2)
+
+print('Waiting for Mobile IO device to come online...')
+m = create_mobile_io(lookup, phone_family, phone_name)
+if m is None:
+  raise RuntimeError("Could not find Mobile IO device")
+m.set_button_mode(1, 'momentary')
+m.set_button_mode(2, 'toggle')
+m.update()
 
 arm_family = 'Example Arm'
 arm_name   = '6-DoF + gripper'
@@ -98,9 +107,11 @@ end_effector_rot_mat = arm_tip_fk[0:3,0:3].copy()
 controller_on = False
 
 # while button 1 is not pressed
-while not state[0][0] == 1:
-  # Update button states
-  state = m.getState()
+while not m.get_button_state(1):
+  # Update MobileIO state
+  if not m.update():
+    print("Failed to get feedback from MobileIO")
+    continue
 
   # Gather sensor data from the arm
   group.get_next_feedback(reuse_fbk=fbk)
@@ -116,13 +127,13 @@ while not state[0][0] == 1:
   kin.get_end_effector(fbk_position, output=arm_tip_fk)
   # If in grav comp mode set led green
   if not controller_on:
-      m.setLedColor("green")
+      m.set_led_color("green")
       end_effector_XYZ = arm_tip_fk[0:3,3].copy()
       end_effector_rot_mat = arm_tip_fk[0:3,0:3].copy()
   
   if controller_on:
     # If in impedance mode set led blue
-    m.setLedColor("blue")
+    m.set_led_color("blue")
     
     # Get Updated Forward Kinematics and Jacobians
     kin.get_jacobian_end_effector(fbk_position, output=J_arm_tip)
@@ -169,12 +180,12 @@ while not state[0][0] == 1:
 
   # See if user requested mode toggle
   # If button 2 is pressed set to impedance mode
-  if state[0][1] == 1:
+  if m.get_button_state(2):
     controller_on = True
   else:
     controller_on = False
 
-m.setLedColor("red")
+m.set_led_color("red")
 
 if enable_logging:
   hebi_log = group.stop_log()

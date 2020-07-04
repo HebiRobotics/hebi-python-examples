@@ -13,10 +13,10 @@ sys.path = [root_path] + sys.path
 
 import numpy as np
 import hebi
-from time import time
+from time import sleep, time
 from components import arm_container
 from components import trajectory_time_heuristic
-import mobile_io  as mbio
+from hebi.util import create_mobile_io
 
 
 class Waypoint(object):
@@ -193,36 +193,50 @@ def run():
   print_and_cr("Press 'b2' to add waypoint ('b3' for stopping at this waypoint), 'b4' to clear waypoints, 'b5' to playback, and 'b1' to quit.")
   print_and_cr("When in playback mode, 'b6' resumes training, and 'b1' quits.")
 
-  m = mbio.MobileIO("HEBI", "Mobile IO")
-  res = m.getState()
+  # Mobile device setup
+  phone_family = 'HEBI'
+  phone_name   = "mobileIO"
 
-  while res[0][0] != 1:
+  lookup = hebi.Lookup()
+  sleep(2)
+
+  print('Waiting for Mobile IO device to come online...')
+  m = create_mobile_io(lookup, phone_family, phone_name)
+  if m is None:
+    raise RuntimeError("Could not find Mobile IO device")
+  m.update()
+
+  while not m.get_button_state(1):
+    # Update MobileIO state
+    if not m.update():
+      print("Failed to get feedback from MobileIO")
+      continue
+
     state.lock()
 
     current_mode = state.mode
 
     if current_mode == 'training':
-      m.setLedColor("blue")
-      if res[0][1] == 1:
+      m.set_led_color("blue")
+      if m.get_button_state(2):
         add_waypoint(state, False)
-      elif res[0][2] == 1:
+      elif m.get_button_state(3):
         add_waypoint(state, True)
-      elif res[0][3] == 1:
+      elif m.get_button_state(4):
         clear_waypoints(state)
-      elif res[0][4] == 1:
+      elif m.get_button_state(5):
         if state.number_of_waypoints > 1:
           state._mode = 'playback'
         else:
           print_and_cr('Need at least two waypoints to enter playback mode!')
     elif current_mode == 'playback':
-      m.setLedColor("green")
-      if res[0][5] == 1:
+      m.set_led_color("green")
+      if m.get_button_state(6):
         state._mode = 'training'
 
     state.unlock()
-    res = m.getState()
 
-  m.setLedColor("red")
+  m.set_led_color("red")
   state._quit = True
   print_and_cr('')
 
