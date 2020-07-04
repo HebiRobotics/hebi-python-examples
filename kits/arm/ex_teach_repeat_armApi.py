@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import arm
-import mobile_io as mbio
+from hebi.util import create_mobile_io
 
 
 # Set up arm
@@ -11,12 +11,16 @@ hrdf = "hrdf/6-DoF_arm.hrdf"
 p = arm.ArmParams(family_name, module_names, hrdf)
 a = arm.Arm(p)
 
-# Set up our mobile io interface
+# Mobile device setup
+phone_family = 'HEBI'
+phone_name   = "mobileIO"
+
+lookup = hebi.Lookup()
+sleep(2)
+
 print('Waiting for Mobile IO device to come online...')
-phone_family = "HEBI"
-phone_name = "Mobile IO"
-m = mbio.MobileIO(phone_family, phone_name)
-state = m.getState()
+m = create_mobile_io(lookup, phone_family, phone_name)
+state = m.state
 
 abort_flag = False
 
@@ -39,7 +43,7 @@ while not abort_flag:
   # Update arm and mobile io
   a.update()
   prev_state = state
-  state = m.getState()
+  state = m.state
   diff = m.getDiff(prev_state, state)
   slider3 = state[1][2]
 

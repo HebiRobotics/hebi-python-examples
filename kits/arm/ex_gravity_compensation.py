@@ -12,15 +12,21 @@ sys.path = [root_path] + sys.path
 # ------------------------------------------------------------------------------
 
 
+from hebi.util import create_mobile_io
 from util.math_utils import get_grav_comp_efforts
 from util.arm import setup_arm_params
 from matplotlib import pyplot as plt
-import mobile_io as mbio
 
+# Set up our mobile io interface
+phone_family = "HEBI"
+phone_name = "Mobile IO"
 
-m = mbio.MobileIO("HEBI", "mobileIO")
-state = m.getState()
+lookup = hebi.Lookup()
+sleep(2)
 
+print('Waiting for Mobile IO device to come online...')
+m = create_mobile_io(lookup, phone_family, phone_name)
+state = m.state
 
 arm_family = 'Example Arm'
 arm_name   = '6-DoF'
@@ -48,7 +54,7 @@ print('Press b1 to stop.')
 
 while not state[0][0] == 1:
   # update mobile io state
-  state = m.getState()
+  state = m.state
     
   # Gather sensor data from the arm
   group.get_next_feedback(reuse_fbk=fbk)

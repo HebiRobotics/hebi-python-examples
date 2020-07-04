@@ -13,16 +13,22 @@ sys.path = [root_path] + sys.path
 
 
 from util.math_utils import get_grav_comp_efforts, rot2axisangle
+from hebi.util import create_mobile_io
 from util.arm import setup_arm_params
 from matplotlib import pyplot as plt
-import mobile_io as mbio
 
+# Set up our mobile io interface
+phone_family = "HEBI"
+phone_name = "Mobile IO"
 
-# set up our mobile io interface
-m = mbio.MobileIO("HEBI", "mobileIO")
-state = m.getState()
-m.setButtonMode(1, 0)
-m.setButtonMode(2, 1)
+lookup = hebi.Lookup()
+sleep(2)
+
+print('Waiting for Mobile IO device to come online...')
+m = create_mobile_io(lookup, phone_family, phone_name)
+state = m.state
+m.set_button_mode(1, 'momentary')
+m.set_button_mode(2, 'toggle')
 
 arm_family = 'Example Arm'
 arm_name   = '6-DoF + gripper'
@@ -100,7 +106,7 @@ controller_on = False
 # while button 1 is not pressed
 while not state[0][0] == 1:
   # Update button states
-  state = m.getState()
+  state = m.state
 
   # Gather sensor data from the arm
   group.get_next_feedback(reuse_fbk=fbk)
@@ -116,13 +122,13 @@ while not state[0][0] == 1:
   kin.get_end_effector(fbk_position, output=arm_tip_fk)
   # If in grav comp mode set led green
   if not controller_on:
-      m.setLedColor("green")
+      m.set_led_color("green")
       end_effector_XYZ = arm_tip_fk[0:3,3].copy()
       end_effector_rot_mat = arm_tip_fk[0:3,0:3].copy()
   
   if controller_on:
     # If in impedance mode set led blue
-    m.setLedColor("blue")
+    m.set_led_color("blue")
     
     # Get Updated Forward Kinematics and Jacobians
     kin.get_jacobian_end_effector(fbk_position, output=J_arm_tip)
@@ -174,7 +180,7 @@ while not state[0][0] == 1:
   else:
     controller_on = False
 
-m.setLedColor("red")
+m.set_led_color("red")
 
 if enable_logging:
   hebi_log = group.stop_log()

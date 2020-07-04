@@ -13,8 +13,8 @@ sys.path = [root_path] + sys.path
 
 
 from hebi.robot_model import endeffector_position_objective
+from hebi.util import create_mobile_io
 import arm
-import mobile_io as mbio
 
 # Set up arm
 family_name = "Arm"
@@ -24,14 +24,17 @@ p = arm.ArmParams(family_name, module_names, hrdf)
 a = arm.Arm(p)
 
 # Set up our mobile io interface
-print('Waiting for Mobile IO device to come online...')
 phone_family = "HEBI"
 phone_name = "Mobile IO"
-m = mbio.MobileIO(phone_family, phone_name)
-m.setButtonMode(1, 1)
-state = m.getState()
+
+lookup = hebi.Lookup()
+sleep(2)
+
+print('Waiting for Mobile IO device to come online...')
+m = create_mobile_io(lookup, phone_family, phone_name)
+m.set_button_mode(1, 'toggle')
+state = m.state
 fbk_mobile = m.fbk
-diff = ["", "", "", "", "", "", "", ""]
 
 control_mode_toggle = 0
 quit_demo_button = 7
@@ -50,24 +53,24 @@ def get_mobile_state(quit_demo_button):
   global run_mode
   global mobile_pos_offset
    
-  m.setLedColor("yellow")
+  m.set_led_color("yellow")
   while not diff[quit_demo_button] == "rising":
     prev_state = state
-    state = m.getState()
+    state = m.state
     diff = m.getDiff(prev_state, state)
     fbk_mobile = m.fbk
     # Check for button presses and control state accordingly
     if diff[0] == "falling":
       run_mode = "startup"
-      m.setLedColor("yellow")
+      m.set_led_color("yellow")
     if run_mode == "standby":
-      m.setLedColor("green")
+      m.set_led_color("green")
     if diff[0] == "rising" and run_mode == "standby":
-      m.setLedColor("blue")
+      m.set_led_color("blue")
       run_mode = "control"
       mobile_pos_offset = xyz_target_init - fbk_mobile.ar_position[0]
             
-  m.setLedColor("red")
+  m.set_led_color("red")
   abort_flag = True
   return
 

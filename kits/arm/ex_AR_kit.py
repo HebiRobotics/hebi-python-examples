@@ -15,13 +15,12 @@ sys.path = [root_path] + sys.path
 
 
 from hebi.robot_model import endeffector_position_objective
+from hebi.util import create_mobile_io
 from util.math_utils import get_grav_comp_efforts, get_dynamic_comp_efforts
 from util.arm import setup_arm_params
 from time import sleep, perf_counter, time
 from util import math_utils
 from matplotlib import pyplot as plt
-import mobile_io as mbio
-
 
 run_mode = "startup"
 
@@ -36,14 +35,14 @@ phone_name = "Mobile IO"
 control_mode_toggle = 0
 quit_demo_button = 7
 
-print('Waiting for Mobile IO device to come online...')
-m = mbio.MobileIO(phone_family, phone_name)
-state = m.getState()
-m.setButtonMode(1, 1)
-
 abort_flag = False
 lookup = hebi.Lookup()
 sleep(2)
+
+print('Waiting for Mobile IO device to come online...')
+m = create_mobile_io(lookup, phone_family, phone_name)
+state = m.state
+m.set_button_mode(1, 'toggle')
 
 # Arm Setup
 arm_name = '6-DoF'
@@ -97,7 +96,7 @@ if enable_logging:
   group.start_log("logs", mkdirs=True)
 
 
-state = m.getState()
+state = m.state
 fbk_mobile = m.fbk
 diff = ["", "", "", "", "", "", "", ""]
 
@@ -107,19 +106,18 @@ def get_mobile_state(quit_demo_button):
   global fbk_mobile
   global diff
   global abort_flag
-  m.setLedColor("yellow")
+  m.set_led_color("yellow")
   while not diff[quit_demo_button] == "rising":
     prev_state = state
-    state = m.getState()
-    diff = m.getDiff(prev_state, state)
+    state = m.state
     fbk_mobile = m.fbk
     if diff[0] == "falling":
-      m.setLedColor("yellow")
+      m.set_led_color("yellow")
     if run_mode == "standby":
-      m.setLedColor("green")
+      m.set_led_color("green")
     if diff[0] == "rising":
-      m.setLedColor("blue")
-  m.setLedColor("red")
+      m.set_led_color("blue")
+  m.set_led_color("red")
   abort_flag = True
 
 
@@ -270,7 +268,7 @@ while not abort_flag:
 
     group.send_command(cmd)
 
-m.setLedColor("red")
+m.set_led_color("red")
 
 if enable_logging:
   # Stop logging

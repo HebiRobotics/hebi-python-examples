@@ -17,7 +17,7 @@ from util.math_utils import get_grav_comp_efforts
 from util.arm import setup_arm_params
 from time import sleep, time
 from util import math_utils
-import mobile_io as mbio
+from hebi.util import create_mobile_io
 
 run_mode = "points"
 
@@ -27,16 +27,17 @@ first_run = True
 phone_family = 'HEBI'
 phone_name   = "mobileIO"
 
-quit_demo_button = 7
+lookup = hebi.Lookup()
+sleep(2)
 
 print('Waiting for Mobile IO device to come online...')
-m = mbio.MobileIO(phone_family, phone_name)
-state = m.getState()
-prev_state = state
-m.setButtonMode(1, 0)
-m.setButtonMode(2, 0)
-m.setButtonMode(3, 0)
+m = create_mobile_io(lookup, phone_family, phone_name)
+state = m.state
+m.set_button_mode(1, 'momentary')
+m.set_button_mode(2, 'momentary')
+m.set_button_mode(3, 'momentary')
 
+quit_demo_button = 7
 abort_flag = False
 lookup = hebi.Lookup()
 sleep(2)
@@ -103,8 +104,7 @@ def get_trajectory(curr_pos, curr_vel, curr_acc, point):
 
 while not abort_flag:
   # Update mobile io state
-  prev_state = state
-  state = m.getState()
+  state = m.state
   diff = m.getDiff(prev_state, state)
 
   # Update arm state
@@ -113,7 +113,7 @@ while not abort_flag:
   # Check for quit
   if state[0][quit_demo_button] == 1:
     # Set led red and quit
-    m.setLedColor("red")
+    m.set_led_color("red")
     abort_flag = False
     break
 
@@ -160,7 +160,7 @@ while not abort_flag:
 
   if run_mode == "points":
     # Set led to green for point move mode
-    m.setLedColor("green")
+    m.set_led_color("green")
     # Move to point
     if t < duration:
       t = time() - start
@@ -186,7 +186,7 @@ while not abort_flag:
 
   elif run_mode == "grav comp":
     # Set led to blue for grav comp mode
-    m.setLedColor("blue")
+    m.set_led_color("blue")
     # Grav comp mode
     # Update gravity vector the base module of the arm
     params.update_gravity(fbk)

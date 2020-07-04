@@ -16,7 +16,7 @@ import hebi
 from time import time
 from components import arm_container
 from components import trajectory_time_heuristic
-import mobile_io  as mbio
+from hebi.util import create_mobile_io
 
 
 class Waypoint(object):
@@ -193,8 +193,16 @@ def run():
   print_and_cr("Press 'b2' to add waypoint ('b3' for stopping at this waypoint), 'b4' to clear waypoints, 'b5' to playback, and 'b1' to quit.")
   print_and_cr("When in playback mode, 'b6' resumes training, and 'b1' quits.")
 
-  m = mbio.MobileIO("HEBI", "Mobile IO")
-  res = m.getState()
+  # Mobile device setup
+  phone_family = 'HEBI'
+  phone_name   = "mobileIO"
+
+  lookup = hebi.Lookup()
+  sleep(2)
+
+  print('Waiting for Mobile IO device to come online...')
+  m = create_mobile_io(lookup, phone_family, phone_name)
+  res = m.state
 
   while res[0][0] != 1:
     state.lock()
@@ -202,7 +210,7 @@ def run():
     current_mode = state.mode
 
     if current_mode == 'training':
-      m.setLedColor("blue")
+      m.set_led_color("blue")
       if res[0][1] == 1:
         add_waypoint(state, False)
       elif res[0][2] == 1:
@@ -215,14 +223,14 @@ def run():
         else:
           print_and_cr('Need at least two waypoints to enter playback mode!')
     elif current_mode == 'playback':
-      m.setLedColor("green")
+      m.set_led_color("green")
       if res[0][5] == 1:
         state._mode = 'training'
 
     state.unlock()
-    res = m.getState()
+    res = m.state
 
-  m.setLedColor("red")
+  m.set_led_color("red")
   state._quit = True
   print_and_cr('')
 
