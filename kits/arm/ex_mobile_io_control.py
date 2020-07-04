@@ -17,7 +17,7 @@ from util.math_utils import get_grav_comp_efforts
 from util.arm import setup_arm_params
 from time import sleep, time
 from util import math_utils
-import mobile_io as mbio
+from hebi.util import create_mobile_io
 
 run_mode = "points"
 
@@ -27,16 +27,19 @@ first_run = True
 phone_family = 'HEBI'
 phone_name   = "mobileIO"
 
-quit_demo_button = 7
+lookup = hebi.Lookup()
+sleep(2)
 
 print('Waiting for Mobile IO device to come online...')
-m = mbio.MobileIO(phone_family, phone_name)
-state = m.getState()
-prev_state = state
-m.setButtonMode(1, 0)
-m.setButtonMode(2, 0)
-m.setButtonMode(3, 0)
+m = create_mobile_io(lookup, phone_family, phone_name)
+if m is None:
+  raise RuntimeError("Could not find Mobile IO device")
+m.set_button_mode(1, 'momentary')
+m.set_button_mode(2, 'momentary')
+m.set_button_mode(3, 'momentary')
+m.update()
 
+quit_demo_button = 8
 abort_flag = False
 lookup = hebi.Lookup()
 sleep(2)
@@ -102,18 +105,18 @@ def get_trajectory(curr_pos, curr_vel, curr_acc, point):
 
 
 while not abort_flag:
-  # Update mobile io state
-  prev_state = state
-  state = m.getState()
-  diff = m.getDiff(prev_state, state)
+  # Update MobileIO state
+  if not m.update():
+    print("Failed to get feedback from MobileIO")
+    continue
 
   # Update arm state
   group.get_next_feedback(reuse_fbk=fbk)
 
   # Check for quit
-  if state[0][quit_demo_button] == 1:
+  if m.get_button_state(quit_demo_button):
     # Set led red and quit
-    m.setLedColor("red")
+    m.set_led_color("red")
     abort_flag = False
     break
 
@@ -128,7 +131,7 @@ while not abort_flag:
     t = time() - start
 
   # If button 1 pressed, create trajectory from current position to point 1
-  elif (diff[0] == "rising"):
+  elif m.get_button_diff(1) == 3: # "ToOn"
     run_mode = "points"
     trajectory = get_trajectory(pos_cmd, vel_cmd, acc_cmd, point_1)
 
@@ -137,7 +140,7 @@ while not abort_flag:
     t = time() - start
 
   # If button 2 pressed, create trajectory from current position to point 2
-  elif diff[1] == "rising":
+  elif m.get_button_diff(2) == 3: # "ToOn"
     run_mode = "points"
     trajectory = get_trajectory(pos_cmd, vel_cmd, acc_cmd, point_2)
 
@@ -146,7 +149,7 @@ while not abort_flag:
     t = time() - start
 
   # If button 3 pressed, create trajectory from current position to point 3
-  elif diff[2] == "rising":
+  elif m.get_button_diff(3) == 3: # "ToOn"
     run_mode = "points"
     trajectory = get_trajectory(pos_cmd, vel_cmd, acc_cmd, point_3)
 
@@ -155,12 +158,12 @@ while not abort_flag:
     t = time() - start
 
   # If button 5 pressed switch to grav comp mode    
-  elif diff[5] == "rising":
+  elif m.get_button_diff(5) == 3: # "ToOn"
     run_mode = "grav comp"
 
   if run_mode == "points":
     # Set led to green for point move mode
-    m.setLedColor("green")
+    m.set_led_color("green")
     # Move to point
     if t < duration:
       t = time() - start
@@ -186,7 +189,7 @@ while not abort_flag:
 
   elif run_mode == "grav comp":
     # Set led to blue for grav comp mode
-    m.setLedColor("blue")
+    m.set_led_color("blue")
     # Grav comp mode
     # Update gravity vector the base module of the arm
     params.update_gravity(fbk)

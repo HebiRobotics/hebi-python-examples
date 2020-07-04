@@ -2,6 +2,7 @@
 
 import numpy as np
 import threading
+from time import sleep
 
 
 # ------------------------------------------------------------------------------
@@ -12,29 +13,36 @@ sys.path = [root_path] + sys.path
 # ------------------------------------------------------------------------------
 
 
+import hebi
 from hebi.robot_model import endeffector_position_objective
+from hebi.util import create_mobile_io
 import arm
-import mobile_io as mbio
 
 # Set up arm
-family_name = "Arm"
+family_name = "Example Arm"
 module_names = ("J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3")
 hrdf = "hrdf/6-DoF_arm.hrdf"
 p = arm.ArmParams(family_name, module_names, hrdf)
 a = arm.Arm(p)
 
 # Set up our mobile io interface
-print('Waiting for Mobile IO device to come online...')
 phone_family = "HEBI"
-phone_name = "Mobile IO"
-m = mbio.MobileIO(phone_family, phone_name)
-m.setButtonMode(1, 1)
-state = m.getState()
-fbk_mobile = m.fbk
-diff = ["", "", "", "", "", "", "", ""]
+phone_name = "mobileIO"
 
-control_mode_toggle = 0
-quit_demo_button = 7
+lookup = hebi.Lookup()
+sleep(2)
+
+print('Waiting for Mobile IO device to come online...')
+m = create_mobile_io(lookup, phone_family, phone_name)
+if m is None:
+  raise RuntimeError("Could not find Mobile IO device")
+m.set_button_mode(1, 'toggle')
+m.update()
+
+fbk_mobile = m.get_last_feedback()
+
+control_mode_toggle = 1
+quit_demo_button = 8
 
 abort_flag = False
 run_mode = "startup"
@@ -43,31 +51,26 @@ def get_mobile_state(quit_demo_button):
   """
   Mobile io function to be run in another thread to prevent main loop stalling on long feedbacks
   """
-  global state
   global fbk_mobile
-  global diff
   global abort_flag
   global run_mode
   global mobile_pos_offset
    
-  m.setLedColor("yellow")
-  while not diff[quit_demo_button] == "rising":
-    prev_state = state
-    state = m.getState()
-    diff = m.getDiff(prev_state, state)
-    fbk_mobile = m.fbk
+  m.set_led_color("yellow")
+  while not m.get_button_diff(quit_demo_button) == 3: # "ToOn"
+    fbk_mobile = m.get_last_feedback()
     # Check for button presses and control state accordingly
-    if diff[0] == "falling":
+    if m.get_button_diff(control_mode_toggle) == 2: # "ToOff"
       run_mode = "startup"
-      m.setLedColor("yellow")
+      m.set_led_color("yellow")
     if run_mode == "standby":
-      m.setLedColor("green")
-    if diff[0] == "rising" and run_mode == "standby":
-      m.setLedColor("blue")
+      m.set_led_color("green")
+    if m.get_button_diff(control_mode_toggle) == 3 and run_mode == "standby": # "ToOn"
+      m.set_led_color("blue")
       run_mode = "control"
       mobile_pos_offset = xyz_target_init - fbk_mobile.ar_position[0]
             
-  m.setLedColor("red")
+  m.set_led_color("red")
   abort_flag = True
   return
 
@@ -93,7 +96,11 @@ mobile_pos_offset = [0, 0, 0]
 # Main run loop
 while not abort_flag:
   a.update()
-    
+  # Update MobileIO state
+  if not m.update():
+    print("Failed to get feedback from MobileIO")
+    continue
+
   if run_mode == "startup":
     # Move to starting pos
     joint_targets = get_ik(xyz_target_init, ik_seed_pos)

@@ -3,6 +3,7 @@
 import hebi
 import os
 import sys
+from time import sleep
 
 
 # ------------------------------------------------------------------------------
@@ -12,15 +13,23 @@ sys.path = [root_path] + sys.path
 # ------------------------------------------------------------------------------
 
 
+from hebi.util import create_mobile_io
 from util.math_utils import get_grav_comp_efforts
 from util.arm import setup_arm_params
 from matplotlib import pyplot as plt
-import mobile_io as mbio
 
+# Set up our mobile io interface
+phone_family = "HEBI"
+phone_name = "mobileIO"
 
-m = mbio.MobileIO("HEBI", "mobileIO")
-state = m.getState()
+lookup = hebi.Lookup()
+sleep(2)
 
+print('Waiting for Mobile IO device to come online...')
+m = create_mobile_io(lookup, phone_family, phone_name)
+if m is None:
+  raise RuntimeError("Could not find Mobile IO device")
+m.update()
 
 arm_family = 'Example Arm'
 arm_name   = '6-DoF'
@@ -46,9 +55,11 @@ fbk = hebi.GroupFeedback(group.size)
 print('Commanded gravity-compensated zero torques to the arm.')
 print('Press b1 to stop.')
 
-while not state[0][0] == 1:
-  # update mobile io state
-  state = m.getState()
+while not m.get_button_state(1):
+  # Update MobileIO state
+  if not m.update():
+    print("Failed to get feedback from MobileIO")
+    continue
     
   # Gather sensor data from the arm
   group.get_next_feedback(reuse_fbk=fbk)

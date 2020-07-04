@@ -15,13 +15,12 @@ sys.path = [root_path] + sys.path
 
 
 from hebi.robot_model import endeffector_position_objective
+from hebi.util import create_mobile_io
 from util.math_utils import get_grav_comp_efforts, get_dynamic_comp_efforts
 from util.arm import setup_arm_params
 from time import sleep, perf_counter, time
 from util import math_utils
 from matplotlib import pyplot as plt
-import mobile_io as mbio
-
 
 run_mode = "startup"
 
@@ -31,19 +30,21 @@ enable_ar_smoothing = False
 
 # Mobile device setup
 phone_family = 'HEBI'
-phone_name = "Mobile IO"
+phone_name = "mobileIO"
 
-control_mode_toggle = 0
-quit_demo_button = 7
-
-print('Waiting for Mobile IO device to come online...')
-m = mbio.MobileIO(phone_family, phone_name)
-state = m.getState()
-m.setButtonMode(1, 1)
+control_mode_toggle = 1
+quit_demo_button = 8
 
 abort_flag = False
 lookup = hebi.Lookup()
 sleep(2)
+
+print('Waiting for Mobile IO device to come online...')
+m = create_mobile_io(lookup, phone_family, phone_name)
+if m is None:
+  raise RuntimeError("Could not find Mobile IO device")
+m.set_button_mode(1, 'toggle')
+m.update()
 
 # Arm Setup
 arm_name = '6-DoF'
@@ -96,30 +97,22 @@ phone_fbk_timer = perf_counter()
 if enable_logging:
   group.start_log("logs", mkdirs=True)
 
-
-state = m.getState()
-fbk_mobile = m.fbk
-diff = ["", "", "", "", "", "", "", ""]
+fbk_mobile = m.get_last_feedback()
 
 
 def get_mobile_state(quit_demo_button):
-  global state
   global fbk_mobile
-  global diff
   global abort_flag
-  m.setLedColor("yellow")
-  while not diff[quit_demo_button] == "rising":
-    prev_state = state
-    state = m.getState()
-    diff = m.getDiff(prev_state, state)
-    fbk_mobile = m.fbk
-    if diff[0] == "falling":
-      m.setLedColor("yellow")
-    if run_mode == "standby":
-      m.setLedColor("green")
-    if diff[0] == "rising":
-      m.setLedColor("blue")
-  m.setLedColor("red")
+  m.set_led_color("yellow")
+  while not m.get_button_diff(quit_demo_button) == 3: # "ToOn"
+    fbk_mobile = m.get_last_feedback()
+    if m.get_button_diff(1) == 2: # "ToOff"
+      m.set_led_color("yellow")
+    elif run_mode == "standby":
+      m.set_led_color("green")
+    elif m.get_button_diff(1) == 3: # "ToOn"
+      m.set_led_color("blue")
+  m.set_led_color("red")
   abort_flag = True
 
 
@@ -128,6 +121,10 @@ t1.start()
 
 # Main run loop
 while not abort_flag:
+  # Update MobileIO state
+  if not m.update():
+    print("Failed to get feedback from MobileIO")
+    continue
 
   # Update arm state
   group.get_next_feedback(reuse_fbk=fbk)
@@ -174,7 +171,7 @@ while not abort_flag:
   elif run_mode == "standby":
     # Hold pos and wait for input
     # Check if mode toggle requested
-    if state[0][control_mode_toggle] == 1:
+    if m.get_button_state(control_mode_toggle):
       # Change run mode
       run_mode = "control"
       print("Following phone")
@@ -197,7 +194,7 @@ while not abort_flag:
   elif run_mode == "control":
     # Follow phones movement
     # Check if mode toggle requested
-    if state[0][control_mode_toggle] == 0:
+    if not m.get_button_state(control_mode_toggle):
       # Change run mode
       run_mode = "startup"
       continue
@@ -270,7 +267,7 @@ while not abort_flag:
 
     group.send_command(cmd)
 
-m.setLedColor("red")
+m.set_led_color("red")
 
 if enable_logging:
   # Stop logging
