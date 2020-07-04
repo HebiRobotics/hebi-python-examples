@@ -54,7 +54,7 @@ def create_3_dof():
   lookup = hebi.Lookup()
 
   # You can modify the names here to match modules found on your network
-  module_family = 'Test Family'
+  module_family = 'Example Arm'
   module_names = ['J1_base', 'J2_shoulder', 'J3_elbow']
 
   from time import sleep

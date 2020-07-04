@@ -30,10 +30,10 @@ enable_ar_smoothing = False
 
 # Mobile device setup
 phone_family = 'HEBI'
-phone_name = "Mobile IO"
+phone_name = "mobileIO"
 
-control_mode_toggle = 0
-quit_demo_button = 7
+control_mode_toggle = 1
+quit_demo_button = 8
 
 abort_flag = False
 lookup = hebi.Lookup()
@@ -41,6 +41,8 @@ sleep(2)
 
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, phone_family, phone_name)
+if m is None:
+  raise RuntimeError("Could not find Mobile IO device")
 m.set_button_mode(1, 'toggle')
 m.update()
 
@@ -95,20 +97,20 @@ phone_fbk_timer = perf_counter()
 if enable_logging:
   group.start_log("logs", mkdirs=True)
 
-fbk_mobile = m.fbk
+fbk_mobile = m.get_last_feedback()
 
 
 def get_mobile_state(quit_demo_button):
   global fbk_mobile
   global abort_flag
   m.set_led_color("yellow")
-  while not m.get_button_diff(quit_demo_button) == "ToOn":
-    fbk_mobile = m.fbk
-    if m.get_button_diff(1) == "ToOff":
+  while not m.get_button_diff(quit_demo_button) == 3: # "ToOn"
+    fbk_mobile = m.get_last_feedback()
+    if m.get_button_diff(1) == 2: # "ToOff"
       m.set_led_color("yellow")
     elif run_mode == "standby":
       m.set_led_color("green")
-    elif m.get_button_diff(1) == "ToOn":
+    elif m.get_button_diff(1) == 3: # "ToOn"
       m.set_led_color("blue")
   m.set_led_color("red")
   abort_flag = True

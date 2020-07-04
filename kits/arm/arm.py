@@ -27,14 +27,28 @@ class ArmParams(object):
     
 class Arm():
     
-    def __init__(self, params):
-        # Create arm from lookup
-        self.lookup = hebi.Lookup()
-        sleep(2)
-        print(self.lookup)
+    def __init__(self, params, lookup = None):
+        if lookup is None:
+            # Create arm from lookup
+            self.lookup = hebi.Lookup()
+            sleep(2)
+        else:
+            self.lookup = lookup
+
         self.grp = self.lookup.get_group_from_names([params.family], params.moduleNames)
-        print(self.grp)
-        
+
+        if self.grp is None:
+            print("Could not find arm on network")
+            modules_on_network = [entry for entry in self.lookup.entrylist]
+            if len(modules_on_network) == 0:
+                print("No modules on network")
+            else:
+                print("modules on network:")
+                for entry in modules_on_network:
+                    print(entry)
+
+            raise RuntimeError()
+
         # Create robot model
         try:
             self.model = hebi.robot_model.import_from_hrdf(params.hrdf)

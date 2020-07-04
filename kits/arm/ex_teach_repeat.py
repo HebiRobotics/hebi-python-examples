@@ -13,7 +13,7 @@ sys.path = [root_path] + sys.path
 
 import numpy as np
 import hebi
-from time import time
+from time import sleep, time
 from components import arm_container
 from components import trajectory_time_heuristic
 from hebi.util import create_mobile_io
@@ -202,6 +202,8 @@ def run():
 
   print('Waiting for Mobile IO device to come online...')
   m = create_mobile_io(lookup, phone_family, phone_name)
+  if m is None:
+    raise RuntimeError("Could not find Mobile IO device")
   m.update()
 
   while not m.get_button_state(1):

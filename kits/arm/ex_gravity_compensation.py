@@ -3,6 +3,7 @@
 import hebi
 import os
 import sys
+from time import sleep
 
 
 # ------------------------------------------------------------------------------
@@ -19,13 +20,15 @@ from matplotlib import pyplot as plt
 
 # Set up our mobile io interface
 phone_family = "HEBI"
-phone_name = "Mobile IO"
+phone_name = "mobileIO"
 
 lookup = hebi.Lookup()
 sleep(2)
 
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, phone_family, phone_name)
+if m is None:
+  raise RuntimeError("Could not find Mobile IO device")
 m.update()
 
 arm_family = 'Example Arm'

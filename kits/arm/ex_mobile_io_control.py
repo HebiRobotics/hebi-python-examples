@@ -32,12 +32,14 @@ sleep(2)
 
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, phone_family, phone_name)
+if m is None:
+  raise RuntimeError("Could not find Mobile IO device")
 m.set_button_mode(1, 'momentary')
 m.set_button_mode(2, 'momentary')
 m.set_button_mode(3, 'momentary')
 m.update()
 
-quit_demo_button = 7
+quit_demo_button = 8
 abort_flag = False
 lookup = hebi.Lookup()
 sleep(2)
@@ -129,7 +131,7 @@ while not abort_flag:
     t = time() - start
 
   # If button 1 pressed, create trajectory from current position to point 1
-  elif (m.get_button_diff(1) == "ToOn"):
+  elif m.get_button_diff(1) == 3: # "ToOn"
     run_mode = "points"
     trajectory = get_trajectory(pos_cmd, vel_cmd, acc_cmd, point_1)
 
@@ -138,7 +140,7 @@ while not abort_flag:
     t = time() - start
 
   # If button 2 pressed, create trajectory from current position to point 2
-  elif m.get_button_diff(2) == "ToOn":
+  elif m.get_button_diff(2) == 3: # "ToOn"
     run_mode = "points"
     trajectory = get_trajectory(pos_cmd, vel_cmd, acc_cmd, point_2)
 
@@ -147,7 +149,7 @@ while not abort_flag:
     t = time() - start
 
   # If button 3 pressed, create trajectory from current position to point 3
-  elif m.get_button_diff(3) == "ToOn":
+  elif m.get_button_diff(3) == 3: # "ToOn"
     run_mode = "points"
     trajectory = get_trajectory(pos_cmd, vel_cmd, acc_cmd, point_3)
 
@@ -156,7 +158,7 @@ while not abort_flag:
     t = time() - start
 
   # If button 5 pressed switch to grav comp mode    
-  elif m.get_button_diff(5) == "ToOn":
+  elif m.get_button_diff(5) == 3: # "ToOn"
     run_mode = "grav comp"
 
   if run_mode == "points":

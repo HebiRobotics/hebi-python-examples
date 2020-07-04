@@ -4,6 +4,7 @@ import hebi
 import numpy as np
 import os
 import sys
+from time import sleep
 
 # ------------------------------------------------------------------------------
 # Add the root folder of the repository to the search path for modules
@@ -19,13 +20,15 @@ from matplotlib import pyplot as plt
 
 # Set up our mobile io interface
 phone_family = "HEBI"
-phone_name = "Mobile IO"
+phone_name = "mobileIO"
 
 lookup = hebi.Lookup()
 sleep(2)
 
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, phone_family, phone_name)
+if m is None:
+  raise RuntimeError("Could not find Mobile IO device")
 m.set_button_mode(1, 'momentary')
 m.set_button_mode(2, 'toggle')
 m.update()

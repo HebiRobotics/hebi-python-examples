@@ -2,6 +2,7 @@
 
 import numpy as np
 import threading
+from time import sleep
 
 
 # ------------------------------------------------------------------------------
@@ -12,12 +13,13 @@ sys.path = [root_path] + sys.path
 # ------------------------------------------------------------------------------
 
 
+import hebi
 from hebi.robot_model import endeffector_position_objective
 from hebi.util import create_mobile_io
 import arm
 
 # Set up arm
-family_name = "Arm"
+family_name = "Example Arm"
 module_names = ("J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3")
 hrdf = "hrdf/6-DoF_arm.hrdf"
 p = arm.ArmParams(family_name, module_names, hrdf)
@@ -25,17 +27,19 @@ a = arm.Arm(p)
 
 # Set up our mobile io interface
 phone_family = "HEBI"
-phone_name = "Mobile IO"
+phone_name = "mobileIO"
 
 lookup = hebi.Lookup()
 sleep(2)
 
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, phone_family, phone_name)
+if m is None:
+  raise RuntimeError("Could not find Mobile IO device")
 m.set_button_mode(1, 'toggle')
 m.update()
 
-fbk_mobile = m.fbk
+fbk_mobile = m.get_last_feedback()
 
 control_mode_toggle = 1
 quit_demo_button = 8
@@ -53,15 +57,15 @@ def get_mobile_state(quit_demo_button):
   global mobile_pos_offset
    
   m.set_led_color("yellow")
-  while not m.get_button_diff(quit_demo_button) == "ToOn":
-    fbk_mobile = m.fbk
+  while not m.get_button_diff(quit_demo_button) == 3: # "ToOn"
+    fbk_mobile = m.get_last_feedback()
     # Check for button presses and control state accordingly
-    if m.get_button_diff(control_mode_toggle) == "ToOff":
+    if m.get_button_diff(control_mode_toggle) == 2: # "ToOff"
       run_mode = "startup"
       m.set_led_color("yellow")
     if run_mode == "standby":
       m.set_led_color("green")
-    if m.get_button_diff(control_mode_toggle) == "ToOn" and run_mode == "standby":
+    if m.get_button_diff(control_mode_toggle) == 3 and run_mode == "standby": # "ToOn"
       m.set_led_color("blue")
       run_mode = "control"
       mobile_pos_offset = xyz_target_init - fbk_mobile.ar_position[0]
