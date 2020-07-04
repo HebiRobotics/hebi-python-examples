@@ -8,16 +8,17 @@ import mobile_io as mbio
 # Set up arm
 family_name  = "Arm"
 module_names = ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3"]
-hrdf = "hrdf/6-DoF_arm.hrdf"
+hrdf = "hrdf/6-DoF_arm_w_gripper.hrdf"
 p = arm.ArmParams(family_name, module_names, hrdf)
 a = arm.Arm(p)
 
 # Set up our mobile io interface
 print('Waiting for Mobile IO device to come online...')
-phone_family = "HEBI"
-phone_name = "Mobile IO"
+phone_family = "Arm"
+phone_name = "mobileIO"
 m = mbio.MobileIO(phone_family, phone_name)
 state = m.getState()
+print (state)
 
 abort_flag = False
 
@@ -28,7 +29,7 @@ while not abort_flag:
   # Update mobile io state
   prev_state = state
   state = m.getState()
-  mobile_io_diff = m.getDiff(prev_state, state)
+  mobile_io_diff = m.getDiff()#m.getDiff(prev_state, state)
 
   # B8 quit demo
   if mobile_io_diff[7] == "rising":

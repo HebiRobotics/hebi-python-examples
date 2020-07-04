@@ -6,7 +6,7 @@ import arm
 # Arm setup
 family_name = "Arm"
 module_names = ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3"]
-hrdf = "hrdf/6-DoF_arm.hrdf"
+hrdf = "hrdf/6-DoF_arm_w_gripper.hrdf"
 p = arm.ArmParams(family_name, module_names, hrdf)
 a = arm.Arm(p)
 

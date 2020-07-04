@@ -18,10 +18,11 @@ from util.math_utils import gravity_from_quaternion
 
 class ArmParams(object):
     
-    def __init__(self, family, moduleNames, hrdf):
+    def __init__(self, family, moduleNames, gripperName, hrdf):
         self.family = family
         self.hrdf = hrdf
         self.moduleNames = moduleNames
+        self.gripperName = gripperName
 
 
     
@@ -34,6 +35,7 @@ class Arm():
         print(self.lookup)
         self.grp = self.lookup.get_group_from_names([params.family], params.moduleNames)
         print(self.grp)
+        self.gripper = self.lookup.get_group_from_names([params.family], [params.gripperName])
         
         # Create robot model
         try:
@@ -53,7 +55,13 @@ class Arm():
         self.vel_cmd = np.zeros(self.grp.size)
         self.accel_cmd = np.zeros(self.grp.size)
         self.eff_cmd = np.zeros(self.grp.size)
-        
+
+        # Setup gripper variables
+        self.gripper_cmd = np.zeros(self.gripper.size)
+        self.gripper_close = -2.5 # effort value
+        self.gripper_open  = 1 # effor value
+        self.gripper_states = []
+
         # Setup gravity vector for grav comp
         self.gravity_vec = [0, 0, 1]
         gravity_from_quaternion(self.fbk.orientation[0], output=self.gravity_vec)
@@ -140,7 +148,7 @@ class Arm():
         return mArray
     
     
-    def createGoal(self, position, durration=None, velocity=None, accel=None, flow=None):
+    def createGoal(self, position, durration=None, velocity=None, accel=None, flow=None, gripper_close=None):
         # Create trajectory to target position
         # Position should be an array of joint positions
         # Durration should be an array of durrations (if passed)
@@ -148,6 +156,7 @@ class Arm():
         # Accel should be an array of joint accelerations of the same length as the amount of positions (if passed)
         # Flow ahould be an array of True/False of the same length as the amount of positions (if passed)
         # Note flow overrides any velocities or accelerations passed
+        # Gripper_close should be an array of True/False of the same length as the amount of positions (if passed)
         """
         EX:
             3dof arm with a 2 point trajectory
@@ -156,6 +165,7 @@ class Arm():
             velocity = [[vel1, vel2, vel3], [vel4, vel5, vel6]]
             accel = [[accel1, accel2, accel3], [accel4, accel5, accel6]]
             flow = [bool1, bool2]
+            gripper_close = [bool1, bool2]
         """
         self.at_goal = False
         
@@ -164,6 +174,7 @@ class Arm():
             self.pos_cmd = self.fbk.position
             self.vel_cmd = self.fbk.velocity
             self.accel_cmd = np.zeros(self.grp.size)
+            self.gripper_cmd = self.gripper_open
         
         waypoints = self.createMotionArray(len(position), self.pos_cmd, array=position)
         
