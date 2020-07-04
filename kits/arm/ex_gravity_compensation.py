@@ -26,7 +26,7 @@ sleep(2)
 
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, phone_family, phone_name)
-state = m.state
+m.update()
 
 arm_family = 'Example Arm'
 arm_name   = '6-DoF'
@@ -52,9 +52,11 @@ fbk = hebi.GroupFeedback(group.size)
 print('Commanded gravity-compensated zero torques to the arm.')
 print('Press b1 to stop.')
 
-while not state[0][0] == 1:
-  # update mobile io state
-  state = m.state
+while not m.get_button_state(1):
+  # Update MobileIO state
+  if not m.update():
+    print("Failed to get feedback from MobileIO")
+    continue
     
   # Gather sensor data from the arm
   group.get_next_feedback(reuse_fbk=fbk)

@@ -20,7 +20,7 @@ sleep(2)
 
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, phone_family, phone_name)
-state = m.state
+m.update()
 
 abort_flag = False
 
@@ -42,33 +42,35 @@ print("")
 while not abort_flag:
   # Update arm and mobile io
   a.update()
-  prev_state = state
-  state = m.state
-  diff = m.getDiff(prev_state, state)
-  slider3 = state[1][2]
+  # Update button states
+  if not m.update():
+    print("Failed to get feedback from MobileIO")
+    continue
+
+  slider3 = m.get_axis_state(3)
 
   # Check for quit
-  if diff[7] == "rising":
+  if m.get_button_diff(8) == "ToOn":
       abort_flag = True
       break
 
   if run_mode == "training":
       # B1 add waypoint (stop)
-      if diff[0] == "rising":
+      if m.get_button_diff(1) == "ToOn":
         print("Stop waypoint added")
         waypoints.append(a.fbk.position)
         flow.append(False)
         durrations.append(slider3 + 4)
 
       # B2 add waypoint (flow)
-      if diff[1] == "rising":
+      if m.get_button_diff(2) == "ToOn":
         print("Flow waypoint added")
         waypoints.append(a.fbk.position)
         flow.append(True)
         durrations.append(slider3 + 4)
 
       # B3 toggle training/playback
-      if diff[2] == "rising":
+      if m.get_button_diff(3) == "ToOn":
         # Check for more than 2 waypoints
         if len(waypoints) > 1:
           run_mode = "playback"
@@ -79,7 +81,7 @@ while not abort_flag:
           print("At least two waypoints are needed")
 
       # B4 clear waypoints
-      if diff[4] == "rising":
+      if m.get_button_diff(4) == "ToOn":
         print("Waypoints cleared")
         waypoints = []
         flow = []
@@ -87,7 +89,7 @@ while not abort_flag:
 
   if run_mode == "playback":
     # B3 toggle training/playback
-    if diff[2] == "rising":
+    if m.get_button_diff(3) == "ToOn":
       run_mode = "training"
       a.cancelGoal()
 

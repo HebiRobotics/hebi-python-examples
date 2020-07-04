@@ -26,9 +26,9 @@ sleep(2)
 
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, phone_family, phone_name)
-state = m.state
 m.set_button_mode(1, 'momentary')
 m.set_button_mode(2, 'toggle')
+m.update()
 
 arm_family = 'Example Arm'
 arm_name   = '6-DoF + gripper'
@@ -104,9 +104,11 @@ end_effector_rot_mat = arm_tip_fk[0:3,0:3].copy()
 controller_on = False
 
 # while button 1 is not pressed
-while not state[0][0] == 1:
-  # Update button states
-  state = m.state
+while not m.get_button_state(1):
+  # Update MobileIO state
+  if not m.update():
+    print("Failed to get feedback from MobileIO")
+    continue
 
   # Gather sensor data from the arm
   group.get_next_feedback(reuse_fbk=fbk)
@@ -175,7 +177,7 @@ while not state[0][0] == 1:
 
   # See if user requested mode toggle
   # If button 2 is pressed set to impedance mode
-  if state[0][1] == 1:
+  if m.get_button_state(2):
     controller_on = True
   else:
     controller_on = False

@@ -202,33 +202,37 @@ def run():
 
   print('Waiting for Mobile IO device to come online...')
   m = create_mobile_io(lookup, phone_family, phone_name)
-  res = m.state
+  m.update()
 
-  while res[0][0] != 1:
+  while not m.get_button_state(1):
+    # Update MobileIO state
+    if not m.update():
+      print("Failed to get feedback from MobileIO")
+      continue
+
     state.lock()
 
     current_mode = state.mode
 
     if current_mode == 'training':
       m.set_led_color("blue")
-      if res[0][1] == 1:
+      if m.get_button_state(2):
         add_waypoint(state, False)
-      elif res[0][2] == 1:
+      elif m.get_button_state(3):
         add_waypoint(state, True)
-      elif res[0][3] == 1:
+      elif m.get_button_state(4):
         clear_waypoints(state)
-      elif res[0][4] == 1:
+      elif m.get_button_state(5):
         if state.number_of_waypoints > 1:
           state._mode = 'playback'
         else:
           print_and_cr('Need at least two waypoints to enter playback mode!')
     elif current_mode == 'playback':
       m.set_led_color("green")
-      if res[0][5] == 1:
+      if m.get_button_state(6):
         state._mode = 'training'
 
     state.unlock()
-    res = m.state
 
   m.set_led_color("red")
   state._quit = True

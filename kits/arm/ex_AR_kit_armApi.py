@@ -33,11 +33,12 @@ sleep(2)
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, phone_family, phone_name)
 m.set_button_mode(1, 'toggle')
-state = m.state
+m.update()
+
 fbk_mobile = m.fbk
 
-control_mode_toggle = 0
-quit_demo_button = 7
+control_mode_toggle = 1
+quit_demo_button = 8
 
 abort_flag = False
 run_mode = "startup"
@@ -46,26 +47,21 @@ def get_mobile_state(quit_demo_button):
   """
   Mobile io function to be run in another thread to prevent main loop stalling on long feedbacks
   """
-  global state
   global fbk_mobile
-  global diff
   global abort_flag
   global run_mode
   global mobile_pos_offset
    
   m.set_led_color("yellow")
-  while not diff[quit_demo_button] == "rising":
-    prev_state = state
-    state = m.state
-    diff = m.getDiff(prev_state, state)
+  while not m.get_button_diff(quit_demo_button) == "ToOn":
     fbk_mobile = m.fbk
     # Check for button presses and control state accordingly
-    if diff[0] == "falling":
+    if m.get_button_diff(control_mode_toggle) == "ToOff":
       run_mode = "startup"
       m.set_led_color("yellow")
     if run_mode == "standby":
       m.set_led_color("green")
-    if diff[0] == "rising" and run_mode == "standby":
+    if m.get_button_diff(control_mode_toggle) == "ToOn" and run_mode == "standby":
       m.set_led_color("blue")
       run_mode = "control"
       mobile_pos_offset = xyz_target_init - fbk_mobile.ar_position[0]
@@ -96,7 +92,11 @@ mobile_pos_offset = [0, 0, 0]
 # Main run loop
 while not abort_flag:
   a.update()
-    
+  # Update MobileIO state
+  if not m.update():
+    print("Failed to get feedback from MobileIO")
+    continue
+
   if run_mode == "startup":
     # Move to starting pos
     joint_targets = get_ik(xyz_target_init, ik_seed_pos)

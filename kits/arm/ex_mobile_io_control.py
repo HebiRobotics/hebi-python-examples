@@ -32,10 +32,10 @@ sleep(2)
 
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, phone_family, phone_name)
-state = m.state
 m.set_button_mode(1, 'momentary')
 m.set_button_mode(2, 'momentary')
 m.set_button_mode(3, 'momentary')
+m.update()
 
 quit_demo_button = 7
 abort_flag = False
@@ -103,15 +103,16 @@ def get_trajectory(curr_pos, curr_vel, curr_acc, point):
 
 
 while not abort_flag:
-  # Update mobile io state
-  state = m.state
-  diff = m.getDiff(prev_state, state)
+  # Update MobileIO state
+  if not m.update():
+    print("Failed to get feedback from MobileIO")
+    continue
 
   # Update arm state
   group.get_next_feedback(reuse_fbk=fbk)
 
   # Check for quit
-  if state[0][quit_demo_button] == 1:
+  if m.get_button_state(quit_demo_button):
     # Set led red and quit
     m.set_led_color("red")
     abort_flag = False
@@ -128,7 +129,7 @@ while not abort_flag:
     t = time() - start
 
   # If button 1 pressed, create trajectory from current position to point 1
-  elif (diff[0] == "rising"):
+  elif (m.get_button_diff(1) == "ToOn"):
     run_mode = "points"
     trajectory = get_trajectory(pos_cmd, vel_cmd, acc_cmd, point_1)
 
@@ -137,7 +138,7 @@ while not abort_flag:
     t = time() - start
 
   # If button 2 pressed, create trajectory from current position to point 2
-  elif diff[1] == "rising":
+  elif m.get_button_diff(2) == "ToOn":
     run_mode = "points"
     trajectory = get_trajectory(pos_cmd, vel_cmd, acc_cmd, point_2)
 
@@ -146,7 +147,7 @@ while not abort_flag:
     t = time() - start
 
   # If button 3 pressed, create trajectory from current position to point 3
-  elif diff[2] == "rising":
+  elif m.get_button_diff(3) == "ToOn":
     run_mode = "points"
     trajectory = get_trajectory(pos_cmd, vel_cmd, acc_cmd, point_3)
 
@@ -155,7 +156,7 @@ while not abort_flag:
     t = time() - start
 
   # If button 5 pressed switch to grav comp mode    
-  elif diff[5] == "rising":
+  elif m.get_button_diff(5) == "ToOn":
     run_mode = "grav comp"
 
   if run_mode == "points":
