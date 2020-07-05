@@ -23,6 +23,52 @@ class ArmParams(object):
         self.hrdf = hrdf
         self.moduleNames = moduleNames
         self.gripperName = gripperName
+        if self.gripperName is not None:
+            self.hasGripper = True
+        else:
+            self.hasGripper = False
+            
+            
+
+class Gripper(object):
+
+    def __init__(self, family, gripperName):
+        self.family = family
+        self.name = gripperName
+
+        self.grp = hebi.Lookup().get_group_from_names([family], [gripperName])
+        if self.grp is None:
+            print ("Could not find gripper spool on network")
+
+        self.openEffort = 1
+        self.closeEffort = -5
+        self.state = 0; # 0 is open, 1 is closed
+
+        # set up command structs
+        # <== insert the command here
+        self.cmd = hebi.GroupCommand(1)
+    
+    def setState(self, new_state):
+        # setState sets gripper to a value between [0 - 1] where 0 
+        # is fully open and 1 is fully closed. 'nan' is ignored.
+        if new_state < 0 or new_state > 1:
+            print("Gripper state must be between 0 and 1")
+        if ~np.isnan(new_state):
+            self.cmd.effort = new_state * self.closeEffort + (1-new_state) * self.openEffort
+            self.state = new_state
+            
+
+    def close(self):
+        self.setState(1)
+
+    def open(self):
+        self.setState(0)
+
+    def toggle(self):
+        self.setState(~self.state)
+
+    def update(self):
+        self.grp.send_command(self.cmd)
 
 
     
@@ -36,8 +82,8 @@ class Arm():
         else:
             self.lookup = lookup
 
-        # Lookup modules for arm
         self.grp = self.lookup.get_group_from_names([params.family], params.moduleNames)
+
         if self.grp is None:
             print("Could not find arm on network")
             modules_on_network = [entry for entry in self.lookup.entrylist]
@@ -49,13 +95,6 @@ class Arm():
                     print(entry)
 
             raise RuntimeError()
-
-        # Lookup gripper on network, if gripper is used
-        if self.gripperName is not None:
-            self.gripper = self.lookup.get_group_from_names([params.family], [params.gripperName])
-            if self.gripper is None:
-                print("Could not find gripper on network")
-                raise RuntimeError()
 
         # Create robot model
         try:
@@ -75,14 +114,7 @@ class Arm():
         self.vel_cmd = np.zeros(self.grp.size)
         self.accel_cmd = np.zeros(self.grp.size)
         self.eff_cmd = np.zeros(self.grp.size)
-
-        # Setup gripper variables
-        if self.gripperName is not None:
-            self.gripper_cmd = np.zeros(self.gripper.size)
-            self.gripper_close = -2.5 # effort value
-            self.gripper_open  = 1 # effor value
-            self.gripper_states = []
-
+        
         # Setup gravity vector for grav comp
         self.gravity_vec = [0, 0, 1]
         gravity_from_quaternion(self.fbk.orientation[0], output=self.gravity_vec)
@@ -169,7 +201,7 @@ class Arm():
         return mArray
     
     
-    def createGoal(self, position, durration=None, velocity=None, accel=None, flow=None, gripper_close=None):
+    def createGoal(self, position, durration=None, velocity=None, accel=None, flow=None):
         # Create trajectory to target position
         # Position should be an array of joint positions
         # Durration should be an array of durrations (if passed)
@@ -177,7 +209,6 @@ class Arm():
         # Accel should be an array of joint accelerations of the same length as the amount of positions (if passed)
         # Flow ahould be an array of True/False of the same length as the amount of positions (if passed)
         # Note flow overrides any velocities or accelerations passed
-        # Gripper_close should be an array of True/False of the same length as the amount of positions (if passed)
         """
         EX:
             3dof arm with a 2 point trajectory
@@ -186,7 +217,6 @@ class Arm():
             velocity = [[vel1, vel2, vel3], [vel4, vel5, vel6]]
             accel = [[accel1, accel2, accel3], [accel4, accel5, accel6]]
             flow = [bool1, bool2]
-            gripper_close = [bool1, bool2]
         """
         self.at_goal = False
         
@@ -195,7 +225,6 @@ class Arm():
             self.pos_cmd = self.fbk.position
             self.vel_cmd = self.fbk.velocity
             self.accel_cmd = np.zeros(self.grp.size)
-            self.gripper_cmd = self.gripper_open
         
         waypoints = self.createMotionArray(len(position), self.pos_cmd, array=position)
         
@@ -244,7 +273,6 @@ class Arm():
         else:
             # No current goal
             return 0
-        
         
         
         
