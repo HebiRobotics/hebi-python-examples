@@ -82,8 +82,8 @@ class Arm():
         else:
             self.lookup = lookup
 
+        # Lookup modules for arm
         self.grp = self.lookup.get_group_from_names([params.family], params.moduleNames)
-
         if self.grp is None:
             print("Could not find arm on network")
             modules_on_network = [entry for entry in self.lookup.entrylist]
