@@ -26,7 +26,7 @@ def get_group():
   # Set gains
   gains_command = hebi.GroupCommand(group.size)
   try:
-    gains_command.read_gains("gains/3-DoF_arm_gains.xml")
+    gains_command.read_gains("gains/A-2085-03.xml")
   except Exception as e:
     print('Failed to read gains: {0}'.format(e))
     return None
@@ -76,7 +76,7 @@ if group is None:
   exit(1)
 
 try:
-  model = hebi.robot_model.import_from_hrdf("hrdf/3-DoF_arm_example.hrdf")
+  model = hebi.robot_model.import_from_hrdf("hrdf/A-2085-03.hrdf")
 except Exception as e:
   print('Could not load HRDF: {0}'.format(e))
   exit(1)
