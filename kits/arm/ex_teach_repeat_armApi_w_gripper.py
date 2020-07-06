@@ -100,7 +100,7 @@ while not abort_flag:
         durrations = []
 
       # B5 add waypoint (stop) and toggle the gripper
-      if m.get_button_diff(5) == 3:
+      if m.get_button_diff(5) == 3 or m.get_button_diff(6) == 3 or m.get_button_diff(7) == 3:
         # Add 2 waypoints to allow the gripperr to open or close
         print("Stop waypoint added and gripper toggled")
 
@@ -117,21 +117,8 @@ while not abort_flag:
         waypoints.append(a.fbk.position)
         flow.append(False)
         grip_states.append(a.gripper.state) # this will now be the toggled state
-        durrations.append(4) # time given to gripper for closing
+        durrations.append(2) # time given to gripper for closing
 
-
-    # """    
-    #   # B5 close gripper
-    #   if m.get_button_diff(5) == 3:
-    #     print("Closing Gripper")
-    #     a.gripper.close()
-
-    
-    #   # B6 open gripper
-    #   if m.get_button_diff(6) == 3:
-    #     print("Opening Gripper")
-    #     a.gripper.open()
-    # """
 
   if run_mode == "playback":
 
@@ -140,20 +127,11 @@ while not abort_flag:
       run_mode = "training"
       a.cancelGoal()
 
-
-    # # command the first waypoint
-    # next_waypoint = waypoints[playback_waypoint]
-    # next_flow = flow[playback_waypoint]
-    # next_durration = durrations[playback_waypoint]
-    # a.createGoal([next_waypoint], flow=[next_flow], durration=[next_durration])
-    # a.setGoal()
-
-
     if playback_waypoint == len(waypoints): # finished playback, reset counter and restart
       playback_waypoint = 0
     
     if a.at_goal:
-      print("Reached waypoint number: %d", playback_waypoint+1)
+      print("Reached waypoint number:", playback_waypoint+1)
       next_waypoint = waypoints[playback_waypoint]
       next_flow = flow[playback_waypoint]
       next_durration = durrations[playback_waypoint]
@@ -161,13 +139,7 @@ while not abort_flag:
       a.setGoal()
       a.gripper.setState(grip_states[playback_waypoint])
 
+      # iterate waypoint counter 
       playback_waypoint += 1
     
-        
-
-    # # When not running through waypoints, start run through the waypoints
-    # if a.at_goal:
-    #   a.createGoal(waypoints, flow=flow, durration=durrations)
-    #   a.setGoal()
-
   a.send()
