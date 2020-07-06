@@ -154,10 +154,10 @@ class Arm():
         return mArray
     
     
-    def createGoal(self, position, durration=None, velocity=None, accel=None, flow=None):
+    def createGoal(self, position, duration=None, velocity=None, accel=None, flow=None):
         # Create trajectory to target position
         # Position should be an array of joint positions
-        # Durration should be an array of durrations (if passed)
+        # Duration should be an array of durations (if passed)
         # Velocity should be an array of joint velocities of the same length as the amount of positions (if passed)
         # Accel should be an array of joint accelerations of the same length as the amount of positions (if passed)
         # Flow ahould be an array of True/False of the same length as the amount of positions (if passed)
@@ -166,7 +166,7 @@ class Arm():
         EX:
             3dof arm with a 2 point trajectory
             position = [[pos1, pos2, pos3], [pos4, pos5, pos6]]
-            durration = [time1, time2]
+            duration = [time1, time2]
             velocity = [[vel1, vel2, vel3], [vel4, vel5, vel6]]
             accel = [[accel1, accel2, accel3], [accel4, accel5, accel6]]
             flow = [bool1, bool2]
@@ -185,16 +185,16 @@ class Arm():
         velocities = self.createMotionArray(len(position), self.vel_cmd, array=velocity, flow=flow)
         accels = self.createMotionArray(len(position), self.accel_cmd, array=accel, flow=flow)
         
-        # Create time vector from durrations given
+        # Create time vector from durations given
         time_vector = []
-        if durration == None:
+        if duration == None:
             time_vector.append(0)
             for i in range(len(position)):
                 time_vector.append(5+time_vector[i])
         else:
             time_vector.append(0)
             for i in range(len(position)):
-                time_vector.append(durration[i]+time_vector[i])
+                time_vector.append(duration[i]+time_vector[i])
         
         # Create trajectory
         self.trajectory_plan = hebi.trajectory.create_trajectory(time_vector, waypoints, velocities, accels)

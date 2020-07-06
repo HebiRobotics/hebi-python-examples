@@ -45,19 +45,19 @@ while not abort_flag:
   # B1 point 1
   if m.get_button_diff(1) == 3: # "ToOn"
     positions = (0, 0, 0, 0, 0, 0)
-    a.createGoal([positions], durration=[4])
+    a.createGoal([positions], duration=[4])
     a.setGoal()
 
   # B2 point 2    
   if m.get_button_diff(2) == 3: # "ToOn"
     positions = np.asarray([np.pi/4, np.pi/3, 2*np.pi/3, np.pi/3, np.pi/4, 0])
-    a.createGoal([positions], durration=[4])
+    a.createGoal([positions], duration=[4])
     a.setGoal()
 
   # B3 point 3
   if m.get_button_diff(3) == 3: # "ToOn"
     positions = np.asarray([-np.pi/4, np.pi/3, 2*np.pi/3, np.pi/3, 3*np.pi/4, 0])
-    a.createGoal([positions], durration=[4])
+    a.createGoal([positions], duration=[4])
     a.setGoal()
 
   # B6 grav comp    

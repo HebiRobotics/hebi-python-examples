@@ -122,7 +122,7 @@ while not abort_flag:
     # Follow phone's motion in 3D space
     phone_target_xyz = fbk_mobile.ar_position[0] + mobile_pos_offset
     joint_targets = get_ik(phone_target_xyz, a.fbk.position)
-    a.createGoal([joint_targets], durration=[1])
+    a.createGoal([joint_targets], duration=[1])
     a.setGoal()
     
   a.send()
