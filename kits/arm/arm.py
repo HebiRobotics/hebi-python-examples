@@ -52,11 +52,12 @@ class Gripper(object):
         # setState sets gripper to a value between [0 - 1] where 0 
         # is fully open and 1 is fully closed. 'nan' is ignored.
         if new_state < 0 or new_state > 1:
+            print("You have tried setting the gripper state to be:")
+            print(self.state, new_state)
             print("Gripper state must be between 0 and 1")
         if ~np.isnan(new_state):
             self.cmd.effort = new_state * self.closeEffort + (1-new_state) * self.openEffort
             self.state = new_state
-            
 
     def close(self):
         self.setState(1)
@@ -65,7 +66,10 @@ class Gripper(object):
         self.setState(0)
 
     def toggle(self):
-        self.setState(~self.state)
+        if self.state == 0:
+            self.setState(1)
+        else:
+            self.setState(0)
 
     def update(self):
         self.grp.send_command(self.cmd)
@@ -103,6 +107,13 @@ class Arm():
             print('Could not load HRDF: {0}'.format(e))
             sys.exit()
         
+        # Create Gripper, if exists
+        if params.hasGripper:
+            self.gripper = Gripper(params.family, params.gripperName)
+        else:
+            self.gripper = None
+
+
         # Create comand and feedback
         self.cmd = hebi.GroupCommand(self.grp.size)
         self.fbk = hebi.GroupFeedback(self.grp.size)
@@ -151,6 +162,7 @@ class Arm():
             self.t_traj = self.time_now - self.traj_start_time
             if self.time_now > (self.traj_start_time + self.duration):
                 self.at_goal = True
+        self.gripper.update()
         # Create command
         if self.goal == "grav comp":
             # Calculate required torques to negate gravity at current position
