@@ -18,7 +18,7 @@ if group is None:
   exit(1)
 
 try:
-  model = hebi.robot_model.import_from_hrdf("hrdf/3-DoF_arm_example.hrdf")
+  model = hebi.robot_model.import_from_hrdf("hrdf/A-2085-03.hrdf")
 except:
   print("Could not load HRDF.")
   exit(1)

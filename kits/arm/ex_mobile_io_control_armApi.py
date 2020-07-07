@@ -10,7 +10,7 @@ from hebi.util import create_mobile_io
 # Set up arm
 family_name  = "Example Arm"
 module_names = ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3"]
-hrdf = "hrdf/6-DoF_arm.hrdf"
+hrdf = "hrdf/A-2085-06.hrdf"
 p = arm.ArmParams(family_name, module_names, hrdf)
 a = arm.Arm(p)
 
@@ -45,19 +45,19 @@ while not abort_flag:
   # B1 point 1
   if m.get_button_diff(1) == 3: # "ToOn"
     positions = (0, 0, 0, 0, 0, 0)
-    a.createGoal([positions], durration=[4])
+    a.createGoal([positions], duration=[4])
     a.setGoal()
 
   # B2 point 2    
   if m.get_button_diff(2) == 3: # "ToOn"
     positions = np.asarray([np.pi/4, np.pi/3, 2*np.pi/3, np.pi/3, np.pi/4, 0])
-    a.createGoal([positions], durration=[4])
+    a.createGoal([positions], duration=[4])
     a.setGoal()
 
   # B3 point 3
   if m.get_button_diff(3) == 3: # "ToOn"
     positions = np.asarray([-np.pi/4, np.pi/3, 2*np.pi/3, np.pi/3, 3*np.pi/4, 0])
-    a.createGoal([positions], durration=[4])
+    a.createGoal([positions], duration=[4])
     a.setGoal()
 
   # B6 grav comp    
