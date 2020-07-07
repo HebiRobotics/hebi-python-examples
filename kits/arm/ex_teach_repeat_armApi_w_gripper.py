@@ -13,6 +13,7 @@ hrdf = "hrdf/6-DoF_arm_w_gripper.hrdf"
 gripper_name = "gripperSpool"
 p = arm.ArmParams(family_name, module_names, hrdf, gripperName=gripper_name)
 a = arm.Arm(p)
+# a.loadGains("gains/")
 a.gripper.open()
 
 
@@ -39,11 +40,11 @@ run_mode = "training"
 
 print("")
 print("B1 - Add waypoint (stop)")
+print("B5 - Add waypoint (stop) and toggle the gripper")
 print("B2 - Add waypoint (flow)")
 print("A3 - Up/down for longer/shorter time to waypoint")
 print("B3 - Toggle training/playback")
 print("B4 - Clear waypoints")
-print("B5 - Add waypoint (stop) and toggle the gripper")
 print("B8 - Quit")
 print("")
 
@@ -131,7 +132,7 @@ while not abort_flag:
       playback_waypoint = 0
     
     if a.at_goal:
-      print("Reached waypoint number:", playback_waypoint+1)
+      print("Reached waypoint number:", playback_waypoint) # waypoint 0 is position from where you start the playback
       next_waypoint = waypoints[playback_waypoint]
       next_flow = flow[playback_waypoint]
       next_durration = durrations[playback_waypoint]
