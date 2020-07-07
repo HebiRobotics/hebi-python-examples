@@ -5,7 +5,7 @@ from math import pi
 
 # Method 1: Load the kinematics from an HRDF file
 try:
-  model_from_hrdf = hebi.robot_model.import_from_hrdf("hrdf/3-DoF_arm_example.hrdf")
+  model_from_hrdf = hebi.robot_model.import_from_hrdf("hrdf/A-2085-03.hrdf")
 except:
   print("Could not load HRDF.")
   exit(1)

@@ -9,7 +9,7 @@ from time import sleep
 # Set up arm
 family_name  = "Arm"
 module_names = ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3"]
-hrdf = "hrdf/6-DoF_arm_w_gripper.hrdf"
+hrdf = "hrdf/A-2085-06.hrdf"
 p = arm.ArmParams(family_name, module_names, hrdf)
 a = arm.Arm(p)
 
@@ -30,7 +30,7 @@ abort_flag = False
 
 waypoints = []
 flow = []
-durrations = []
+durations = []
 run_mode = "training"
 curr_waypoint_num = 0
 
@@ -64,14 +64,14 @@ while not abort_flag:
         print("Stop waypoint added")
         waypoints.append(a.fbk.position)
         flow.append(False)
-        durrations.append(slider3 + 4)
+        durations.append(slider3 + 4)
 
       # B2 add waypoint (flow)
       if m.get_button_diff(2) == 3: # "ToOn"
         print("Flow waypoint added")
         waypoints.append(a.fbk.position)
         flow.append(True)
-        durrations.append(slider3 + 4)
+        durations.append(slider3 + 4)
 
       # B3 toggle training/playback
       if m.get_button_diff(3) == 3: # "ToOn"
@@ -89,7 +89,7 @@ while not abort_flag:
         print("Waypoints cleared")
         waypoints = []
         flow = []
-        durrations = []
+        durations = []
 
   if run_mode == "playback":
     # B3 toggle training/playback
@@ -99,7 +99,7 @@ while not abort_flag:
 
     # When not running through waypoints, run through the waypoints
     if a.at_goal:
-      a.createGoal(waypoints, flow=flow, durration=durrations)
+      a.createGoal(waypoints, flow=flow, duration=durations)
       a.setGoal()
 
   a.send()

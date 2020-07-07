@@ -21,7 +21,7 @@ import arm
 # Set up arm
 family_name = "Example Arm"
 module_names = ("J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3")
-hrdf = "hrdf/6-DoF_arm.hrdf"
+hrdf = "hrdf/A-2085-06.hrdf"
 p = arm.ArmParams(family_name, module_names, hrdf)
 a = arm.Arm(p)
 
@@ -122,7 +122,7 @@ while not abort_flag:
     # Follow phone's motion in 3D space
     phone_target_xyz = fbk_mobile.ar_position[0] + mobile_pos_offset
     joint_targets = get_ik(phone_target_xyz, a.fbk.position)
-    a.createGoal([joint_targets], durration=[1])
+    a.createGoal([joint_targets], duration=[1])
     a.setGoal()
     
   a.send()
