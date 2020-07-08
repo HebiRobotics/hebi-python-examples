@@ -47,6 +47,16 @@ class Gripper(object):
         # set up command structs
         # <== insert the command here
         self.cmd = hebi.GroupCommand(1)
+
+    # Loads gains from given gains file    
+    def loadGains(self, gains_file):
+        try:
+            self.cmd.read_gains(gains_file)
+            if not self.grp.send_command_with_acknowledgement(self.cmd):
+                raise RuntimeError('Did not receive acknowledgement from group.')
+            print('Successfully read gains from file and sent to gripper.')
+        except Exception as e:
+            print('Problem reading gains from file or sending to module: {0}'.format(e))
     
     def setState(self, new_state):
         # setState sets gripper to a value between [0 - 1] where 0 
@@ -148,9 +158,9 @@ class Arm():
             self.cmd.read_gains(gains_file)
             if not self.grp.send_command_with_acknowledgement(self.cmd):
                 raise RuntimeError('Did not receive ack from group.')
-            print('Successfully read gains from file and sent to module.')
+            print('Successfully read gains from file and sent to arm.')
         except Exception as e:
-            print('Problem reading gains from file or sending to module: {0}'.format(e))
+            print('Problem reading gains from file or sending to arm: {0}'.format(e))
     
     
     # Updates feedback and generates the basic command for this timestep
