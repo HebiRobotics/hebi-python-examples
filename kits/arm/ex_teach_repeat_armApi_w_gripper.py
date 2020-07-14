@@ -11,7 +11,7 @@ family_name  = "Arm"
 module_names = ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3"]
 hrdf = "hrdf/A-2085-06G.hrdf"
 gripper_name = "gripperSpool"
-p = arm.ArmParams(family_name, module_names, hrdf, gripperName=gripper_name)
+p = arm.ArmParams(family_name, module_names, hrdf, hasGripper=True, gripperName=gripper_name)
 a = arm.Arm(p)
 a.loadGains("gains/A-2085-06.xml")
 a.gripper.loadGains("gains/gripper_spool_gains.xml")
