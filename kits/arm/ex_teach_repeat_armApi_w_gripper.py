@@ -9,12 +9,12 @@ from time import sleep
 # Set up arm
 family_name  = "Arm"
 module_names = ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3"]
-hrdf = "hrdf/A-2085-06G_custom.hrdf"
+hrdf = "hrdf/A-2085-06G.hrdf"
 gripper_name = "gripperSpool"
 p = arm.ArmParams(family_name, module_names, hrdf, gripperName=gripper_name)
 a = arm.Arm(p)
-# a.loadGains("gains/A-2085-06.xml")
-# a.gripper.loadGains("gains/gripper_spool_gains.xml")
+a.loadGains("gains/A-2085-06.xml")
+a.gripper.loadGains("gains/gripper_spool_gains.xml")
 a.gripper.open()
 
 
@@ -107,6 +107,7 @@ while not abort_flag:
       if m.get_button_diff(5) == 3: # "ToOn"
         # Check for more than 2 waypoints
         if len(waypoints) > 1:
+          print("Starting playback of waypoints")
           run_mode = "playback"
           playback_waypoint = 0 # reset playback_waypoint before starting playback
           a.gripper.open()
@@ -121,6 +122,7 @@ while not abort_flag:
         waypoints = []
         flow = []
         durations = []
+        grip_states = []
 
       
 
@@ -128,6 +130,7 @@ while not abort_flag:
 
     # B5 toggle training/playback, leave playback
     if m.get_button_diff(5) == 3: # "ToOn"
+      print("Returned to training mode")
       run_mode = "training"
       a.cancelGoal()
     
