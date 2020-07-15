@@ -7,14 +7,14 @@ from time import sleep
 
 
 # Set up arm
-family_name  = "Example Arm"
+family_name  = "Arm"
 module_names = ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3"]
 hrdf = "hrdf/A-2085-06.hrdf"
 p = arm.ArmParams(family_name, module_names, hrdf)
 a = arm.Arm(p)
 
 # Mobile device setup
-phone_family = 'HEBI'
+phone_family = 'Arm'
 phone_name   = "mobileIO"
 
 lookup = hebi.Lookup()

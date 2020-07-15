@@ -27,15 +27,18 @@ if m is None:
   raise RuntimeError("Could not find Mobile IO device")
 m.update()
 
+
 abort_flag = False
 
 while not abort_flag:
   # Update arm
   a.update()
+
   # Update MobileIO state
   if not m.update():
     print("Failed to get feedback from MobileIO")
     continue
+
 
   # B8 quit demo
   if m.get_button_diff(8) == 3: # "ToOn"
