@@ -8,12 +8,11 @@ from time import sleep
 from hebi import arm as arm_api
 from hebi.util import create_mobile_io
 
-run_mode = "points"
-first_run = True
-
+# Arm setup
 phone_family = 'HEBI'
 phone_name   = "mobileIO"
 arm_family   = "Example Arm"
+hrdf_file    = "hrdf/A-2085-06.hrdf"
 
 lookup = hebi.Lookup()
 sleep(2)
@@ -31,16 +30,18 @@ m.update()
 # Setup arm components
 arm = arm_api.create(arm_family,
                      lookup=lookup,
-                     hrdf_file=os.path.join(os.path.dirname(__file__), 'hrdf', 'A-2085-06.hrdf'))
+                     hrdf_file=hrdf_file)
 
 # Configure arm components
 # TODO
 
 quit_demo_button = 8
 keep_running = True
-point_1 = np.asarray([np.pi/4, np.pi/3, 2*np.pi/3, np.pi/3, np.pi/4, 0])
-point_2 = np.asarray([-np.pi/4, np.pi/3, 2*np.pi/3, np.pi/3, 3*np.pi/4, 0])
-point_3 = np.asarray([0, 0, 0, 0, 0, 0])
+run_mode = "points"
+first_run = True
+point_1 = np.asarray([np.pi/4, np.pi/3, 2*np.pi/3, np.pi/3, np.pi/4, 0], dtype=np.float64)
+point_2 = np.asarray([-np.pi/4, np.pi/3, 2*np.pi/3, np.pi/3, 3*np.pi/4, 0], dtype=np.float64)
+point_3 = np.asarray([0, 0, 0, 0, 0, 0], dtype=np.float64)
 
 print('B1-3 - select different points to move the arm to.')
 print('B6 - enables grav comp mode.')

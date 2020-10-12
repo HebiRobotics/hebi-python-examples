@@ -1,82 +1,60 @@
 #!/usr/bin/env python3
 
 import hebi
+import numpy as np
 import os
-import sys
 from time import sleep
-
-
-# ------------------------------------------------------------------------------
-# Add the root folder of the repository to the search path for modules
-root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path = [root_path] + sys.path
-# ------------------------------------------------------------------------------
-
-
 from hebi.util import create_mobile_io
-from util.math_utils import get_grav_comp_efforts
-from util.arm import setup_arm_params
+from hebi import arm as arm_api
 from matplotlib import pyplot as plt
 
-# Set up our mobile io interface
+# Arm setup
 phone_family = "HEBI"
-phone_name = "mobileIO"
+phone_name   = "mobileIO"
+arm_family   = "Example Arm"
+hrdf_file    = "hrdf/A-2085-06.hrdf"
 
 lookup = hebi.Lookup()
 sleep(2)
 
+# Setup MobileIO
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, phone_family, phone_name)
 if m is None:
   raise RuntimeError("Could not find Mobile IO device")
 m.update()
 
-arm_family = 'Example Arm'
-arm_name   = '6-DoF'
-# If you attach a gas spring to the shoulder for extra payload, set this to True
-has_gas_spring = False
+# Setup arm components
+arm = arm_api.create(arm_family,
+                     lookup=lookup,
+                     hrdf_file=hrdf_file)
 
-group, kin, params = setup_arm_params(arm_name, arm_family, has_gas_spring)
-
-gravity_vec = params.gravity_vec
-effort_offset = params.effort_offset
-local_dir = params.local_dir
+# Configure arm components
+# TODO
 
 enable_logging = True
 
 # Start background logging 
 if enable_logging:
-  group.start_log('dir', 'logs', mkdirs=True)
-
-# Gravity compensated mode
-cmd = hebi.GroupCommand(group.size)
-fbk = hebi.GroupFeedback(group.size)
+  arm.group.start_log('dir', 'logs', mkdirs=True)
 
 print('Commanded gravity-compensated zero torques to the arm.')
 print('Press b1 to stop.')
 
 while not m.get_button_state(1):
-  # Update MobileIO state
+
+  if not arm.update():
+    print("Failed to update arm")
+    continue
+
   if not m.update():
     print("Failed to get feedback from MobileIO")
     continue
-    
-  # Gather sensor data from the arm
-  group.get_next_feedback(reuse_fbk=fbk)
 
-  # Update gravity vector the base module of the arm
-  params.update_gravity(fbk)
-  gravity_vec = params.gravity_vec
-
-  # Calculate required torques to negate gravity at current position
-  cmd.effort = get_grav_comp_efforts(kin, fbk.position, -gravity_vec) + effort_offset
-
-  # Send to robot
-  group.send_command(cmd)
-
+  arm.send()
 
 if enable_logging:
-  hebi_log = group.stop_log()
+  hebi_log = arm.group.stop_log()
 
   # Plot tracking / error from the joints in the arm.
   time = []

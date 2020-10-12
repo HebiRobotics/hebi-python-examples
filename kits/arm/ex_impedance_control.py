@@ -8,9 +8,11 @@ from hebi.util import create_mobile_io
 from hebi import arm as arm_api
 from matplotlib import pyplot as plt
 
+# Arm setup
 phone_family = "HEBI"
 phone_name   = "mobileIO"
 arm_family   = "Example Arm"
+hrdf_file    = "hrdf/A-2085-06G.hrdf"
 
 lookup = hebi.Lookup()
 sleep(2)
@@ -27,7 +29,7 @@ m.update()
 # Setup arm components
 arm = arm_api.create(arm_family,
                      lookup=lookup,
-                     hrdf_file=os.path.join(os.path.dirname(__file__), 'hrdf', 'A-2085-06G.hrdf'))
+                     hrdf_file=hrdf_file)
 impedance_controller = arm_api.ImpedanceController()
 end_effector = arm_api.Gripper()
 
