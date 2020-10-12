@@ -28,7 +28,8 @@ m.set_button_mode(3, 'momentary')
 m.update()
 
 # Setup arm components
-arm = arm_api.create(arm_family,
+arm = arm_api.create([arm_family],
+                     names=['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
                      lookup=lookup,
                      hrdf_file=hrdf_file)
 

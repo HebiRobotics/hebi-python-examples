@@ -24,7 +24,8 @@ if m is None:
 m.update()
 
 # Setup arm components
-arm = arm_api.create(arm_family,
+arm = arm_api.create([arm_family],
+                     names=['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
                      lookup=lookup,
                      hrdf_file=hrdf_file)
 
@@ -48,9 +49,10 @@ while keep_running:
     arm.set_goal_from_builder(builder)
     pending_goal = False
 
-  # Update arm and mobile io
-  arm.update()
-  # Update button states
+  if not arm.update():
+    print("Failed to update arm")
+    continue
+
   if not m.update():
     print("Failed to get feedback from MobileIO")
     continue
