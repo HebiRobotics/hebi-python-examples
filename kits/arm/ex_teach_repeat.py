@@ -32,7 +32,7 @@ arm = arm_api.create([arm_family],
 keep_running = True
 pending_goal = False
 run_mode = "training"
-builder = arm_api.GoalBuilder()
+builder = arm_api.GoalBuilder(arm.size)
 
 print("")
 print("B1 - Add waypoint (stop)")
@@ -81,6 +81,7 @@ while keep_running:
     if m.get_button_diff(3) == 3: # "ToOn"
       # Check for more than 2 waypoints
       if builder.waypoint_count > 1:
+        print("Transitioning to playback mode")
         run_mode = "playback"
         pending_goal = True
       else:
@@ -94,6 +95,7 @@ while keep_running:
   elif run_mode == "playback":
     # B3 toggle training/playback
     if m.get_button_diff(3) == 3: # "ToOn"
+      print("Transitioning to training mode")
       run_mode = "training"
       arm.cancel_goal()
 

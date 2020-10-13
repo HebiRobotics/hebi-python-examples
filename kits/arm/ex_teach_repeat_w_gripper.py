@@ -13,6 +13,9 @@ phone_name   = "mobileIO"
 arm_family   = "Example Arm"
 hrdf_file    = "hrdf/A-2085-06.hrdf"
 
+gripper_family = arm_family
+gripper_name   = 'gripperSpool'
+
 lookup = hebi.Lookup()
 sleep(2)
 
@@ -28,7 +31,7 @@ arm = arm_api.create([arm_family],
                      names=['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
                      lookup=lookup,
                      hrdf_file=hrdf_file)
-gripper = arm_api.Gripper()
+gripper = arm_api.Gripper(lookup.get_group_from_names([gripper_family], [gripper_name]), 1, -5)
 gripper.load_gains("gains/gripper_spool_gains.xml")
 
 arm.set_end_effector(gripper)
@@ -36,7 +39,7 @@ arm.set_end_effector(gripper)
 keep_running = True
 pending_goal = False
 run_mode = "training"
-builder = arm_api.GoalBuilder()
+builder = arm_api.GoalBuilder(arm.size)
 
 print("")
 print("B1 - Add waypoint (stop)")
@@ -96,6 +99,7 @@ while keep_running:
     if m.get_button_diff(5) == 3: # "ToOn"
       # Check for more than 2 waypoints
       if builder.waypoint_count > 1:
+        print("Transitioning to playback mode")
         run_mode = "playback"
         pending_goal = True
       else:
@@ -107,8 +111,9 @@ while keep_running:
       builder.clear()
 
   elif run_mode == "playback":
-    # B3 toggle training/playback
-    if m.get_button_diff(3) == 3: # "ToOn"
+    # B5 toggle training/playback
+    if m.get_button_diff(5) == 3: # "ToOn"
+      print("Transitioning to training mode")
       run_mode = "training"
       arm.cancel_goal()
 

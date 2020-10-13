@@ -93,4 +93,6 @@ if enable_logging:
   plt.xlabel('time (sec)')
   plt.ylabel('effort (N*m)')
   plt.grid(True)
+
+  plt.show()
   # Put more plotting code here

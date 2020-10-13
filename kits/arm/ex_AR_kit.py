@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
 
-import sys
-sys.path = ['/mnt/develop/hebi/repos/git/python/core_py/src'] + sys.path
-
 import hebi
 import numpy as np
 import os
@@ -14,7 +11,7 @@ from hebi import arm as arm_api
 # Arm setup
 phone_family = "HEBI"
 phone_name   = "mobileIO"
-arm_family   = "Arm"
+arm_family   = "Example Arm"
 hrdf_file    = "hrdf/A-2085-06.hrdf"
 
 lookup = hebi.Lookup()

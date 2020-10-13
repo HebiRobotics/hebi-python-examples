@@ -32,13 +32,14 @@ arm = arm_api.create([arm_family],
                      lookup=lookup,
                      hrdf_file=hrdf_file)
 impedance_controller = arm_api.ImpedanceController()
-end_effector = arm_api.Gripper()
 
 # Configure arm components
 arm.add_plugin(impedance_controller)
-impedance_controller.set_damper_gains(10, 10, 0, .1, .1, .1)
-impedance_controller.set_spring_gains(500, 500, 0, 5, 5, 5)
-arm.set_end_effector(end_effector)
+
+# hold position only (Allow rotation around end-effector position)
+impedance_controller.gains_in_end_effector_frame = True
+impedance_controller.set_damper_gains(5, 5, 5, 0, 0, 0)
+impedance_controller.set_spring_gains(500, 500, 500, 0, 0, 0)
 
 # Increase feedback frequency since we're calculating velocities at the
 # high level for damping. Going faster can help reduce a little bit of
@@ -66,9 +67,6 @@ controller_on = False
 # while button 1 is not pressed
 while not m.get_button_state(1):
 
-  # Update impedance controller state
-  impedance_controller.enabled = controller_on
-
   if not arm.update():
     print("Failed to update arm")
     continue
@@ -83,6 +81,11 @@ while not m.get_button_state(1):
   m.set_led_color("blue" if controller_on else "green")
   # If button 2 is pressed set to impedance mode
   controller_on = bool(m.get_button_state(2))
+
+  if controller_on:
+    arm.set_goal(arm.last_feedback.position)
+  else:
+    arm.cancel_goal()
 
 m.set_led_color("red")
 
@@ -125,4 +128,7 @@ if enable_logging:
   plt.xlabel('time (sec)')
   plt.ylabel('effort (N*m)')
   plt.grid(True)
+
+  plt.show()
+
   # Put more plotting code here
