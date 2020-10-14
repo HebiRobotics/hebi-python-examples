@@ -67,19 +67,19 @@ while keep_running:
 
   # On first run go to point 1
   if first_run:
-    a.set_goal(point_1, times=[4])
+    arm.set_goal(point_1, times=[4])
 
   # B1 point 1
   elif m.get_button_diff(1) == 3: # "ToOn"
-    a.set_goal(point_1, times=[4])
+    arm.set_goal(point_1, times=[4])
 
   # B2 point 2
   elif m.get_button_diff(2) == 3: # "ToOn"
-    a.set_goal(point_2, times=[4])
+    arm.set_goal(point_2, times=[4])
 
   # B3 point 3
   elif m.get_button_diff(3) == 3: # "ToOn"
-    a.set_goal(point_3, times=[4])
+    arm.set_goal(point_3, times=[4])
 
   # B6 grav comp
   elif m.get_button_diff(6) == 3: # "ToOn"

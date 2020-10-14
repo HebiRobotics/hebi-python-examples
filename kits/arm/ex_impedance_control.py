@@ -77,10 +77,10 @@ while not m.get_button_state(1):
 
   arm.send()
 
-  # If in impedance mode set led blue
-  m.set_led_color("blue" if controller_on else "green")
   # If button 2 is pressed set to impedance mode
   controller_on = bool(m.get_button_state(2))
+  # If in impedance mode set led blue
+  m.set_led_color("blue" if controller_on else "green")
 
   if controller_on:
     arm.set_goal(arm.last_feedback.position)

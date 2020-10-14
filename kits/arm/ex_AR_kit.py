@@ -51,9 +51,16 @@ def get_mobile_state(quit_demo_button):
   global keep_running
   global run_mode
   global mobile_pos_offset
-   
+
+  m.update()
+
   m.set_led_color("yellow")
   while not m.get_button_diff(quit_demo_button) == 3: # "ToOn"
+
+    if not m.update():
+      print("Failed to get feedback from MobileIO")
+      continue
+  
     fbk_mobile = m.get_last_feedback()
     # Check for button presses and control state accordingly
     if m.get_button_diff(control_mode_toggle) == 2: # "ToOff"
@@ -64,12 +71,10 @@ def get_mobile_state(quit_demo_button):
     if m.get_button_diff(control_mode_toggle) == 3 and run_mode == "standby": # "ToOn"
       m.set_led_color("blue")
       run_mode = "control"
-      print(f"ar_position: {fbk_mobile.ar_position}")
       mobile_pos_offset = xyz_target_init - fbk_mobile.ar_position[0]
             
   m.set_led_color("red")
   keep_running = False
-  return
 
 
 # Start mobile io thread
@@ -90,10 +95,6 @@ while keep_running:
     print("Failed to update arm")
     continue
 
-  if not m.update():
-    print("Failed to get feedback from MobileIO")
-    continue
-
   if run_mode == "startup":
     # Move to starting pos
     joint_targets = arm.ik_target_xyz(ik_seed_pos, xyz_target_init)
@@ -110,7 +111,6 @@ while keep_running:
     # Follow phone's motion in 3D space
     phone_target_xyz = fbk_mobile.ar_position[0] + mobile_pos_offset
     joint_targets = arm.ik_target_xyz(arm.last_feedback.position, phone_target_xyz)
-    print(f'phone_target_xyz: {phone_target_xyz}')
     arm.set_goal([joint_targets], times=[1.0])
     
   arm.send()
