@@ -76,24 +76,20 @@ while keep_running:
     # B1 add waypoint (stop)
     if m.get_button_diff(1) == 3: # "ToOn"
       print("Stop waypoint added")
-      builder.add_waypoint(slider3 + 4.0, position=arm.last_feedback.position, aux=gripper.state)
-      #flow.append(False)
+      builder.add_waypoint(slider3 + 4.0, position=arm.last_feedback.position, aux=gripper.state, velocity=0)
 
     # B2 add waypoint (stop) and toggle the gripper
     if m.get_button_diff(2) == 3: # "ToOn"
       # Add 2 waypoints to allow the gripper to open or close
       print("Stop waypoint added and gripper toggled")
       position = arm.last_feedback.position
-      builder.add_waypoint(slider3 + 4.0, position=position, aux=gripper.state)
+      builder.add_waypoint(slider3 + 4.0, position=position, aux=gripper.state, velocity=0)
       gripper.toggle()
-      builder.add_waypoint(2.0, position=position, aux=gripper.state)
-      #flow.append(False)
+      builder.add_waypoint(2.0, position=position, aux=gripper.state, velocity=0)
 
     # B3 add waypoint (flow)
     if m.get_button_diff(3) == 3: # "ToOn"
       print("Flow waypoint added")
-      builder.add_waypoint(slider3 + 4.0, position=arm.last_feedback.position, aux=gripper.state)
-      #flow.append(True)
 
     # B5 toggle training/playback
     if m.get_button_diff(5) == 3: # "ToOn"

@@ -68,14 +68,12 @@ while keep_running:
     # B1 add waypoint (stop)
     if m.get_button_diff(1) == 3: # "ToOn"
       print("Stop waypoint added")
-      builder.add_waypoint(slider3 + 4.0, position=arm.last_feedback.position)
-      #flow.append(False)
+      builder.add_waypoint(slider3 + 4.0, position=arm.last_feedback.position, velocity=0)
 
     # B2 add waypoint (flow)
     if m.get_button_diff(2) == 3: # "ToOn"
       print("Flow waypoint added")
       builder.add_waypoint(slider3 + 4.0, position=arm.last_feedback.position)
-      #flow.append(True)
 
     # B3 toggle training/playback
     if m.get_button_diff(3) == 3: # "ToOn"
