@@ -9,7 +9,7 @@ from hebi import arm as arm_api
 from hebi.util import create_mobile_io
 
 # Arm setup
-phone_family = 'HEBI'
+phone_family = "HEBI"
 phone_name   = "mobileIO"
 arm_family   = "Example Arm"
 hrdf_file    = "hrdf/A-2085-06.hrdf"
@@ -68,6 +68,7 @@ while keep_running:
   # On first run go to point 1
   if first_run:
     arm.set_goal(point_1, times=[4])
+    first_run = False
 
   # B1 point 1
   elif m.get_button_diff(1) == 3: # "ToOn"
