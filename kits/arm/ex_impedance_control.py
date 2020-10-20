@@ -51,6 +51,7 @@ arm.group.feedback_frequency = 200.0
 # TODO
 
 enable_logging = True
+goal = arm_api.Goal(arm.size)
 
 # Start background logging 
 if enable_logging:
@@ -83,7 +84,7 @@ while not m.get_button_state(1):
   m.set_led_color("blue" if controller_on else "green")
 
   if controller_on:
-    arm.set_goal(arm.last_feedback.position)
+    arm.set_goal(goal.clear().add_waypoint(position=arm.last_feedback.position))
   else:
     arm.cancel_goal()
 

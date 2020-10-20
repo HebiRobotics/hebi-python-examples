@@ -30,9 +30,6 @@ arm = arm_api.create([arm_family],
                      lookup=lookup,
                      hrdf_file=hrdf_file)
 
-# Configure arm components
-# TODO
-
 enable_logging = True
 
 # Start background logging 

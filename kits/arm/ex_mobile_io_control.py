@@ -33,12 +33,10 @@ arm = arm_api.create([arm_family],
                      lookup=lookup,
                      hrdf_file=hrdf_file)
 
-# Configure arm components
-# TODO
-
 quit_demo_button = 8
 keep_running = True
 run_mode = "points"
+goal = arm_api.Goal(arm.size)
 first_run = True
 point_1 = np.asarray([np.pi/4, np.pi/3, 2*np.pi/3, np.pi/3, np.pi/4, 0], dtype=np.float64)
 point_2 = np.asarray([-np.pi/4, np.pi/3, 2*np.pi/3, np.pi/3, 3*np.pi/4, 0], dtype=np.float64)
@@ -67,20 +65,20 @@ while keep_running:
 
   # On first run go to point 1
   if first_run:
-    arm.set_goal(point_1, times=[4])
+    arm.set_goal(goal.clear().add_waypoint(t=4, position=point_1))
     first_run = False
 
   # B1 point 1
   elif m.get_button_diff(1) == 3: # "ToOn"
-    arm.set_goal(point_1, times=[4])
+    arm.set_goal(goal.clear().add_waypoint(t=4, position=point_1))
 
   # B2 point 2
   elif m.get_button_diff(2) == 3: # "ToOn"
-    arm.set_goal(point_2, times=[4])
+    arm.set_goal(goal.clear().add_waypoint(t=4, position=point_2))
 
   # B3 point 3
   elif m.get_button_diff(3) == 3: # "ToOn"
-    arm.set_goal(point_3, times=[4])
+    arm.set_goal(goal.clear().add_waypoint(t=4, position=point_3))
 
   # B6 grav comp
   elif m.get_button_diff(6) == 3: # "ToOn"

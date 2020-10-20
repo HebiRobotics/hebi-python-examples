@@ -33,14 +33,13 @@ arm = arm_api.create([arm_family],
 keep_running = True
 pending_goal = False
 run_mode = "startup"
-builder = arm_api.GoalBuilder(arm.size)
+goal = arm_api.Goal(arm.size)
 control_mode_toggle = 1
 quit_demo_button = 8
 
 xyz_target_init = np.asarray([0.5, 0.0, 0.1])
 ik_seed_pos = np.asarray([0.01, 1.0, 2.5, 1.5, -1.5, 0.01])
 mobile_pos_offset = [0, 0, 0]
-
 
 
 def get_mobile_state(quit_demo_button):
@@ -98,7 +97,7 @@ while keep_running:
   if run_mode == "startup":
     # Move to starting pos
     joint_targets = arm.ik_target_xyz(ik_seed_pos, xyz_target_init)
-    arm.set_goal([joint_targets])
+    arm.set_goal(goal.clear().add_waypoint(position=joint_targets))
     run_mode = "moving to start pos"
   elif run_mode == "moving to start pos":
     # When at startup pos, switch to standby mode
@@ -111,6 +110,6 @@ while keep_running:
     # Follow phone's motion in 3D space
     phone_target_xyz = fbk_mobile.ar_position[0] + mobile_pos_offset
     joint_targets = arm.ik_target_xyz(arm.last_feedback.position, phone_target_xyz)
-    arm.set_goal([joint_targets], times=[1.0])
+    arm.set_goal(goal.clear().add_waypoint(t=1.0, position=joint_targets))
     
   arm.send()

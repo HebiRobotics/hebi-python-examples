@@ -32,7 +32,7 @@ arm = arm_api.create([arm_family],
 keep_running = True
 pending_goal = False
 run_mode = "training"
-builder = arm_api.GoalBuilder(arm.size)
+goal = arm_api.Goal(arm.size)
 
 print("")
 print("B1 - Add waypoint (stop)")
@@ -46,7 +46,7 @@ print("")
 while keep_running:
   # If there is a goal pending, set it on the arm and clear the flag
   if pending_goal:
-    arm.set_goal_from_builder(builder)
+    arm.set_goal(goal)
     pending_goal = False
 
   if not arm.update():
@@ -68,17 +68,17 @@ while keep_running:
     # B1 add waypoint (stop)
     if m.get_button_diff(1) == 3: # "ToOn"
       print("Stop waypoint added")
-      builder.add_waypoint(slider3 + 4.0, position=arm.last_feedback.position, velocity=0)
+      goal.add_waypoint(t=slider3 + 4.0, position=arm.last_feedback.position, velocity=0)
 
     # B2 add waypoint (flow)
     if m.get_button_diff(2) == 3: # "ToOn"
       print("Flow waypoint added")
-      builder.add_waypoint(slider3 + 4.0, position=arm.last_feedback.position)
+      goal.add_waypoint(t=slider3 + 4.0, position=arm.last_feedback.position)
 
     # B3 toggle training/playback
     if m.get_button_diff(3) == 3: # "ToOn"
       # Check for more than 2 waypoints
-      if builder.waypoint_count > 1:
+      if goal.waypoint_count > 1:
         print("Transitioning to playback mode")
         run_mode = "playback"
         pending_goal = True
@@ -88,7 +88,7 @@ while keep_running:
     # B4 clear waypoints
     if m.get_button_diff(4) == 3: # "ToOn"
       print("Waypoints cleared")
-      builder.clear()
+      goal.clear()
 
   elif run_mode == "playback":
     # B3 toggle training/playback
@@ -99,6 +99,6 @@ while keep_running:
 
     # replay through the path again once the goal has been reached
     if arm.at_goal:
-      arm.set_goal_from_builder(builder)
+      arm.set_goal(goal)
 
   arm.send()
