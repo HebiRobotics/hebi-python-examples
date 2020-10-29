@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 # Arm setup
 phone_family = "HEBI"
 phone_name   = "mobileIO"
-arm_family   = "Example Arm"
+arm_family   = "Arm"
 hrdf_file    = "hrdf/A-2085-06G.hrdf"
 
 lookup = hebi.Lookup()
