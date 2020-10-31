@@ -72,16 +72,13 @@ while not m.get_button_state(1):
     print("Failed to update arm")
     continue
 
-  if not m.update():
-    print("Failed to get feedback from MobileIO")
-    continue
+  if m.update(timeout_ms=0):
+    # If button 2 is pressed set to impedance mode
+    controller_on = bool(m.get_button_state(2))
+    # If in impedance mode set led blue
+    m.set_led_color("blue" if controller_on else "green", blocking=False)
 
   arm.send()
-
-  # If button 2 is pressed set to impedance mode
-  controller_on = bool(m.get_button_state(2))
-  # If in impedance mode set led blue
-  m.set_led_color("blue" if controller_on else "green")
 
   if controller_on:
     arm.set_goal(goal.clear().add_waypoint(position=arm.last_feedback.position))

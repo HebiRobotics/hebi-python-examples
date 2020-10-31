@@ -45,9 +45,7 @@ while not m.get_button_state(1):
     print("Failed to update arm")
     continue
 
-  if not m.update():
-    print("Failed to get feedback from MobileIO")
-    continue
+  m.update(timeout_ms=0):
 
   arm.send()
 

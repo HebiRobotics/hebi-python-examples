@@ -53,52 +53,50 @@ while keep_running:
     print("Failed to update arm")
     continue
 
-  if not m.update():
-    print("Failed to get feedback from MobileIO")
-    continue
+  if m.update(timeout_ms=0):
 
-  slider3 = m.get_axis_state(3)
+    slider3 = m.get_axis_state(3)
 
-  # Check for quit
-  if m.get_button_diff(8) == 3: # "ToOn"
-    keep_running = False
-    break
+    # Check for quit
+    if m.get_button_diff(8) == 3: # "ToOn"
+      keep_running = False
+      break
 
-  if run_mode == "training":
-    # B1 add waypoint (stop)
-    if m.get_button_diff(1) == 3: # "ToOn"
-      print("Stop waypoint added")
-      goal.add_waypoint(t=slider3 + 4.0, position=arm.last_feedback.position, velocity=0)
+    if run_mode == "training":
+      # B1 add waypoint (stop)
+      if m.get_button_diff(1) == 3: # "ToOn"
+        print("Stop waypoint added")
+        goal.add_waypoint(t=slider3 + 4.0, position=arm.last_feedback.position, velocity=[0,0,0,0,0,0])
 
-    # B2 add waypoint (flow)
-    if m.get_button_diff(2) == 3: # "ToOn"
-      print("Flow waypoint added")
-      goal.add_waypoint(t=slider3 + 4.0, position=arm.last_feedback.position)
+      # B2 add waypoint (flow)
+      if m.get_button_diff(2) == 3: # "ToOn"
+        print("Flow waypoint added")
+        goal.add_waypoint(t=slider3 + 4.0, position=arm.last_feedback.position)
 
-    # B3 toggle training/playback
-    if m.get_button_diff(3) == 3: # "ToOn"
-      # Check for more than 2 waypoints
-      if goal.waypoint_count > 1:
-        print("Transitioning to playback mode")
-        run_mode = "playback"
-        pending_goal = True
-      else:
-        print("At least two waypoints are needed")
+      # B3 toggle training/playback
+      if m.get_button_diff(3) == 3: # "ToOn"
+        # Check for more than 2 waypoints
+        if goal.waypoint_count > 1:
+          print("Transitioning to playback mode")
+          run_mode = "playback"
+          pending_goal = True
+        else:
+          print("At least two waypoints are needed")
 
-    # B4 clear waypoints
-    if m.get_button_diff(4) == 3: # "ToOn"
-      print("Waypoints cleared")
-      goal.clear()
+      # B4 clear waypoints
+      if m.get_button_diff(4) == 3: # "ToOn"
+        print("Waypoints cleared")
+        goal.clear()
 
-  elif run_mode == "playback":
-    # B3 toggle training/playback
-    if m.get_button_diff(3) == 3: # "ToOn"
-      print("Transitioning to training mode")
-      run_mode = "training"
-      arm.cancel_goal()
+    elif run_mode == "playback":
+      # B3 toggle training/playback
+      if m.get_button_diff(3) == 3: # "ToOn"
+        print("Transitioning to training mode")
+        run_mode = "training"
+        arm.cancel_goal()
 
-    # replay through the path again once the goal has been reached
-    if arm.at_goal:
-      arm.set_goal(goal)
+      # replay through the path again once the goal has been reached
+      if arm.at_goal:
+        arm.set_goal(goal)
 
   arm.send()

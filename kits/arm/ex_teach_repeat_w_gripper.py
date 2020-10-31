@@ -63,59 +63,58 @@ while keep_running:
 
   if not m.update():
     print("Failed to get feedback from MobileIO")
-    continue
 
-  slider3 = m.get_axis_state(3)
+    slider3 = m.get_axis_state(3)
 
-  # Check for quit
-  if m.get_button_diff(8) == 3: # "ToOn"
-    keep_running = False
-    break
+    # Check for quit
+    if m.get_button_diff(8) == 3: # "ToOn"
+      keep_running = False
+      break
 
-  if run_mode == "training":
-    # B1 add waypoint (stop)
-    if m.get_button_diff(1) == 3: # "ToOn"
-      print("Stop waypoint added")
-      goal.add_waypoint(t=slider3 + 4.0, position=arm.last_feedback.position, aux=gripper.state, velocity=0)
+    if run_mode == "training":
+      # B1 add waypoint (stop)
+      if m.get_button_diff(1) == 3: # "ToOn"
+        print("Stop waypoint added")
+        goal.add_waypoint(t=slider3 + 4.0, position=arm.last_feedback.position, aux=gripper.state, velocity=0)
 
-    # B2 add waypoint (stop) and toggle the gripper
-    if m.get_button_diff(2) == 3: # "ToOn"
-      # Add 2 waypoints to allow the gripper to open or close
-      print("Stop waypoint added and gripper toggled")
-      position = arm.last_feedback.position
-      goal.add_waypoint(t=slider3 + 4.0, position=position, aux=gripper.state, velocity=0)
-      gripper.toggle()
-      goal.add_waypoint(t=2.0, position=position, aux=gripper.state, velocity=0)
+      # B2 add waypoint (stop) and toggle the gripper
+      if m.get_button_diff(2) == 3: # "ToOn"
+        # Add 2 waypoints to allow the gripper to open or close
+        print("Stop waypoint added and gripper toggled")
+        position = arm.last_feedback.position
+        goal.add_waypoint(t=slider3 + 4.0, position=position, aux=gripper.state, velocity=0)
+        gripper.toggle()
+        goal.add_waypoint(t=2.0, position=position, aux=gripper.state, velocity=0)
 
-    # B3 add waypoint (flow)
-    if m.get_button_diff(3) == 3: # "ToOn"
-      print("Flow waypoint added")
-      goal.add_waypoint(t=slider3 + 4.0, position=arm.last_feedback.position, aux=gripper.state)
+      # B3 add waypoint (flow)
+      if m.get_button_diff(3) == 3: # "ToOn"
+        print("Flow waypoint added")
+        goal.add_waypoint(t=slider3 + 4.0, position=arm.last_feedback.position, aux=gripper.state)
 
-    # B5 toggle training/playback
-    if m.get_button_diff(5) == 3: # "ToOn"
-      # Check for more than 2 waypoints
-      if goal.waypoint_count > 1:
-        print("Transitioning to playback mode")
-        run_mode = "playback"
-        pending_goal = True
-      else:
-        print("At least two waypoints are needed")
+      # B5 toggle training/playback
+      if m.get_button_diff(5) == 3: # "ToOn"
+        # Check for more than 2 waypoints
+        if goal.waypoint_count > 1:
+          print("Transitioning to playback mode")
+          run_mode = "playback"
+          pending_goal = True
+        else:
+          print("At least two waypoints are needed")
 
-    # B6 clear waypoints
-    if m.get_button_diff(6) == 3: # "ToOn"
-      print("Waypoints cleared")
-      goal.clear()
+      # B6 clear waypoints
+      if m.get_button_diff(6) == 3: # "ToOn"
+        print("Waypoints cleared")
+        goal.clear()
 
-  elif run_mode == "playback":
-    # B5 toggle training/playback
-    if m.get_button_diff(5) == 3: # "ToOn"
-      print("Transitioning to training mode")
-      run_mode = "training"
-      arm.cancel_goal()
+    elif run_mode == "playback":
+      # B5 toggle training/playback
+      if m.get_button_diff(5) == 3: # "ToOn"
+        print("Transitioning to training mode")
+        run_mode = "training"
+        arm.cancel_goal()
 
-    # replay through the path again once the goal has been reached
-    if arm.at_goal:
-      arm.set_goal(goal)
+  # replay through the path again once the goal has been reached
+  if run_mode == "playback" and arm.at_goal:
+    arm.set_goal(goal)
 
   arm.send()

@@ -52,40 +52,38 @@ while keep_running:
     print("Failed to update arm")
     continue
 
-  if not m.update():
-    print("Failed to get feedback from MobileIO")
-    continue
-
-  # Check for quit
-  if m.get_button_state(quit_demo_button):
-    # Set led red and quit
-    m.set_led_color("red")
-    keep_running = False
-    break
-
   # On first run go to point 1
   if first_run:
     arm.set_goal(goal.clear().add_waypoint(t=4, position=point_1))
     first_run = False
+    continue
 
-  # B1 point 1
-  elif m.get_button_diff(1) == 3: # "ToOn"
-    arm.set_goal(goal.clear().add_waypoint(t=4, position=point_1))
+  if m.update(timeout_ms=0):
+    # Check for quit
+    if m.get_button_state(quit_demo_button):
+      # Set led red and quit
+      m.set_led_color("red")
+      keep_running = False
+      break
 
-  # B2 point 2
-  elif m.get_button_diff(2) == 3: # "ToOn"
-    arm.set_goal(goal.clear().add_waypoint(t=4, position=point_2))
+    # B1 point 1
+    elif m.get_button_diff(1) == 3: # "ToOn"
+      arm.set_goal(goal.clear().add_waypoint(t=4, position=point_1))
 
-  # B3 point 3
-  elif m.get_button_diff(3) == 3: # "ToOn"
-    arm.set_goal(goal.clear().add_waypoint(t=4, position=point_3))
+    # B2 point 2
+    elif m.get_button_diff(2) == 3: # "ToOn"
+      arm.set_goal(goal.clear().add_waypoint(t=4, position=point_2))
 
-  # B6 grav comp
-  elif m.get_button_diff(6) == 3: # "ToOn"
-    run_mode = "grav comp"
-    arm.cancel_goal()
+    # B3 point 3
+    elif m.get_button_diff(3) == 3: # "ToOn"
+      arm.set_goal(goal.clear().add_waypoint(t=4, position=point_3))
+
+    # B6 grav comp
+    elif m.get_button_diff(6) == 3: # "ToOn"
+      run_mode = "grav comp"
+      arm.cancel_goal()
 
   arm.send()
 
   # Set led to blue for grav comp mode, green for points mode
-  m.set_led_color("green" if (run_mode == "points") else "blue")
+  m.set_led_color("green" if (run_mode == "points") else "blue", blocking=False)
