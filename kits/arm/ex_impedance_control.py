@@ -1,45 +1,36 @@
 #!/usr/bin/env python3
 
-import hebi
-import numpy as np
-import os
 from time import sleep
-from hebi.util import create_mobile_io
-from hebi import arm as arm_api
-from matplotlib import pyplot as plt
+import numpy as np
+import hebi
 
-# Arm setup
-phone_family = "HEBI"
-phone_name   = "mobileIO"
-arm_family   = "Arm"
-hrdf_file    = "hrdf/A-2085-06G.hrdf"
-
+# Lookup initialization
 lookup = hebi.Lookup()
 sleep(2)
 
-# Setup Mobile IO
-print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io(lookup, phone_family, phone_name)
-if m is None:
+# Setup Mobile IO controller
+phone = hebi.util.create_mobile_io(
+  lookup=lookup,
+  family="HEBI",
+  name="mobileIO")
+
+if phone is None:
   raise RuntimeError("Could not find Mobile IO device")
-m.set_button_mode(1, 'momentary')
-m.set_button_mode(2, 'toggle')
-m.update()
+phone.set_button_mode(1, 'momentary')
+phone.set_button_mode(2, 'toggle')
+phone.update()
 
-# Setup arm components
-arm = arm_api.create([arm_family],
-                     names=['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
-                     lookup=lookup,
-                     hrdf_file=hrdf_file)
-impedance_controller = arm_api.ImpedanceController()
-
-# Configure arm components
-arm.add_plugin(impedance_controller)
-
-# hold position only (Allow rotation around end-effector position)
-impedance_controller.gains_in_end_effector_frame = True
-impedance_controller.set_damper_gains(5, 5, 5, 0, 0, 0)
-impedance_controller.set_spring_gains(500, 500, 500, 0, 0, 0)
+# Setup Arm
+arm = hebi.arm.create(
+  lookup=lookup,
+  families=["Arm"],
+  names=['J1_base',
+         'J2_shoulder',
+         'J3_elbow',
+         'J4_wrist1',
+         'J5_wrist2',
+         'J6_wrist3'],
+  hrdf_file="hrdf/A-2085-06.hrdf")
 
 # Increase feedback frequency since we're calculating velocities at the
 # high level for damping. Going faster can help reduce a little bit of
@@ -47,86 +38,67 @@ impedance_controller.set_spring_gains(500, 500, 500, 0, 0, 0)
 # for most applications.
 arm.group.feedback_frequency = 200.0
 
+# Add Impedance controller and setup gains
+impedance_controller = hebi.arm.ImpedanceController()
+arm.add_plugin(impedance_controller)
+
+# example: hold position, but allow rotation around end-effector position
+impedance_controller.set_damper_gains(5, 5, 5, 0, 0, 0)
+impedance_controller.set_spring_gains(500, 500, 500, 0, 0, 0)
+impedance_controller.gains_in_end_effector_frame = True
+
 # Double the effort gains from their default values, to make the arm more sensitive for tracking force.
 # TODO
 
 enable_logging = True
-goal = arm_api.Goal(arm.size)
+goal = hebi.arm.Goal(arm.size)
 
-# Start background logging 
+# Start background logging
 if enable_logging:
-  arm.group.start_log('dir', 'logs', mkdirs=True)
+  arm.group.start_log(
+    directory='logs',
+    name='logFile',
+    mkdirs=True)
 
 print('Commanded gravity-compensated zero force to the arm.')
 print('  b2 - Toggles an impedance controller on/off:')
-print('          ON  - Apply controller based on current position')
-print('          OFF - Go back to gravity-compensated mode')
-print('  b1 - Exits the demo.')
+print('          ON  - Apply controller based on current position [blue]')
+print('          OFF - Go back to gravity-compensated mode [green]')
+print('  b1 - Exits the demo')
 
+# Run main demo
+phone.set_led_color('green')
 controller_on = False
-
-# while button 1 is not pressed
-while not m.get_button_state(1):
+disabled = np.ones(arm.size) * np.nan
+while not phone.get_button_state(1):
 
   if not arm.update():
     print("Failed to update arm")
     continue
 
-  if m.update(timeout_ms=0):
-    # If button 2 is pressed set to impedance mode
-    controller_on = bool(m.get_button_state(2))
-    # If in impedance mode set led blue
-    m.set_led_color("blue" if controller_on else "green", blocking=False)
+  if phone.update(timeout_ms=0):
+    b2 = bool(phone.get_button_state(2))
+    if controller_on is not b2:
+      controller_on = b2
+      if controller_on:
+        arm.set_goal(goal.clear().add_waypoint(position=arm.last_feedback.position))
+        color = 'blue'
+      else:
+        arm.cancel_goal()
+        color = 'green'
+      phone.set_led_color(color, blocking=False)
 
+  # In this example we want to run pure torque control, so we disable the pos/vel
+  # commands. Typically these would be enabled, and impedance control would be used
+  # to further improve tracking.
+  arm.pending_command.position = disabled
+  arm.pending_command.velocity = disabled
   arm.send()
 
-  if controller_on:
-    arm.set_goal(goal.clear().add_waypoint(position=arm.last_feedback.position))
-  else:
-    arm.cancel_goal()
-
-m.set_led_color("red")
+phone.set_led_color('transparent')
 
 if enable_logging:
-  hebi_log = arm.group.stop_log()
-
-  # Plot tracking / error from the joints in the arm.  
-  time = []
-  position = []
-  velocity = []
-  effort = []
-  # iterate through log
-  for entry in hebi_log.feedback_iterate:
-    time.append(entry.transmit_time)
-    position.append(entry.position)
-    velocity.append(entry.velocity)
-    effort.append(entry.effort)
-
-  # Offline Visualization
-  # Plot the logged position feedback
-  plt.figure(101)
-  plt.plot(time, position)
-  plt.title('Position')
-  plt.xlabel('time (sec)')
-  plt.ylabel('position (rad)')
-  plt.grid(True)
-
-  # Plot the logged velocity feedback
-  plt.figure(102)
-  plt.plot(time, velocity)
-  plt.title('Velocity')
-  plt.xlabel('time (sec)')
-  plt.ylabel('velocity (rad/sec)')
-  plt.grid(True)
-
-  # Plot the logged effort feedback
-  plt.figure(103)
-  plt.plot(time, effort)
-  plt.title('Effort')
-  plt.xlabel('time (sec)')
-  plt.ylabel('effort (N*m)')
-  plt.grid(True)
-
-  plt.show()
-
-  # Put more plotting code here
+  log_file = arm.group.stop_log()
+  hebi.util.plot_logs(log_file, 'position', figure_spec=101)
+  hebi.util.plot_logs(log_file, 'velocity', figure_spec=102)
+  hebi.util.plot_logs(log_file, 'effort', figure_spec=103)
