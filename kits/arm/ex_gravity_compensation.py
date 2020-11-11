@@ -1,53 +1,48 @@
 #!/usr/bin/env python3
 
+from time import sleep, time
+
 import hebi
-import numpy as np
-import os
-from time import sleep
-from hebi.util import create_mobile_io
-from hebi import arm as arm_api
 from matplotlib import pyplot as plt
 
-# Arm setup
-phone_family = "HEBI"
-phone_name   = "mobileIO"
-arm_family   = "Arm"
-hrdf_file    = "hrdf/A-2085-06.hrdf"
-
+# Lookup initialization
 lookup = hebi.Lookup()
 sleep(2)
 
-# Setup MobileIO
-print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io(lookup, phone_family, phone_name)
-if m is None:
-  raise RuntimeError("Could not find Mobile IO device")
-m.update()
+# Arm setup
+arm = hebi.arm.create(
+  families=["Arm"],
+  names=['J1_base',
+         'J2_shoulder',
+         'J3_elbow',
+         'J4_wrist1',
+         'J5_wrist2',
+         'J6_wrist3'],
+  lookup=lookup,
+  hrdf_file="hrdf/A-2085-06.hrdf")
 
-# Setup arm components
-arm = arm_api.create([arm_family],
-                     names=['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
-                     lookup=lookup,
-                     hrdf_file=hrdf_file)
-
+# Example parameters
+duration = 10  # [s]
 enable_logging = True
 
-# Start background logging 
+# Start background logging
 if enable_logging:
-  arm.group.start_log('dir', 'logs', mkdirs=True)
+  arm.group.start_log(
+    directory='logs',
+    name='logFile',
+    mkdirs=True)
 
-print('Commanded gravity-compensated zero torques to the arm.')
-print('Press b1 to stop.')
-
-while not m.get_button_state(1):
+print('Commanding gravity-compensating torques')
+t0 = time()
+while time() - t0 < duration:
 
   if not arm.update():
     print("Failed to update arm")
     continue
 
-  m.update(timeout_ms=0):
-
   arm.send()
+
+print('Stopped commands')
 
 if enable_logging:
   hebi_log = arm.group.stop_log()
