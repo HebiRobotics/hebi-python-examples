@@ -4,6 +4,9 @@ from time import sleep
 import numpy as np
 import hebi
 
+# Example parameters
+enable_logging = True
+
 # Lookup initialization
 lookup = hebi.Lookup()
 sleep(2)
@@ -50,9 +53,6 @@ impedance_controller.gains_in_end_effector_frame = True
 # Double the effort gains from their default values, to make the arm more sensitive for tracking force.
 # TODO
 
-enable_logging = True
-goal = hebi.arm.Goal(arm.size)
-
 # Start background logging
 if enable_logging:
   arm.group.start_log(
@@ -70,6 +70,7 @@ print('  b1 - Exits the demo')
 phone.set_led_color('green')
 controller_on = False
 disabled = np.ones(arm.size) * np.nan
+goal = hebi.arm.Goal(arm.size)
 while not phone.get_button_state(1):
 
   if not arm.update():
@@ -97,6 +98,7 @@ while not phone.get_button_state(1):
 
 phone.set_led_color('transparent')
 
+print('Stopped example')
 if enable_logging:
   log_file = arm.group.stop_log()
   hebi.util.plot_logs(log_file, 'position', figure_spec=101)

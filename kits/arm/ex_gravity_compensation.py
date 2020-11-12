@@ -4,6 +4,10 @@ from time import sleep, time
 
 import hebi
 
+# Example parameters
+enable_logging = True
+duration = 10  # [s]
+
 # Lookup initialization
 lookup = hebi.Lookup()
 sleep(2)
@@ -19,10 +23,6 @@ arm = hebi.arm.create(
          'J6_wrist3'],
   lookup=lookup,
   hrdf_file="hrdf/A-2085-06.hrdf")
-
-# Example parameters
-duration = 10  # [s]
-enable_logging = True
 
 # Start background logging
 if enable_logging:
@@ -41,8 +41,7 @@ while time() - t0 < duration:
 
   arm.send()
 
-print('Stopped commands')
-
+print('Stopped example')
 if enable_logging:
   log_file = arm.group.stop_log()
   hebi.util.plot_logs(log_file, 'position', figure_spec=101)

@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 
+from time import sleep
+
 import hebi
 import numpy as np
-import os
-from time import sleep
-from hebi.util import create_mobile_io
-from hebi import arm as arm_api
 
-# Arm setup
-phone_family = "HEBI"
-phone_name   = "mobileIO"
-arm_family   = "Arm"
-hrdf_file    = "hrdf/A-2085-06.hrdf"
+# Example parameters
+enable_logging = True
+time_per_waypoint = 2 # [s]
 
 # Lookup initialization
 lookup = hebi.Lookup()
@@ -27,15 +23,6 @@ if phone is None:
   raise RuntimeError("Could not find Mobile IO device")
 phone.update()
 
-print("")
-print("B1 - Add waypoint (stop)")
-print("B2 - Add waypoint (flow)")
-print("A3 - Up/down for longer/shorter time to waypoint")
-print("B3 - Toggle training/playback")
-print("B4 - Clear waypoints")
-print("B8 - Quit")
-print("")
-
 # Setup Arm
 arm = hebi.arm.create(
   lookup=lookup,
@@ -48,9 +35,24 @@ arm = hebi.arm.create(
          'J6_wrist3'],
   hrdf_file="hrdf/A-2085-06.hrdf")
 
-time_per_waypoint = 2 # [s]
+print("")
+print("B1 - Add waypoint (stop)")
+print("B2 - Add waypoint (flow)")
+print("A3 - Up/down for longer/shorter time to waypoint")
+print("B3 - Toggle training/playback")
+print("B4 - Clear waypoints")
+print("B8 - Quit")
+print("")
+
+# Start background logging
+if enable_logging:
+  arm.group.start_log(
+    directory='logs',
+    name='logFile',
+    mkdirs=True)
+
 zeros = np.zeros(arm.size)
-goal = arm_api.Goal(arm.size)
+goal = hebi.arm.Goal(arm.size)
 run_mode = "training"
 while True:
 
@@ -59,9 +61,9 @@ while True:
     continue
 
   if phone.update(timeout_ms=0):
-    time_offset = phone.get_axis_state(3)
+    motion_time = time_per_waypoint + phone.get_axis_state(3)
 
-    # Check for quit
+    # B8 quit example
     if phone.get_button_diff(8) == 3: # "ToOn"
       break
 
@@ -69,12 +71,12 @@ while True:
       # B1 add waypoint (stop)
       if phone.get_button_diff(1) == 3: # "ToOn"
         print("Stop waypoint added")
-        goal.add_waypoint(t=time_per_waypoint + time_offset, position=arm.last_feedback.position, velocity=zeros, acceleration=zeros)
+        goal.add_waypoint(t=motion_time, position=arm.last_feedback.position, velocity=zeros)
 
       # B2 add waypoint (flow)
       if phone.get_button_diff(2) == 3: # "ToOn"
         print("Flow waypoint added")
-        goal.add_waypoint(t=time_per_waypoint + time_offset, position=arm.last_feedback.position)
+        goal.add_waypoint(t=motion_time, position=arm.last_feedback.position)
 
       # B3 toggle training/playback
       if phone.get_button_diff(3) == 3: # "ToOn"
@@ -103,3 +105,10 @@ while True:
         arm.set_goal(goal)
 
   arm.send()
+
+print('Stopped example')
+if enable_logging:
+  log_file = arm.group.stop_log()
+  hebi.util.plot_logs(log_file, 'position', figure_spec=101)
+  hebi.util.plot_logs(log_file, 'velocity', figure_spec=102)
+  hebi.util.plot_logs(log_file, 'effort', figure_spec=103)
