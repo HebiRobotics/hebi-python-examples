@@ -8,7 +8,7 @@ import hebi
 lookup = hebi.Lookup()
 sleep(2)
 
-# Setup Mobile IO controller
+# Setup Mobile IO input device
 phone = hebi.util.create_mobile_io(
   lookup=lookup,
   family="HEBI",
