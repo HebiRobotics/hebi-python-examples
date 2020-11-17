@@ -2,54 +2,45 @@
 
 import hebi
 import numpy as np
-import os
-from time import sleep
-from hebi.util import create_mobile_io
 from hebi import arm as arm_api
 from matplotlib import pyplot as plt
 
 # Arm setup
-phone_family = "HEBI"
-phone_name   = "mobileIO"
 arm_family   = "Arm"
+module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
 hrdf_file    = "hrdf/A-2085-06.hrdf"
+gains_file   = "gains/A-2085-06.xml"
 
-lookup = hebi.Lookup()
-sleep(2)
 
-# Setup MobileIO
-print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io(lookup, phone_family, phone_name)
-if m is None:
-  raise RuntimeError("Could not find Mobile IO device")
-m.update()
-
-# Setup arm components
+# Create Arm object
 arm = arm_api.create([arm_family],
-                     names=['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
-                     lookup=lookup,
+                     names=module_names,
                      hrdf_file=hrdf_file)
+arm.load_gains(gains_file)
 
-enable_logging = True
 
 # Start background logging 
+enable_logging = True
 if enable_logging:
   arm.group.start_log('dir', 'logs', mkdirs=True)
 
-print('Commanded gravity-compensated zero torques to the arm.')
-print('Press b1 to stop.')
+#######################
+## Main Control Loop ##
+#######################
 
-while not m.get_button_state(1):
+print('Commanding gravity-compensated zero torques to the arm.')
+while arm.update():
+  # When no goal is set, the arm automatically returns to grav-comp mode
+  # Thus, when we have an empty control loop, the arm is in grav-comp
+  # awaiting further instructions
 
-  if not arm.update():
-    print("Failed to update arm")
-    continue
-
-  if not m.update():
-    print("Failed to get feedback from MobileIO")
-    continue
-
+  # Send the latest loaded commands to the arm. If no changes are made, 
+  # it will send the last loaded command when arm.update() was last called
   arm.send()
+
+##########################
+## Logging and Plotting ##
+##########################
 
 if enable_logging:
   hebi_log = arm.group.stop_log()
@@ -92,4 +83,4 @@ if enable_logging:
   plt.grid(True)
 
   plt.show()
-  # Put more plotting code here
+  # Insert additional plotting code here

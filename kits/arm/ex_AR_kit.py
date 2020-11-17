@@ -4,14 +4,14 @@ import hebi
 import numpy as np
 import os
 import threading
+import copy
 from time import sleep
 from hebi.util import create_mobile_io
 from hebi import arm as arm_api
 
 # Arm setup
-phone_family = "HEBI"
-phone_name   = "mobileIO"
 arm_family   = "Arm"
+phone_name   = "mobileIO"
 hrdf_file    = "hrdf/A-2085-06.hrdf"
 
 lookup = hebi.Lookup()
@@ -19,7 +19,7 @@ sleep(2)
 
 # Setup MobileIO
 print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io(lookup, phone_family, phone_name)
+m = create_mobile_io(lookup, arm_family, phone_name)
 if m is None:
   raise RuntimeError("Could not find Mobile IO device")
 m.update()
@@ -34,11 +34,12 @@ keep_running = True
 pending_goal = False
 run_mode = "startup"
 goal = arm_api.Goal(arm.size)
-control_mode_toggle = 1
+home_pos = 1
+control_mode = 2
 quit_demo_button = 8
 
-xyz_target_init = np.asarray([0.5, 0.0, 0.1])
-ik_seed_pos = np.asarray([0.01, 1.0, 2.5, 1.5, -1.5, 0.01])
+xyz_target_init = np.asarray([0.5, 0.0, 0.0])
+ik_seed_pos = np.asarray([0.01, np.pi/3 , 2*np.pi/3, 5*np.pi/6, -np.pi/2, 0.01])
 mobile_pos_offset = [0, 0, 0]
 
 
@@ -50,6 +51,8 @@ def get_mobile_state(quit_demo_button):
   global keep_running
   global run_mode
   global mobile_pos_offset
+  global mobile_pos_init
+  global mobile_ori_init
 
   m.update()
 
@@ -62,15 +65,19 @@ def get_mobile_state(quit_demo_button):
   
     fbk_mobile = m.get_last_feedback()
     # Check for button presses and control state accordingly
-    if m.get_button_diff(control_mode_toggle) == 2: # "ToOff"
+    if m.get_button_diff(home_pos) == 2: # "ToOff"
       run_mode = "startup"
       m.set_led_color("yellow")
     if run_mode == "standby":
       m.set_led_color("green")
-    if m.get_button_diff(control_mode_toggle) == 3 and run_mode == "standby": # "ToOn"
+    if m.get_button_diff(control_mode) == 3 and run_mode == "standby": # "ToOn"
       m.set_led_color("blue")
       run_mode = "control"
-      mobile_pos_offset = xyz_target_init - fbk_mobile.ar_position[0]
+      mobile_pos_init = copy.copy(fbk_mobile.ar_position)
+      mobile_ori_init = copy.copy(fbk_mobile.ar_orientation)
+    if run_mode == "control":
+      m.set_led_color("black")
+      mobile_pos_offset = fbk_mobile.ar_position - mobile_pos_init
             
   m.set_led_color("red")
   keep_running = False
@@ -97,7 +104,7 @@ while keep_running:
   if run_mode == "startup":
     # Move to starting pos
     joint_targets = arm.ik_target_xyz(ik_seed_pos, xyz_target_init)
-    arm.set_goal(goal.clear().add_waypoint(position=joint_targets))
+    arm.set_goal(goal.clear().add_waypoint(t=3, position=joint_targets))
     run_mode = "moving to start pos"
   elif run_mode == "moving to start pos":
     # When at startup pos, switch to standby mode
@@ -108,8 +115,17 @@ while keep_running:
     pass
   elif run_mode == "control":
     # Follow phone's motion in 3D space
-    phone_target_xyz = fbk_mobile.ar_position[0] + mobile_pos_offset
-    joint_targets = arm.ik_target_xyz(arm.last_feedback.position, phone_target_xyz)
-    arm.set_goal(goal.clear().add_waypoint(t=1.0, position=joint_targets))
+    xyz_target_new = xyz_target_init + mobile_pos_offset
+    # ori_target_new = mobile_ori_init
     
+    print(mobile_ori_init)
+
+    joint_targets = arm.ik_target_xyz(arm.last_feedback.position, xyz_target_new)
+    # joint_targets = arm.ik_target_xyz_so3(arm.last_feedback.position, xyz_target_new, ori_target_new)
+    arm.set_goal(goal.clear().add_waypoint(t=1.0, position=joint_targets.tolist()))
+
   arm.send()
+
+
+# I pretty much just need to rewrite this example, my own way. Along with the other examples in this repo.
+# Where is the documentation for the goal?
