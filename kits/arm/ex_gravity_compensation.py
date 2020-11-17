@@ -28,11 +28,21 @@ if enable_logging:
 ## Main Control Loop ##
 #######################
 
+<<<<<<< HEAD
 print('Commanding gravity-compensated zero torques to the arm.')
 while arm.update():
   # When no goal is set, the arm automatically returns to grav-comp mode
   # Thus, when we have an empty control loop, the arm is in grav-comp
   # awaiting further instructions
+=======
+while not m.get_button_state(1):
+
+  if not arm.update():
+    print("Failed to update arm")
+    continue
+
+  m.update(timeout_ms=0):
+>>>>>>> dac822b471caf75859ebd1cb86f20335ccebf8cc
 
   # Send the latest loaded commands to the arm. If no changes are made, 
   # it will send the last loaded command when arm.update() was last called

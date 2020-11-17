@@ -56,6 +56,7 @@ m.set_text(instructions)
 while not abort_flag:
   arm.update() # update the arm
 
+<<<<<<< HEAD
   if not m.update():
     print("Failed to get feedback from MobileIO")
     continue
@@ -85,6 +86,38 @@ while not abort_flag:
   if m.get_button_diff(6) == 3: # "ToOn"
     m.set_led_color("blue")
     arm.cancel_goal()
+=======
+  # On first run go to point 1
+  if first_run:
+    arm.set_goal(goal.clear().add_waypoint(t=4, position=point_1))
+    first_run = False
+    continue
+
+  if m.update(timeout_ms=0):
+    # Check for quit
+    if m.get_button_state(quit_demo_button):
+      # Set led red and quit
+      m.set_led_color("red")
+      keep_running = False
+      break
+
+    # B1 point 1
+    elif m.get_button_diff(1) == 3: # "ToOn"
+      arm.set_goal(goal.clear().add_waypoint(t=4, position=point_1))
+
+    # B2 point 2
+    elif m.get_button_diff(2) == 3: # "ToOn"
+      arm.set_goal(goal.clear().add_waypoint(t=4, position=point_2))
+
+    # B3 point 3
+    elif m.get_button_diff(3) == 3: # "ToOn"
+      arm.set_goal(goal.clear().add_waypoint(t=4, position=point_3))
+
+    # B6 grav comp
+    elif m.get_button_diff(6) == 3: # "ToOn"
+      run_mode = "grav comp"
+      arm.cancel_goal()
+>>>>>>> dac822b471caf75859ebd1cb86f20335ccebf8cc
 
   # B8 - Quit
   if m.get_button_diff(8) == 3: # "ToOn"
@@ -96,3 +129,8 @@ while not abort_flag:
 
   arm.send()
 
+<<<<<<< HEAD
+=======
+  # Set led to blue for grav comp mode, green for points mode
+  m.set_led_color("green" if (run_mode == "points") else "blue", blocking=False)
+>>>>>>> dac822b471caf75859ebd1cb86f20335ccebf8cc
