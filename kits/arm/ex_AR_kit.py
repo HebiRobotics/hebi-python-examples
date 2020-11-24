@@ -2,18 +2,51 @@
 
 import hebi
 import numpy as np
-import os
 import threading
 import copy
 from time import sleep
 from hebi.util import create_mobile_io
 from hebi import arm as arm_api
 
+
+# TODO: move this helper function into utils
+def quat2rotMat(q):
+  """
+  QUAT2DCM Conversion of a quaternion to an orthogonal rotation matrix.
+  Assumes that the scalar element, q_w, is the first element of the
+  quaternion vector, q = [q_w q_x q_y q_z].
+    R = quat2rotMat( q )
+  """
+  w = q[0]
+  x = q[1]
+  y = q[2]
+  z = q[3]
+  return np.asarray([
+    [x * x - y * y - z * z + w * w, 2 * (x * y - z * w), 2 * (x * z + y * w)],
+    [2 * (x * y + z * w), -x * x + y * y - z * z + w * w, 2 * (y * z - x * w)],
+    [2 * (x * z - y * w), 2 * (y * z + x * w), -x * x - y * y + z * z + w * w]
+  ])
+# quat2rotMat test:
+#print(quat2rotMat([0.77545035,  0.4112074 ,  0.24011487, -0.41464436]))
+# R = [[ 0.54082968  0.84054625  0.03138466]
+#      [-0.44559821  0.31795693 -0.8368664 ]
+#      [-0.71340398  0.43861729  0.54650651]]
+
+
 # Arm setup
 arm_family   = "Arm"
-phone_name   = "mobileIO"
+module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
 hrdf_file    = "hrdf/A-2085-06.hrdf"
+gains_file   = "gains/A-2085-06.xml"
 
+# Create Arm object
+arm = arm_api.create([arm_family],
+                     names=module_names,
+                     hrdf_file=hrdf_file)
+arm.load_gains(gains_file)
+
+# mobileIO setup
+phone_name = "mobileIO"
 lookup = hebi.Lookup()
 sleep(2)
 
@@ -24,108 +57,97 @@ if m is None:
   raise RuntimeError("Could not find Mobile IO device")
 m.update()
 
-# Setup arm components
-arm = arm_api.create([arm_family],
-                     names=['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
-                     lookup=lookup,
-                     hrdf_file=hrdf_file)
-
-keep_running = True
-pending_goal = False
-run_mode = "startup"
+# Demo Variables
+abort_flag = False
+run_mode = "softstart"
 goal = arm_api.Goal(arm.size)
-home_pos = 1
-control_mode = 2
-quit_demo_button = 8
+home_position = [0, np.pi/3, 2*np.pi/3, 5*np.pi/6, -np.pi/2, 0]
 
-xyz_target_init = np.asarray([0.5, 0.0, 0.0])
-ik_seed_pos = np.asarray([0.01, np.pi/3 , 2*np.pi/3, 5*np.pi/6, -np.pi/2, 0.01])
-mobile_pos_offset = [0, 0, 0]
+# Command the softstart to the home position
+softstart = arm_api.Goal(arm.size)
+softstart.add_waypoint(t=4, position=home_position)
+arm.update()
+arm.set_goal(softstart)
+arm.send()
 
+# Get the cartesian position and rotation matrix @ home position
+xyz_home = np.zeros(3)
+rot_home = np.zeros((3,3))
+# arm.FK(home_position, xyz_home, ori_home)
+arm.FK(home_position, xyz_out=xyz_home, orientation_out=rot_home)
 
-def get_mobile_state(quit_demo_button):
-  """
-  Mobile io function to be run in another thread to prevent main loop stalling on long feedbacks
-  """
-  global fbk_mobile
-  global keep_running
-  global run_mode
-  global mobile_pos_offset
-  global mobile_pos_init
-  global mobile_ori_init
+print(xyz_home)
+print(rot_home)
 
-  m.update()
+# Get the states for the mobile device
+xyz_phone_init = np.zeros(3)
+rot_phone_init = np.zeros((3,3))
 
-  m.set_led_color("yellow")
-  while not m.get_button_diff(quit_demo_button) == 3: # "ToOn"
+# # Target variables
+# target_joints = np.zeros(arm.size)
 
-    if not m.update():
-      print("Failed to get feedback from MobileIO")
-      continue
-  
-    fbk_mobile = m.get_last_feedback()
-    # Check for button presses and control state accordingly
-    if m.get_button_diff(home_pos) == 2: # "ToOff"
-      run_mode = "startup"
-      m.set_led_color("yellow")
-    if run_mode == "standby":
-      m.set_led_color("green")
-    if m.get_button_diff(control_mode) == 3 and run_mode == "standby": # "ToOn"
-      m.set_led_color("blue")
-      run_mode = "control"
-      mobile_pos_init = copy.copy(fbk_mobile.ar_position)
-      mobile_ori_init = copy.copy(fbk_mobile.ar_orientation)
-    if run_mode == "control":
-      m.set_led_color("black")
-      mobile_pos_offset = fbk_mobile.ar_position - mobile_pos_init
-            
-  m.set_led_color("red")
-  keep_running = False
+#######################
+## Main Control Loop ##
+#######################
 
+while not abort_flag:
+  arm.update() # update the arm
 
-# Start mobile io thread
-t1 = threading.Thread(target=get_mobile_state, args=(quit_demo_button,), daemon=True)
-t1.start()
-
-print('Arm end-effector is now following the mobile device pose.')
-print('The control interface has the following commands:')
-print('  B1 - Reset/re-align poses.')
-print('       This takes the arm to home and aligns with mobile device.')
-print('  B8 - Quits the demo.')
-
-
-# Main run loop
-while keep_running:
-
-  if not arm.update():
-    print("Failed to update arm")
+  if not m.update():
+    print("Failed to get feedback from MobileIO")
     continue
 
-  if run_mode == "startup":
-    # Move to starting pos
-    joint_targets = arm.ik_target_xyz(ik_seed_pos, xyz_target_init)
-    arm.set_goal(goal.clear().add_waypoint(t=3, position=joint_targets))
-    run_mode = "moving to start pos"
-  elif run_mode == "moving to start pos":
-    # When at startup pos, switch to standby mode
+  if run_mode == "softstart":
+    # End softstart when the arm reaches the home_position
     if arm.at_goal:
-      run_mode = "standby"
-  elif run_mode == "standby":
-    # Wait for mobile io input while holding arm in place
-    pass
-  elif run_mode == "control":
-    # Follow phone's motion in 3D space
-    xyz_target_new = xyz_target_init + mobile_pos_offset
-    # ori_target_new = mobile_ori_init
-    
-    print(mobile_ori_init)
+      m.set_led_color("yellow")
+      run_mode = "waiting"
+      continue
+    arm.send()
+    continue
 
-    joint_targets = arm.ik_target_xyz(arm.last_feedback.position, xyz_target_new)
-    # joint_targets = arm.ik_target_xyz_so3(arm.last_feedback.position, xyz_target_new, ori_target_new)
-    arm.set_goal(goal.clear().add_waypoint(t=1.0, position=joint_targets.tolist()))
+  # B1 - Return to home position
+  if m.get_button_diff(1) == 3: # "ToOn"
+    m.set_led_color("yellow")
+    run_mode = "waiting"
+    arm.set_goal(softstart)
+
+  # B3 - Start AR Control
+  if m.get_button_diff(3) == 3 and run_mode != "ar_mode": # "ToOn"
+    m.set_led_color("green")
+    run_mode = "ar_mode"
+    xyz_phone_init = m.position.copy()
+    rot_phone_init = quat2rotMat(m.orientation)
+
+  # B6 - Grav Comp Mode
+  if m.get_button_diff(6) == 3: # "ToOn"
+    m.set_led_color("blue")
+    run_mode = "grav_comp"
+    arm.cancel_goal()
+
+  # B8 - Quit
+  if m.get_button_diff(8) == 3: # "ToOn"
+    m.set_led_color("transparent")
+    abort_flag = True
+    break
+
+  if run_mode == "ar_mode":
+    # Get the latest mobile position and orientation
+    xyz_phone = m.position
+    rot_phone = quat2rotMat(m.orientation)
+
+    # Calculate new targets
+    # <-- insert xyz_scale here if wanted -->
+    xyz_target = xyz_home + (0.75 * np.matmul(rot_phone_init.T, (xyz_phone - xyz_phone_init)))
+    rot_target = np.matmul(np.matmul(rot_phone_init.T, rot_phone), rot_home)
+
+    # Calculate new arm joint angles
+    target_joints = arm.ik_target_xyz_so3(arm.last_feedback.position, xyz_target, rot_target)
+
+    # Set and send new goal to the arm
+    goal.clear()
+    goal.add_waypoint(position=target_joints)
+    arm.set_goal(goal)
 
   arm.send()
 
-
-# I pretty much just need to rewrite this example, my own way. Along with the other examples in this repo.
-# Where is the documentation for the goal?
