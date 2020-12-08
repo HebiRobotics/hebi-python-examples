@@ -10,7 +10,7 @@ class Arm(PeripheralBody):
   damper_gains = np.array([1.0, 1.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float64).T
   spring_gains = np.array([100.0, 10.0, 100.0, 0.0, 0.0, 0.0], dtype=np.float64).T
 
-  Jacobian_Determinant_Threshold = 0.010
+  Jacobian_Determinant_Threshold = 0.020
   """
   The lower threshold allowed for the determinant calculation of the jacobians.
   Anything below this will be considered at or near a singularity.
@@ -173,8 +173,8 @@ class Arm(PeripheralBody):
     at the given point in time
     """
     super(Arm, self).update_position()
-    self._current_det_actual = np.linalg.det(self._current_j_actual[0:4, 0:4])
-    self._current_det_expected = np.linalg.det(self._current_j_expected[0:4, 0:4])
+    self._current_det_actual = abs(np.linalg.det(self._current_j_actual[0:3, 0:3]))
+    self._current_det_expected = abs(np.linalg.det(self._current_j_expected[0:3, 0:3]))
 
   def update_command(self, group_command, pose, soft_start):
     """
