@@ -586,6 +586,7 @@ class Igor(object):
 
     self._left_leg.integrate_step(dt, calculated_knee_velocity)
     self._right_leg.integrate_step(dt, calculated_knee_velocity)
+
     self._left_arm.integrate_step(dt, calculated_grip_velocity)
     self._right_arm.integrate_step(dt, calculated_grip_velocity)
 
@@ -626,11 +627,8 @@ class Igor(object):
     # ------------
     # Leg Commands
 
-    # Roll Angle is in degrees, but Leg needs it to be in radians
-    roll_angle = radians(self._roll_angle)
-
-    self._left_leg.update_command(group_command, roll_angle, soft_start)
-    self._right_leg.update_command(group_command, roll_angle, soft_start)
+    self._left_leg.update_command(group_command, self._roll_angle, soft_start)
+    self._right_leg.update_command(group_command, self._roll_angle, soft_start)
 
     # ------------
     # Arm Commands
