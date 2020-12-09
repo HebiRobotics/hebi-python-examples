@@ -1,0 +1,80 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="{{ url_for('static', filename= 'css/style.css') }}">
+    <title>HEBI Robot Controller</title>
+</head>
+<body>
+   <h1>Control a HEBI Robot!</h1>
+   <br></br>
+   <h2>Watch the robot in the video. Use the controller below to send some commands and watch the robot move!</h2>
+   <h2> Disclaimer: The robot may not respond if it is already receiving commands from another user. Come back and try again later!</h2>
+   <h2> If you enjoyed playing with the robot, email us at info@hebirobotics.com to learn how we can make a custom configuration like this one that fits your needs!</h2>
+
+   <table style="width:100%">
+     <!-- Row 1 -->
+     <tr>
+      <td style="width:40%; valign:center; text-align:center">
+         <!-- insert link to the livestream -->
+      </td>
+
+      <td>
+      </td>
+ 
+      <td style="valign:center; text-align:center">
+        <!-- <button type="submit" formmethod="POST" style="width=100%; height=100%">Forward</button> -->
+        <form action="" method="post">
+          <input type="submit" name="waypoint_target" value="Waypoint 1" />
+          <!-- onclick="return prompt('This is what you want to do?', 'yes')" -->
+        </form>
+      </td>
+
+      <td>
+      </td>
+     </tr>
+
+     <!-- Row 2 -->
+     <tr>
+      <td align="right">
+         <button type="button" width="100%" height="100%">Up</button>
+      </td>
+
+      <td align="right">
+        <button type="button" width="100%" height="100%">Left</button>
+      </td>
+
+      <td style="valign:center; text-align:center">
+        <!-- <button type="button" width="100%" height="100%">Backward</button> -->
+        <form action="" method="post">
+          <input type="submit" name="waypoint_target" value="Waypoint 2" />
+          <!-- onclick="return prompt('This is what you want to do?', 'yes')" -->
+        </form>
+       </td>
+
+       <td align="left">
+         <button type="button" width="100%" height="100%">Right</button>
+       </td>
+     </tr>
+
+     <!-- Row 3 -->
+     <tr>
+       <td align="right">
+         <button type="button" width="100%" height="100%">Down</button>
+       </td>
+
+       <td>
+       </td>
+
+       <td>
+       </td>
+
+       <td>
+       </td>
+     </tr>
+   </table>
+
+
+</body>
+</html>
