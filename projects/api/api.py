@@ -29,7 +29,16 @@ def index():
       hebi_thread.set_waypoint_1()
 
     if request.form['waypoint_target'] == 'Waypoint 2':
-      hebi_thread.clear_waypoints()
+      hebi_thread.set_waypoint_2()
+
+    if request.form['waypoint_target'] == 'Waypoint 3':
+      hebi_thread.set_waypoint_3()
+
+    if request.form['waypoint_target'] == 'Waypoint 4':
+      hebi_thread.set_waypoint_4()
+
+    if request.form['waypoint_target'] == 'Say Hello!':
+      hebi_thread.set_waypoint_say()
     # print(request.form['waypoint2'])
 
 

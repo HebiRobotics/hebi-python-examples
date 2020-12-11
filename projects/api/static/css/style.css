@@ -1,6 +1,17 @@
 h1 {
     border: 2px #eee solid;
-    color: #c82506;
+    color: #C82506;
     text-align: center;
+    padding: 10px;
+    font-family: "Questrial";
+    font-weight: bold;
+}
+h4 {
+    text-align: center;
+    font-family: "Proxima Nova";
+    font-weight: normal;
+}
+input[type=submit] {
+    width: 10em;  height: 5em;
     padding: 10px;
 }

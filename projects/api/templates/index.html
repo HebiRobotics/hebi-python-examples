@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,74 +6,64 @@
     <title>HEBI Robot Controller</title>
 </head>
 <body>
-   <h1>Control a HEBI Robot!</h1>
-   <br></br>
-   <h2>Watch the robot in the video. Use the controller below to send some commands and watch the robot move!</h2>
-   <h2> Disclaimer: The robot may not respond if it is already receiving commands from another user. Come back and try again later!</h2>
-   <h2> If you enjoyed playing with the robot, email us at info@hebirobotics.com to learn how we can make a custom configuration like this one that fits your needs!</h2>
-
-   <table style="width:100%">
-     <!-- Row 1 -->
-     <tr>
-      <td style="width:40%; valign:center; text-align:center">
-         <!-- insert link to the livestream -->
-      </td>
-
+  <h1>Control a HEBI Robot!</h1>
+  <h4>Welcome! Get started by starting the livestream link to watch the robot in real-time. Then, use the buttons below to send some commands and watch the robot move!</h4>
+  <h4> If you enjoyed playing with the robot, email us at info@hebirobotics.com to learn how we can make a custom configuration like this one that fits your needs!</h4>
+  <h4> Disclaimers:</h4>
+  <h4>1. Please expect the video to lag anywhere between 2-5 seconds behind when you click a button. Be patient! </h4>
+  <h4>2. If someone else is commanding the arm the same time as you, then you might see unexpected behavior! </h4>
+  <table style="width:100%; padding-left:35px;">
+    <tr>
       <td>
+        <iframe width="784" height="441" src="https://www.youtube.com/embed/Y2kazhWJSNE" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe>
       </td>
- 
-      <td style="valign:center; text-align:center">
-        <!-- <button type="submit" formmethod="POST" style="width=100%; height=100%">Forward</button> -->
-        <form action="" method="post">
-          <input type="submit" name="waypoint_target" value="Waypoint 1" />
-          <!-- onclick="return prompt('This is what you want to do?', 'yes')" -->
-        </form>
+      <td style="width:100%">
+        <table style="margin:auto; width:25%">
+          <tr>
+            <td>
+              <form action="" method="post" target="frame">
+                <input type="submit" name="waypoint_target" value="Waypoint 1"/>
+              </form>
+            </td>
+          </tr>
+          <tr></tr>
+          <tr></tr>
+          <tr>
+            <td>
+              <form action="" method="post" target="frame">
+                <input type="submit" name="waypoint_target" value="Waypoint 2" />
+              </form>
+            </td>
+          </tr>
+          <tr></tr>
+          <tr></tr>
+          <tr>
+            <td>
+              <form action="" method="post" target="frame">
+                <input type="submit" name="waypoint_target" value="Waypoint 3" />
+              </form>
+            </td>
+          </tr>
+          <tr></tr>
+          <tr></tr>
+          <tr>
+            <td>
+              <form action="" method="post" target="frame">
+                <input type="submit" name="waypoint_target" value="Waypoint 4" />
+              </form>
+            </td>
+          </tr>
+          <tr></tr>
+          <tr></tr>
+          <tr>
+            <td>
+              <form action="" method="post" target="frame">
+                <input type="submit" name="waypoint_target" value="Say Hello!" />
+              </form>
+            </td>
+          </tr>
+        </table>
       </td>
-
-      <td>
-      </td>
-     </tr>
-
-     <!-- Row 2 -->
-     <tr>
-      <td align="right">
-         <button type="button" width="100%" height="100%">Up</button>
-      </td>
-
-      <td align="right">
-        <button type="button" width="100%" height="100%">Left</button>
-      </td>
-
-      <td style="valign:center; text-align:center">
-        <!-- <button type="button" width="100%" height="100%">Backward</button> -->
-        <form action="" method="post">
-          <input type="submit" name="waypoint_target" value="Waypoint 2" />
-          <!-- onclick="return prompt('This is what you want to do?', 'yes')" -->
-        </form>
-       </td>
-
-       <td align="left">
-         <button type="button" width="100%" height="100%">Right</button>
-       </td>
-     </tr>
-
-     <!-- Row 3 -->
-     <tr>
-       <td align="right">
-         <button type="button" width="100%" height="100%">Down</button>
-       </td>
-
-       <td>
-       </td>
-
-       <td>
-       </td>
-
-       <td>
-       </td>
-     </tr>
-   </table>
-
-
-</body>
-</html>
+    </tr>
+  </table>
+<iframe name="frame" style="display:none"></iframe>

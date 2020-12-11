@@ -30,8 +30,14 @@ class HebiThread(threading.Thread):
     # Control Variables
     self.goal = arm_api.Goal(self.arm.size)
     # self.which_goal = "clear"
-    self.waypoint_1 = np.asarray([0, 0, 0, 0, 0, 0], dtype=np.float64)
-    self.waypoint_2 = np.asarray([np.pi/4, np.pi/3, 2*np.pi/3, np.pi/3, np.pi/4, 0], dtype=np.float64)
+    self.waypoint_1 = np.asarray([0, np.pi/3, np.pi/2, -np.pi/3, np.pi/2, 0], dtype=np.float64)
+    self.waypoint_2 = np.asarray([np.pi/4, np.pi/2, 2*np.pi/3, np.pi/3, np.pi/4, 0], dtype=np.float64)
+    self.waypoint_3 = np.asarray([-np.pi/4, np.pi/2, 2*np.pi/3, np.pi/3, 3*np.pi/4, 0], dtype=np.float64)
+    self.waypoint_4 = np.asarray([-np.pi/4, 3*np.pi/4, np.pi/3, -np.pi/3, np.pi/4, np.pi/2], dtype=np.float64)
+    self.waypoint_say1 = np.asarray([0, 2*np.pi/3, np.pi/2, -np.pi/6, np.pi/2, 0], dtype=np.float64)
+    self.waypoint_say2 = np.asarray([0, 2*np.pi/3, np.pi/2, -np.pi/6, np.pi/2, np.pi/4], dtype=np.float64)
+    self.waypoint_say3 = np.asarray([0, 2*np.pi/3, np.pi/2, -np.pi/6, np.pi/2, -np.pi/4], dtype=np.float64)
+
 
     self.start()
 
@@ -59,6 +65,43 @@ class HebiThread(threading.Thread):
     self.arm.set_goal(new_goal)
     self.arm.send()
     print("Going to Waypoint 1.")
+
+  def set_waypoint_2(self):
+    new_goal = arm_api.Goal(self.arm.size)
+    new_goal.add_waypoint(t=3, position=self.waypoint_2)
+    # self.arm.cancel_goal()
+    self.arm.set_goal(new_goal)
+    self.arm.send()
+    print("Going to Waypoint 2.")
+
+  def set_waypoint_3(self):
+    new_goal = arm_api.Goal(self.arm.size)
+    new_goal.add_waypoint(t=3, position=self.waypoint_3)
+    # self.arm.cancel_goal()
+    self.arm.set_goal(new_goal)
+    self.arm.send()
+    print("Going to Waypoint 3.")
+
+  def set_waypoint_4(self):
+    new_goal = arm_api.Goal(self.arm.size)
+    new_goal.add_waypoint(t=3, position=self.waypoint_4)
+    # self.arm.cancel_goal()
+    self.arm.set_goal(new_goal)
+    self.arm.send()
+    print("Going to Waypoint 4.")
+
+  def set_waypoint_say(self):
+    new_goal = arm_api.Goal(self.arm.size)
+    new_goal.add_waypoint(t=3, position=self.waypoint_say1)
+    new_goal.add_waypoint(t=1, position=self.waypoint_say2)
+    new_goal.add_waypoint(t=1, position=self.waypoint_say3)
+    new_goal.add_waypoint(t=1, position=self.waypoint_say2)
+    new_goal.add_waypoint(t=1, position=self.waypoint_say3)
+    new_goal.add_waypoint(t=1, position=self.waypoint_say1)
+    # self.arm.cancel_goal()
+    self.arm.set_goal(new_goal)
+    self.arm.send()
+    print("Going to Waypoint Say.")
 
   def clear_waypoints(self):
     self.arm.cancel_goal()
