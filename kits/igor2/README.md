@@ -24,7 +24,7 @@ python3 igor2_demo.py
 
 Both Python 2 and 3 are supported, but note that Python 2 upstream is end of life.
 
-**Note:** By default, the demo will look for a Mobile IO device with family `Igor` and name `Mobile IO`. You must provide `--joystick` if you want to control Igor using a USB gamecontroller.
+**Note:** By default, the demo will look for a Mobile IO device with family `Igor` and name `mobileIO`. You must provide `--joystick` if you want to control Igor using a USB gamecontroller.
 
 ## Controls
 

@@ -11,7 +11,7 @@ class Leg(PeripheralBody):
 
   damper_gains = np.array([2.0, 0.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float64)
   spring_gains = np.array([400.0, 0.0, 100.0, 0.0, 0.0, 0.0], dtype=np.float64)
-  roll_gains = np.array([0.0, 0.0, 10.0, 0.0, 0.0, 0.0], dtype=np.float64)
+  roll_gains = np.array([0.0, 0.0, 10.0, 0.0, 0.0, 0.0], dtype=np.float64) # (N or Nm) / degree
 
   def __init__(self, val_lock, name, group_indices):
     assert name == 'Left' or name == 'Right'
