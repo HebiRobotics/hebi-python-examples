@@ -2,26 +2,19 @@ import flask
 from flask import request, render_template
 from HebiThread import HebiThread
 
-
-
 app = flask.Flask(__name__)
 app.config["DEBUG"] = False
-
+# Note: If the above is True, it will start 2 HebiThreads and cause issues
 
 @app.route('/', methods=['GET'])
 def home():
-  return '''<h1>Distant Reading Archive</h1>
-<p>A prototype API for distant reading of science fiction novels.</p>'''
+  return '''<h1>Go to /index for the main screen</h1>
+<p>Go to /index for the main screen</p>'''
 
 @app.route('/index', methods=['GET', 'POST'])
 def index():
-  # request.
-  # print("waypoint")
-  # if request.args == "waypoint_target":
-  #     print("waypoint")
-  # print(request.data)
-  # return render_template('index.html')
 
+  # The index page has buttons that will send POST requests
   if request.method == "POST":
     print(request.form['waypoint_target'])
 
@@ -39,32 +32,8 @@ def index():
 
     if request.form['waypoint_target'] == 'Say Hello!':
       hebi_thread.set_waypoint_say()
-    # print(request.form['waypoint2'])
-
 
   return render_template('index.html')
-     
-
 
 hebi_thread = HebiThread()
 app.run()
-
-# #app.py
-
-# from flask import Flask, request #import main Flask class and request object
-
-# app = Flask(__name__) #create the Flask app
-
-# @app.route('/query-example')
-# def query_example():
-#     return 'Todo...'
-
-# @app.route('/form-example')
-# def formexample():
-#     return 'Todo...'
-
-# @app.route('/json-example')
-# def jsonexample():
-#     return 'Todo...'
-
-# app.run()

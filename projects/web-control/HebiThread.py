@@ -29,7 +29,8 @@ class HebiThread(threading.Thread):
 
     # Control Variables
     self.goal = arm_api.Goal(self.arm.size)
-    # self.which_goal = "clear"
+
+    # Harcoded waypoints
     self.waypoint_1 = np.asarray([0, np.pi/3, np.pi/2, -np.pi/3, np.pi/2, 0], dtype=np.float64)
     self.waypoint_2 = np.asarray([np.pi/4, np.pi/2, 2*np.pi/3, np.pi/3, np.pi/4, 0], dtype=np.float64)
     self.waypoint_3 = np.asarray([-np.pi/4, np.pi/2, 2*np.pi/3, np.pi/3, 3*np.pi/4, 0], dtype=np.float64)
@@ -38,7 +39,7 @@ class HebiThread(threading.Thread):
     self.waypoint_say2 = np.asarray([0, 2*np.pi/3, np.pi/2, -np.pi/6, np.pi/2, np.pi/4], dtype=np.float64)
     self.waypoint_say3 = np.asarray([0, 2*np.pi/3, np.pi/2, -np.pi/6, np.pi/2, -np.pi/4], dtype=np.float64)
 
-
+    # Start the thread at initialization
     self.start()
 
 
@@ -46,14 +47,11 @@ class HebiThread(threading.Thread):
     # Main control Loop
     while not self.abort_flag:
       self.arm.update()
-      # if self.goal.waypoint_count > 0:
-      #   print('setting the waypoint and then clearing it')
-      #   self.arm.set_goal(self.goal)
-      #   self.arm.send()
-      #   self.goal = arm_api.Goal(self.arm.size)
+
+      # Additional behavior can go here
+      # It's better to use helper functions to change state parameters for the arm
 
       self.arm.send()
-
 
   def abort(self):
     self.abort_flag = True
@@ -61,7 +59,6 @@ class HebiThread(threading.Thread):
   def set_waypoint_1(self):
     new_goal = arm_api.Goal(self.arm.size)
     new_goal.add_waypoint(t=3, position=self.waypoint_1)
-    # self.arm.cancel_goal()
     self.arm.set_goal(new_goal)
     self.arm.send()
     print("Going to Waypoint 1.")
@@ -69,7 +66,6 @@ class HebiThread(threading.Thread):
   def set_waypoint_2(self):
     new_goal = arm_api.Goal(self.arm.size)
     new_goal.add_waypoint(t=3, position=self.waypoint_2)
-    # self.arm.cancel_goal()
     self.arm.set_goal(new_goal)
     self.arm.send()
     print("Going to Waypoint 2.")
@@ -77,7 +73,6 @@ class HebiThread(threading.Thread):
   def set_waypoint_3(self):
     new_goal = arm_api.Goal(self.arm.size)
     new_goal.add_waypoint(t=3, position=self.waypoint_3)
-    # self.arm.cancel_goal()
     self.arm.set_goal(new_goal)
     self.arm.send()
     print("Going to Waypoint 3.")
@@ -85,12 +80,13 @@ class HebiThread(threading.Thread):
   def set_waypoint_4(self):
     new_goal = arm_api.Goal(self.arm.size)
     new_goal.add_waypoint(t=3, position=self.waypoint_4)
-    # self.arm.cancel_goal()
     self.arm.set_goal(new_goal)
     self.arm.send()
     print("Going to Waypoint 4.")
 
   def set_waypoint_say(self):
+    # Create a set of motions from multiple waypoints.
+    # This makes the robot wave to the camera.
     new_goal = arm_api.Goal(self.arm.size)
     new_goal.add_waypoint(t=3, position=self.waypoint_say1)
     new_goal.add_waypoint(t=1, position=self.waypoint_say2)
@@ -98,7 +94,6 @@ class HebiThread(threading.Thread):
     new_goal.add_waypoint(t=1, position=self.waypoint_say2)
     new_goal.add_waypoint(t=1, position=self.waypoint_say3)
     new_goal.add_waypoint(t=1, position=self.waypoint_say1)
-    # self.arm.cancel_goal()
     self.arm.set_goal(new_goal)
     self.arm.send()
     print("Going to Waypoint Say.")
@@ -106,8 +101,3 @@ class HebiThread(threading.Thread):
   def clear_waypoints(self):
     self.arm.cancel_goal()
     print("Cleared Waypoint")
-
-
-
-
-
