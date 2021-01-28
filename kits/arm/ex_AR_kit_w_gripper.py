@@ -36,7 +36,7 @@ def quat2rotMat(q):
 # Arm setup
 arm_family   = "Arm"
 module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
-hrdf_file    = "hrdf/A-2085-06.hrdf"
+hrdf_file    = "hrdf/A-2085-06G.hrdf"
 gains_file   = "gains/A-2085-06.xml"
 
 # Create Arm object
@@ -56,6 +56,14 @@ m = create_mobile_io(lookup, arm_family, phone_name)
 if m is None:
   raise RuntimeError("Could not find Mobile IO device")
 m.update()
+
+# Add the gripper 
+gripper_family = arm_family
+gripper_name   = 'gripperSpool'
+gripper = arm_api.Gripper(lookup.get_group_from_names([gripper_family], [gripper_name]), -5, 1)
+gripper.load_gains("gains/gripper_spool_gains.xml")
+arm.set_end_effector(gripper)
+
 
 # Demo Variables
 abort_flag = False
@@ -146,6 +154,13 @@ while not abort_flag:
     goal.clear()
     goal.add_waypoint(position=target_joints)
     arm.set_goal(goal)
+
+    # Set the gripper separataly to follow slider A3
+    slider3 = m.get_axis_state(3)
+    # Map slider range -1 to 1 onto close and open effort for gripper
+    grip_effort = (slider3+1)/2
+    arm.end_effector.update(grip_effort)
+
 
   arm.send()
 
