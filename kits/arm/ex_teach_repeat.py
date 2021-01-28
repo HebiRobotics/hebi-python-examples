@@ -30,6 +30,7 @@ m = create_mobile_io(lookup, arm_family, phone_name)
 if m is None:
   raise RuntimeError("Could not find Mobile IO device")
 m.set_led_color("blue") # as we start in grav comp
+m.clear_text() # Clear any garbage on screen
 m.update()
 
 
@@ -65,6 +66,7 @@ while not abort_flag:
   # B8 - Quit
   if m.get_button_diff(8) == 3: # "ToOn"
     m.set_led_color("transparent")
+    m.clear_text()
     abort_flag = True
     break
 

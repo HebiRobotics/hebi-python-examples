@@ -9,7 +9,7 @@ from hebi import arm as arm_api
 from matplotlib import pyplot as plt
 
 # Arm setup
-phone_family = "HEBI"
+phone_family = "Arm"
 phone_name   = "mobileIO"
 arm_family   = "Arm"
 hrdf_file    = "hrdf/A-2085-06G.hrdf"
@@ -38,8 +38,8 @@ arm.add_plugin(impedance_controller)
 
 # hold position only (Allow rotation around end-effector position)
 impedance_controller.gains_in_end_effector_frame = True
-impedance_controller.set_damper_gains(5, 5, 5, 0, 0, 0)
-impedance_controller.set_spring_gains(500, 500, 500, 0, 0, 0)
+impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
+impedance_controller.set_kp(500, 500, 500, 0, 0, 0)
 
 # Increase feedback frequency since we're calculating velocities at the
 # high level for damping. Going faster can help reduce a little bit of
