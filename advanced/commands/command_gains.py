@@ -6,8 +6,8 @@ lookup = hebi.Lookup()
 group = lookup.get_group_from_names(['family'], ['base', 'shoulder', 'elbow'])
 
 if group is None:
-  print('Group not found: Did you forget to set the module family and names above?')
-  exit(1)
+    print('Group not found: Did you forget to set the module family and names above?')
+    exit(1)
 
 command = hebi.GroupCommand(group.size)
 
@@ -15,8 +15,8 @@ command = hebi.GroupCommand(group.size)
 # in the group doesn't match the number in the XML, or the file was corrupt.
 
 try:
-  command.read_gains('gains.xml')
-  print('Successfully read gains from file; now sending to module.')
-  group.send_command(command)
+    command.read_gains('gains.xml')
+    print('Successfully read gains from file; now sending to module.')
+    group.send_command(command)
 except:
-  print('Could not read gains from file')
+    print('Could not read gains from file')

@@ -14,14 +14,14 @@ module_names = ["J1_base", "J2_shoulder", "J3_elbow"]
 group = lookup.get_group_from_names([family_name], module_names)
 
 if group is None:
-  print('Group not found: Did you forget to set the module family and name above?')
-  exit(1)
+    print('Group not found: Did you forget to set the module family and name above?')
+    exit(1)
 
 try:
-  model = hebi.robot_model.import_from_hrdf("hrdf/A-2085-03.hrdf")
+    model = hebi.robot_model.import_from_hrdf("hrdf/A-2085-03.hrdf")
 except:
-  print("Could not load HRDF.")
-  exit(1)
+    print("Could not load HRDF.")
+    exit(1)
 
 target_xyz = [0.4, 0.0, 0.2]
 
@@ -31,8 +31,8 @@ target_xyz = [0.4, 0.0, 0.2]
 
 group_fbk = hebi.GroupFeedback(group.size)
 if group.get_next_feedback(reuse_fbk=group_fbk) is None:
-  print("Couldn't get feedback.")
-  exit(1)
+    print("Couldn't get feedback.")
+    exit(1)
 
 # Note: user should check if the positions are appropriate for initial conditions.
 initial_joint_angles = group_fbk.position
@@ -60,7 +60,7 @@ group_command = hebi.GroupCommand(group.size)
 group_command.position = ik_result_joint_angles
 
 for i in range(100):
-  group.send_command(group_command)
-  # Note: the arm will go limp after the 100 ms command lifetime,
-  # so the command is repeated every 50 ms for 5 seconds.
-  sleep(0.05)
+    group.send_command(group_command)
+    # Note: the arm will go limp after the 100 ms command lifetime,
+    # so the command is repeated every 50 ms for 5 seconds.
+    sleep(0.05)

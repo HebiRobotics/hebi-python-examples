@@ -9,8 +9,8 @@ lookup = hebi.Lookup()
 group = lookup.get_group_from_names(['X5-4'], ['X5-0000'])
 
 if group is None:
-  print('Group not found: Did you forget to set the module family and names above?')
-  exit(1)
+    print('Group not found: Did you forget to set the module family and names above?')
+    exit(1)
 
 command = hebi.GroupCommand(group.size)
 
@@ -22,13 +22,13 @@ t = 0.0
 
 positions = np.empty(group.size, dtype=np.float64)
 while t < 10.0:
-  for module_index in range(0, group.size):
-    positions[module_index] = sin((t * 0.5) + (module_index * 0.25))
+    for module_index in range(0, group.size):
+        positions[module_index] = sin((t * 0.5) + (module_index * 0.25))
 
-  command.position = positions
-  group.send_command(command)
-  sleep(period)
-  t = t + period
+    command.position = positions
+    group.send_command(command)
+    sleep(period)
+    t = t + period
 
 # For critical packets, we can verify that they were sent by requesting
 # confirmation from the group.  If the acknowledgement function returns
@@ -42,14 +42,14 @@ while t < 10.0:
 timeout_ms = 100
 
 while t < 10.0:
-  for module_index in range(0, group.size):
-    positions[module_index] = sin((t * 0.5) + (module_index * 0.25))
+    for module_index in range(0, group.size):
+        positions[module_index] = sin((t * 0.5) + (module_index * 0.25))
 
-  command.position = positions
-  if group.send_command_with_acknowledgement(command):
-    print('Got acknowledgement.')
-  else:
-    print('Did not receive acknowledgement!')
+    command.position = positions
+    if group.send_command_with_acknowledgement(command):
+        print('Got acknowledgement.')
+    else:
+        print('Did not receive acknowledgement!')
 
-  sleep(period)
-  t = t + period
+    sleep(period)
+    t = t + period

@@ -7,8 +7,8 @@ lookup = hebi.Lookup()
 group = lookup.get_group_from_names(['family'], ['name'])
 
 if group is None:
-  print('Group not found: Did you forget to set the module family and names above?')
-  exit(1)
+    print('Group not found: Did you forget to set the module family and names above?')
+    exit(1)
 
 # Set command lifetime to 100 ms
 group.command_lifetime = 100
@@ -43,7 +43,7 @@ group_command.led.color = hebi.Color(255, 0, 255)
 group.send_command(group_command)
 
 sleep(3)
-  
+
 # Set the LED back to module control.
 group_command.led.color = 'transparent'
 group.send_command(group_command)

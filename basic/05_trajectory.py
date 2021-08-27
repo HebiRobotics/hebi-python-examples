@@ -16,15 +16,15 @@ module_name = "Test Actuator"
 group = lookup.get_group_from_names([family_name], [module_name])
 
 if group is None:
-  print('Group not found: Did you forget to set the module family and name above?')
-  exit(1)
+    print('Group not found: Did you forget to set the module family and name above?')
+    exit(1)
 
 num_joints = group.size
 group_feedback = hebi.GroupFeedback(num_joints)
 
 if group.get_next_feedback(reuse_fbk=group_feedback) is None:
-  print('Error getting feedback.')
-  exit(1)
+    print('Error getting feedback.')
+    exit(1)
 
 positions = np.zeros((num_joints, 3), dtype=np.float64)
 offset = [pi] * num_joints
@@ -48,13 +48,13 @@ start = time()
 t = time() - start
 
 while t < duration:
-  # Serves to rate limit the loop without calling sleep
-  group.get_next_feedback(reuse_fbk=group_feedback)
-  t = time() - start
+    # Serves to rate limit the loop without calling sleep
+    group.get_next_feedback(reuse_fbk=group_feedback)
+    t = time() - start
 
-  pos, vel, acc = trajectory.get_state(t)
-  group_command.position = pos
-  group_command.velocity = vel
-  group.send_command(group_command)
+    pos, vel, acc = trajectory.get_state(t)
+    group_command.position = pos
+    group_command.velocity = vel
+    group.send_command(group_command)
 
 group.stop_log()

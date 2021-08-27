@@ -7,57 +7,47 @@ from util import math_utils
 
 
 class BaseBody(object):
-  """
-  Base class for all body components of Igor
-  """
+    """Base class for all body components of Igor."""
 
-  def __init__(self, val_lock, mass=0.0, com=[0.0, 0.0, 0.0]):
-    self.__val_lock = val_lock
-    self._mass = mass
-    self._com = np.zeros(3, dtype=np.float64)
-    self._com[0] = com[0]
-    self._com[1] = com[1]
-    self._com[2] = com[2]
+    def __init__(self, val_lock, mass=0.0, com=[0.0, 0.0, 0.0]):
+        self.__val_lock = val_lock
+        self._mass = mass
+        self._com = np.zeros(3, dtype=np.float64)
+        self._com[0] = com[0]
+        self._com[1] = com[1]
+        self._com[2] = com[2]
 
-  def _set_mass(self, mass):
-    """
-    Called by subclasses to update mass
-    """
-    self._mass = mass
+    def _set_mass(self, mass):
+        """Called by subclasses to update mass."""
+        self._mass = mass
 
-  def _set_com(self, com):
-    """
-    Called by subclasses to update the center of mass
-    """
-    self._com[0:3] = com
+    def _set_com(self, com):
+        """Called by subclasses to update the center of mass."""
+        self._com[0:3] = com
 
-  def acquire_value_lock(self):
-    """
-    Used to acquire mutex for the parameters of this body component
-    """
-    self.__val_lock.acquire()
+    def acquire_value_lock(self):
+        """Used to acquire mutex for the parameters of this body component."""
+        self.__val_lock.acquire()
 
-  def release_value_lock(self):
-    """
-    Used to release mutex for the parameters of this body component
-    """
-    self.__val_lock.release()
+    def release_value_lock(self):
+        """Used to release mutex for the parameters of this body component."""
+        self.__val_lock.release()
 
-  @property
-  def mass(self):
-    """
-    :return: The mass (in kilograms) of this body component
-    :rtype:  float
-    """
-    return self._mass
+    @property
+    def mass(self):
+        """
+        :return: The mass (in kilograms) of this body component
+        :rtype:  float
+        """
+        return self._mass
 
-  @property
-  def com(self):
-    """
-    :return: The center of mass (in meters) of this body component in 3D Euclidean space
-    :rtype:  np.ndarray
-    """
-    return self._com
+    @property
+    def com(self):
+        """
+        :return: The center of mass (in meters) of this body component in 3D Euclidean space
+        :rtype:  np.ndarray
+        """
+        return self._com
 
 
 class PeripheralBody(BaseBody):

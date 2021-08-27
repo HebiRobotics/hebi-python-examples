@@ -92,32 +92,32 @@ _default_button_map['DOWN'] = SDL_CONTROLLER_BUTTON_DPAD_DOWN
 _default_button_map['DPAD_LEFT'] = SDL_CONTROLLER_BUTTON_DPAD_LEFT
 _default_button_map['LEFT'] = SDL_CONTROLLER_BUTTON_DPAD_LEFT
 
-# DPAD_RIGHT 
+# DPAD_RIGHT
 _default_button_map['DPAD_RIGHT'] = SDL_CONTROLLER_BUTTON_DPAD_RIGHT
 _default_button_map['RIGHT'] = SDL_CONTROLLER_BUTTON_DPAD_RIGHT
 
 
 class JoystickMapping(object):
-  """Maps string axis and button names to their SDL2 values"""
-  __slots__ = ('__axis_map', '__button_map')
+    """Maps string axis and button names to their SDL2 values."""
+    __slots__ = ('__axis_map', '__button_map')
 
-  def __init__(self, a_map, b_map):
-    self.__axis_map = a_map
-    self.__button_map = b_map
+    def __init__(self, a_map, b_map):
+        self.__axis_map = a_map
+        self.__button_map = b_map
 
-  def get_axis(self, axis):
-    if axis not in self.__axis_map:
-      raise ValueError('Invalid axis {0}'.format(axis))
-    return self.__axis_map[axis]
+    def get_axis(self, axis):
+        if axis not in self.__axis_map:
+            raise ValueError('Invalid axis {0}'.format(axis))
+        return self.__axis_map[axis]
 
-  def get_button(self, button):
-    if button not in self.__button_map:
-      raise ValueError('Invalid button {0}'.format(button))
-    return self.__button_map[button]
+    def get_button(self, button):
+        if button not in self.__button_map:
+            raise ValueError('Invalid button {0}'.format(button))
+        return self.__button_map[button]
 
 
 _default_mapping = JoystickMapping(_default_axis_map, _default_button_map)
 
 
 def default_joystick_mapping():
-  return _default_mapping
+    return _default_mapping

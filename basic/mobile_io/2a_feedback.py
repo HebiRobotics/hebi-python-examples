@@ -15,8 +15,8 @@ module_name = "mobileIO"
 group = lookup.get_group_from_names([family_name], [module_name])
 
 if group is None:
-  print('Group not found: Did you forget to set the module family and name above?')
-  exit(1)
+    print('Group not found: Did you forget to set the module family and name above?')
+    exit(1)
 
 group.feedback_frequency = 50.0
 
@@ -39,12 +39,12 @@ end_time = start_time + duration
 current_time = start_time
 
 while current_time < end_time:
-  if group.get_next_feedback(reuse_fbk=group_feedback) is None:
-    print('Failed to get feedback')
-    continue
-  gyro = group_feedback.gyro[0]
-  
-  plt.bar([0, 1, 2], gyro)
-  plt.pause(0.00001)
+    if group.get_next_feedback(reuse_fbk=group_feedback) is None:
+        print('Failed to get feedback')
+        continue
+    gyro = group_feedback.gyro[0]
 
-  current_time = time()
+    plt.bar([0, 1, 2], gyro)
+    plt.pause(0.00001)
+
+    current_time = time()

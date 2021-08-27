@@ -6,9 +6,8 @@ from pyquaternion import Quaternion
 
 
 class Mesh:
-    '''
-    This class describes a 3D mesh that is used to represent the robot components
-    '''
+    """This class describes a 3D mesh that is used to represent the robot
+    components."""
 
     def __init__(self, vertices, edges, faces, face_vectors):
         # vertices is a list of points in a mesh
@@ -48,16 +47,17 @@ base_meshes = {'actuator': Mesh(vertices=[['-1*@1', '-1*@1', '@1'], ['-1*@1', '-
 
 # this is used to draw models of robots with a virtual position
 class VirtualFeedback:
-    def __init__(self, position,orientation):
+    def __init__(self, position, orientation):
         self.position = position  # the virtual positions of the robot
         self.orientation = orientation  # this is the identity quaternion
 
 
 class Robot:
-    '''
-    the Robot class represents your robot. specific values for the robot model are defined in __init__ and can be changed
-    according to your specific configuration
-    '''
+    """the Robot class represents your robot.
+
+    specific values for the robot model are defined in __init__ and can
+    be changed according to your specific configuration
+    """
 
     # constructs a hebi robot model from a list of components
     def make_model(self, components):
@@ -76,7 +76,7 @@ class Robot:
         lookup = hebi.Lookup()
         # Give the Lookup process 2 seconds to discover modules
         sleep(2)
-        self.group = lookup.get_group_from_names(['HEBI'], ['X5-9', 'X-00147']) #change depending on
+        self.group = lookup.get_group_from_names(['HEBI'], ['X5-9', 'X-00147'])  # change depending on
         self.group.feedback_frequency = 24.0
         # this is a list of components that can be iterated through that represent the robot
         # i.e. components[0] is linked to components[1] etc.
@@ -84,7 +84,7 @@ class Robot:
                            ['actuator', 'X5-1'], ['link', 'X5', 5.0, 0]]
         self.model = self.make_model(self.components)
         self.mesh = []
-        self.base_rotation=[1, 0, 0, 0]
+        self.base_rotation = [1, 0, 0, 0]
 
     # parse mesh substitutes parametric variables into the base mesh so vals[0] replaces @1, vals[1] replaces @2 etc.
     # note that the tags for parametric variables are 1 indexed and vals are 0 indexed
@@ -111,7 +111,7 @@ class Robot:
         # refer to the position of the second component
         transforms.insert(0, numpy.matrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]))
         # multiplies base rotation and the kinematic transforms (unless there are nan values in the quaternion)
-        if not numpy.isnan(numpy.array(feedback.orientation[0],dtype=numpy.float64)).any():
+        if not numpy.isnan(numpy.array(feedback.orientation[0], dtype=numpy.float64)).any():
             transforms = [numpy.dot(base_rotation, transforms[i]) for i in range(len(self.components))]
         for i in range(len(self.components)):
             if self.components[i][0] == 'bracket':  # no model for the bracket
@@ -139,10 +139,9 @@ class Robot:
 
 
 class App:
-    '''
-    the App class is what actually creates the window, runs the program and takes in user inputs
-    uses tkinter library
-    '''
+    """the App class is what actually creates the window, runs the program and
+    takes in user inputs uses tkinter library."""
+
     def __init__(self, title):
         self.window = tkinter.Tk()  # creates a tkinter window
         self.window.title(title)
@@ -168,6 +167,7 @@ class App:
                 self.sliders.append(w)
                 j += 1
     #creates canvas for drawing mesh onto and places it at the bottom of the window
+
     def begin_canvas(self, h, w):
         self.canvas = tkinter.Canvas(self.window, width=w, height=h)
         self.canvas.pack(side="bottom")
@@ -204,7 +204,7 @@ class App:
         light_src = numpy.array(light_src)
         incident_vector = light_src - face_pos
         proj_inc_face = (numpy.dot(face_vector, incident_vector)) * incident_vector / (
-                numpy.linalg.norm(incident_vector) ** 2)
+            numpy.linalg.norm(incident_vector) ** 2)
         color = [str(hex(int(base_color[i] * numpy.linalg.norm(proj_inc_face)))).replace('0x', '') for i in range(3)]
         for i in range(3):
             if len(color[i]) < 2:
@@ -283,14 +283,13 @@ class App:
             p.append(w[0].get())
         group_command.position = p
         self.robot.group.send_command(group_command)
-        self.virtual_robot.generate_3d_mesh(VirtualFeedback(p,self.virtual_robot.base_rotation))
-        self.draw_mesh_wireframe(self.virtual_robot.mesh, colors=['yellow', 'yellow', 'yellow', 'yellow']
-                                 , horizon=400, offsets=[250, 250, 0], camera=self.camera,
+        self.virtual_robot.generate_3d_mesh(VirtualFeedback(p, self.virtual_robot.base_rotation))
+        self.draw_mesh_wireframe(self.virtual_robot.mesh, colors=['yellow', 'yellow', 'yellow', 'yellow'], horizon=400, offsets=[250, 250, 0], camera=self.camera,
                                  camera_angle=self.camera_angle)
-        self.draw_mesh_solid(self.robot.mesh, mesh_colors=[[0, 255, 0], [0, 0, 255]]
-                             , horizon=400, offsets=[250, 250, 0], camera=self.camera, camera_angle=self.camera_angle,
+        self.draw_mesh_solid(self.robot.mesh, mesh_colors=[[0, 255, 0], [0, 0, 255]], horizon=400, offsets=[250, 250, 0], camera=self.camera, camera_angle=self.camera_angle,
                              light=[0, 10, 10])
     #binds keys to move camera
+
     def bind_keys(self):
         self.window.bind("<Left>", lambda event, move=(-1, 0, 0), angle=0: self.move_camera(move, angle))
         self.window.bind("<Right>", lambda event, move=(1, 0, 0), angle=0: self.move_camera(move, angle))
@@ -307,6 +306,7 @@ class App:
         # lab['text'] = time
         self.update()
         self.window.after(16, self.clock)
+
 
 #creates the app, sliders, canvas and clock, then runs the app
 if __name__ == "__main__":
