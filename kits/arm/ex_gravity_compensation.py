@@ -1,49 +1,74 @@
 #!/usr/bin/env python3
 
 import hebi
-import numpy as np
-from hebi import arm as arm_api
+import os
+import sys
+
+
+# ------------------------------------------------------------------------------
+# Add the root folder of the repository to the search path for modules
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path = [root_path] + sys.path
+# ------------------------------------------------------------------------------
+
+
+from util.math_utils import get_grav_comp_efforts
+from util.arm import setup_arm_params
+
 from matplotlib import pyplot as plt
 
-# Arm setup
-arm_family = "Arm"
-module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
-hrdf_file = "hrdf/A-2085-06.hrdf"
-gains_file = "gains/A-2085-06.xml"
+import mobile_io as mbio
 
 
-# Create Arm object
-arm = arm_api.create([arm_family],
-                     names=module_names,
-                     hrdf_file=hrdf_file)
-arm.load_gains(gains_file)
+m = mbio.MobileIO("HEBI", "Phone Name")
+state = m.getState()
 
+
+arm_name = '6-DoF'
+arm_family = 'Example Arm'
+# If you attach a gas spring to the shoulder for extra payload, set this to True
+has_gas_spring = False
+
+group, kin, params = setup_arm_params(arm_name, arm_family, has_gas_spring)
+
+gravity_vec = params.gravity_vec
+effort_offset = params.effort_offset
+local_dir = params.local_dir
+
+enable_logging = True
 
 # Start background logging
-enable_logging = True
 if enable_logging:
-    arm.group.start_log('dir', 'logs', mkdirs=True)
+    group.start_log('dir', 'logs', mkdirs=True)
 
-#######################
-## Main Control Loop ##
-#######################
 
-print('Commanding gravity-compensated zero torques to the arm.')
-while arm.update():
-    # When no goal is set, the arm automatically returns to grav-comp mode
-    # Thus, when we have an empty control loop, the arm is in grav-comp
-    # awaiting further instructions
+# Gravity compensated mode
+cmd = hebi.GroupCommand(group.size)
+fbk = hebi.GroupFeedback(group.size)
 
-    # Send the latest loaded commands to the arm. If no changes are made,
-    # it will send the last loaded command when arm.update() was last called
-    arm.send()
+print('Commanded gravity-compensated zero torques to the arm.')
+print('Press b1 to stop.')
 
-##########################
-## Logging and Plotting ##
-##########################
+while not state[0][0] == 1:
+    # update mobile io state
+    state = m.getState()
+
+    # Gather sensor data from the arm
+    group.get_next_feedback(reuse_fbk=fbk)
+
+    # Update gravity vector the base module of the arm
+    params.update_gravity(fbk)
+    gravity_vec = params.gravity_vec
+
+    # Calculate required torques to negate gravity at current position
+    cmd.effort = get_grav_comp_efforts(kin, fbk.position, -gravity_vec) + effort_offset
+
+    # Send to robot
+    group.send_command(cmd)
+
 
 if enable_logging:
-    hebi_log = arm.group.stop_log()
+    hebi_log = group.stop_log()
 
     # Plot tracking / error from the joints in the arm.
     time = []
@@ -81,6 +106,4 @@ if enable_logging:
     plt.xlabel('time (sec)')
     plt.ylabel('effort (N*m)')
     plt.grid(True)
-
-    plt.show()
-    # Insert additional plotting code here
+    # Put more plotting code here

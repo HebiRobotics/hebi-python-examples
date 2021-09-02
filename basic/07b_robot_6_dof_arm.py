@@ -80,14 +80,14 @@ if group is None:
     exit(1)
 
 try:
-    model = hebi.robot_model.import_from_hrdf("hrdf/A-2085-06.hrdf")
+    model = hebi.robot_model.import_from_hrdf("hrdf/6-DoF_arm_example.hrdf")
 except Exception as e:
     print('Could not load HRDF: {0}'.format(e))
     exit(1)
 
 # Go to the XYZ positions at four corners of the box, and create a rotation matrix
 # that has the end effector point straight forward.
-xyz_targets = np.array([[0.20, 0.40, 0.40, 0.20], [0.30, 0.30, -0.30, -0.30], [0.10, 0.10, 0.10, 0.10]])
+xyz_targets = np.array([[0.20, 0.40, 0.40, 0.20, ], [0.30, 0.30, -0.30, -0.30, ], [0.10, 0.10, 0.10, 0.10]])
 xyz_cols = xyz_targets.shape[1]
 rotation_target = math_utils.rotate_y(pi / 2)
 
@@ -132,6 +132,7 @@ for col in range(xyz_cols - 1):
 # Stop logging
 log_file = group.stop_log()
 if log_file is not None:
-  hebi.util.plot_logs(log_file, 'position', figure_spec=101)
-  hebi.util.plot_logs(log_file, 'velocity', figure_spec=102)
-  hebi.util.plot_logs(log_file, 'effort', figure_spec=103)
+    log_file.load()
+    hebi.util.plot_logs(log_file, 'position', figure_spec=101)
+    hebi.util.plot_logs(log_file, 'velocity', figure_spec=102)
+    hebi.util.plot_logs(log_file, 'effort', figure_spec=103)

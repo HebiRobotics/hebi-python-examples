@@ -28,9 +28,9 @@ group_feedback = hebi.GroupFeedback(group.size)
 group.start_log('logs', mkdirs=True)
 
 # Parameters for step function
-step_period = 1.0                  # [sec]
-step_amplitude = pi / 8.0             # [rad]
-step_duration = step_period * 4.0    # [sec] the 4.0 multiplier gives 2 full cycles
+step_period = 1.0                  # sec
+step_amplitude = pi / 8.0          # rad
+step_duration = step_period * 4.0  # the 4.0 multiplier gives 2 full cycles
 
 # Make the position controller gradually stiffer.
 new_position_kp_gains = [0.2, 0.5, 10.0]
@@ -62,4 +62,5 @@ for new_gain in new_position_kp_gains:
 
 log_file = group.stop_log()
 if log_file is not None:
-  hebi.util.plot_logs(log_file, 'position', figure_spec=101)
+    log_file.load()
+    hebi.util.plot_logs(log_file, 'position', figure_spec=101)

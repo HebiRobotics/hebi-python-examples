@@ -46,10 +46,11 @@ print('All done!')
 
 # Stops background logging and converts the logged data into readable data that can be easily plotted.
 log = group.stop_log()
+log.load()  # load into memory for easier multi-plotting
 
 # Offline Visualization
 if log is not None:
-  # Plot the logged position feedback
-  hebi.util.plot_logs(log, 'position', figure_spec=101)
-  # Plot the logged velocity feedback
-  hebi.util.plot_logs(log, 'velocity', figure_spec=102)
+    # Plot the logged position feedback
+    hebi.util.plot_logs(log, 'position', figure_spec=101)
+    # Plot the logged velocity feedback
+    hebi.util.plot_logs(log, 'velocity', figure_spec=102)

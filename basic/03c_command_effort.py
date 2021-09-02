@@ -24,11 +24,11 @@ group_feedback = hebi.GroupFeedback(group.size)
 # Start logging in the background
 group.start_log('logs', mkdirs=True)
 
-freq_hz = 0.5                 # [Hz]
+freq_hz = 0.5              # [Hz]
 freq = freq_hz * 2.0 * pi  # [rad / sec]
-amp = 1.0                 # [rad]
+amp = 1.0                  # [rad]
 
-duration = 10.0               # [sec]
+duration = 10.0            # [sec]
 start = time()
 t = time() - start
 
@@ -44,4 +44,5 @@ while t < duration:
 # Stop logging. `log_file` contains the contents of the file
 log_file = group.stop_log()
 if log_file is not None:
-  hebi.util.plot_logs(log_file, 'effort')
+    log_file.load()
+    hebi.util.plot_logs(log_file, 'effort')
