@@ -97,28 +97,9 @@ class TreadedBase:
 
         # switch to position trajectory to align flippers if needed
         if self.joined_flipper_mode and !self.flippers_aligned:
-            # this nils chassis_traj and flipper_traj, so
-            # falls through to homing block and starts to align flippers
+            # this sets flipper_pos_traj, so flippers align
             pos = np.array([self.flipper_cmd.position, self.aligned_flipper_position])
             self.set_flipper_pos_trajectory(t_now, [0, 3.0], pos)
-
-        if self.chassis_traj is not None:
-            # chassis update
-            t = min(t_now, self.chassis_traj.end_time)
-            [vel, acc, jerk] = self.chassis_traj.get_state(t)
-            self.wheel_cmd.velocity = self.chassis_to_wheel_vel @ vel
-            self.wheel_cmd.position += self.wheel_cmd.velocity * dt
-
-        if self.flipper_traj is not None:
-            # flipper update
-            t = min(t_now, self.flipper_traj.end_time)
-            [vel, acc, jerk] = self.flipper_traj.get_state(t)
-            self.flipper_cmd.velocity = vel
-
-            if self.joined_flipper_mode and self.flippers_aligned:
-                self.flipper_cmd.position = self.aligned_flipper_position
-
-            self.flipper_cmd.position += vel * dt
 
         # if we are homing, need to set command differently
         if self.flipper_pos_traj is not None:
@@ -130,6 +111,24 @@ class TreadedBase:
             nan.fill(np.nan)
             self.wheel_cmd.position = nan
             self.wheel_cmd.velocity = nan
+        else:
+            if self.chassis_traj is not None:
+                # chassis update
+                t = min(t_now, self.chassis_traj.end_time)
+                [vel, acc, jerk] = self.chassis_traj.get_state(t)
+                self.wheel_cmd.velocity = self.chassis_to_wheel_vel @ vel
+                self.wheel_cmd.position += self.wheel_cmd.velocity * dt
+
+            if self.flipper_traj is not None:
+                # flipper update
+                t = min(t_now, self.flipper_traj.end_time)
+                [vel, acc, jerk] = self.flipper_traj.get_state(t)
+                self.flipper_cmd.velocity = vel
+
+                if self.joined_flipper_mode and self.flippers_aligned:
+                    self.flipper_cmd.position = self.aligned_flipper_position
+
+                self.flipper_cmd.position += vel * dt
 
         self.group.send_command(self.cmd)
         self.t_prev = t_now
