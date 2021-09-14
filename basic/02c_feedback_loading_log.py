@@ -6,7 +6,6 @@ folder = './logs/'
 name = 'exampleLog.hebilog'
 
 log = hebi.util.load_log('{}/{}'.format(folder, name))
-log.load()
 
 # Plot using some handy helper functions
 hebi.util.plot_logs(log, 'position', figure_spec=101)

@@ -46,7 +46,6 @@ print('All done!')
 
 # Stops background logging and converts the logged data into readable data that can be easily plotted.
 log = group.stop_log()
-log.load()  # load into memory for easier multi-plotting
 
 # Offline Visualization
 if log is not None:
