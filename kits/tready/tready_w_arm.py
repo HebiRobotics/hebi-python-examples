@@ -47,7 +47,9 @@ class TreadedBase:
         self.t_prev = time()
         self._aligned_flipper_mode = False
         self._aligning = False
-        self.clear_trajectories()
+
+        self.chassis_traj = None
+        self.flipper_traj = None
 
     def has_active_trajectory(self, t_now):
         if self.chassis_traj is not None and t_now < self.chassis_traj.end_time:
@@ -55,10 +57,6 @@ class TreadedBase:
         if self.flipper_traj is not None and t_now < self.flipper_traj.end_time:
             return True
         return False
-
-    def clear_trajectories(self):
-        self.chassis_traj = None
-        self.flipper_traj = None
 
     @property
     def aligned_flipper_mode(self):
@@ -88,11 +86,11 @@ class TreadedBase:
 
     @property
     def flipper_aligned_front(self):
-        return (self.flipper_cmd.position[0] + self.flipper_cmd.position[1]) < 0.01
+        return (self.flipper_fbk.position_command[0] + self.flipper_fbk.position_command[1]) < 0.01
 
     @property
     def flipper_aligned_back(self):
-        return (self.flipper_cmd.position[2] + self.flipper_cmd.position[3]) < 0.01
+        return (self.flipper_fbk.position_command[2] + self.flipper_fbk.position_command[3]) < 0.01
 
     @property
     def flippers_aligned(self):
@@ -100,19 +98,20 @@ class TreadedBase:
 
     @property
     def aligned_flipper_position(self):
-        fmf = np.mean([self.flipper_cmd.position[0], -1 * self.flipper_cmd.position[1]])
-        fmb = np.mean([self.flipper_cmd.position[2], -1 * self.flipper_cmd.position[3]])
-        return np.array([fmf, -fmf, fmb, -fmb], dtype=np.float64)
+        front_mean = np.mean([self.flipper_fbk.position_command[0], -1 * self.flipper_fbk.position_command[1]])
+        back_mean = np.mean([self.flipper_fbk.position_command[2], -1 * self.flipper_fbk.position_command[3]])
+        return np.array([front_mean, -front_mean, back_mean, -back_mean], dtype=np.float64)
 
     def update(self, t_now):
         dt = t_now - self.t_prev
         self.group.get_next_feedback(reuse_fbk=self.fbk)
 
         if self.flipper_traj is None and self.chassis_traj is None:
-            self._aligning = False
+            print("No trajectories, zeroing velocity")
             self.cmd.velocity = 0.0
         # finished aligning flippers
         elif self.aligning and self.flippers_aligned:
+            print("Done aligning")
             self._aligning = False
         else:
             if self.chassis_traj is not None:
@@ -125,13 +124,16 @@ class TreadedBase:
             if self.flipper_traj is not None:
                 # flipper update
                 t = min(t_now, self.flipper_traj.end_time)
-                [_, vel, _] = self.flipper_traj.get_state(t)
+                [pos, vel, _] = self.flipper_traj.get_state(t)
+
                 self.flipper_cmd.velocity = vel
-
-                if self.aligned_flipper_mode and self.flippers_aligned:
-                    self.flipper_cmd.position = self.aligned_flipper_position
-
-                self.flipper_cmd.position += vel * dt
+                if self.aligned_flipper_mode:
+                    if not self.flippers_aligned:
+                        self.flipper_cmd.position = pos
+                    else:
+                        self.flipper_cmd.position = self.aligned_flipper_position + vel * dt
+                else:
+                    self.flipper_cmd.position += vel * dt
 
         self.t_prev = t_now
 
@@ -152,7 +154,7 @@ class TreadedBase:
             t = min(t_now, self.flipper_traj.end_time)
             positions[:, 0], velocities[:, 0], accelerations[:, 0] = self.flipper_traj.get_state(t)
         else:
-            positions[:, 0] = base.flipper_fbk.position
+            positions[:, 0] = self.flipper_fbk.position
             velocities[:, 0] = self.flipper_fbk.velocity
             accelerations[:, 0] = self.flipper_fbk.effort_command
 
@@ -187,12 +189,14 @@ class TreadedBase:
         self.chassis_traj = hebi.trajectory.create_trajectory(times, positions, velocities, efforts)
 
     def align_flippers(self, t_now):
+        print("Aligning flippers")
         self._aligned_flipper_mode = True
         self._aligning = True
-        self.clear_trajectories()
+        self.chassis_traj = None
         self.set_flipper_trajectory(t_now, 3.0, p=self.aligned_flipper_position)
 
     def unlock_flippers(self):
+        print("End aligning flippers")
         self._aligned_flipper_mode = False
         self._aligning = False
 
@@ -217,7 +221,7 @@ class DemoState(Enum):
 
 ChassisVelocity = namedtuple('ChassisVelocity', ['x', 'rz'])
 TreadyInputs = namedtuple('TreadyInputs', ['base_motion', 'flippers', 'align_flippers'])
-ArmInputs = namedtuple('ArmInputs', ['phone_pos', 'phone_rot', 'locked', 'active'])
+ArmInputs = namedtuple('ArmInputs', ['phone_pos', 'phone_rot', 'locked', 'active', 'gripper_closed'])
 DemoInputs = namedtuple('DemoInputs', ['should_exit', 'should_reset', 'chassis', 'arm'])
 
 class TreadyControl:
@@ -345,13 +349,14 @@ class TreadyControl:
                 return True
 
             elif self.state is DemoState.TELEOP:
-                if not demo_input.chassis.align_flippers and self.base.aligned_flipper_mode:
+                should_align_flippers = demo_input.chassis.align_flippers
+
+                if not should_align_flippers and self.base.aligned_flipper_mode:
                     self.base.unlock_flippers()
-                elif demo_input.chassis.align_flippers and not self.base.aligned_flipper_mode:
-                    self.base.align_flippers(t_now)
                 elif self.base.aligning:
-                    # do nothing while waiting for flippers to align
                     pass
+                elif should_align_flippers and not self.base.aligned_flipper_mode:
+                    self.base.align_flippers(t_now)
                 else:
                     chassis_vels, flipper_vels = self.compute_velocities(demo_input)
                     self.base.set_chassis_vel_trajectory(t_now, self.base.chassis_ramp_time, chassis_vels)
@@ -360,6 +365,11 @@ class TreadyControl:
                 arm_goal = self.compute_arm_goal(t_now, demo_input)
                 if arm_goal is not None:
                     self.arm.set_goal(arm_goal)
+                gripper_closed = self.arm.end_effector.state == 1.0
+                if demo_input.arm.gripper_closed and not gripper_closed:
+                    self.arm.end_effector.close()
+                elif not demo_input.arm.gripper_closed and gripper_closed:
+                    self.arm.end_effector.open()
 
                 return True
 
@@ -374,14 +384,14 @@ class TreadyControl:
 
         if state is DemoState.HOMING:
             print("TRANSITIONING TO HOMING")
-            base.set_color('magenta')
+            self.base.set_color('magenta')
             self.mobile_io.clear_text()
             msg = 'Robot Homing Sequence\nPlease wait...'
             self.mobile_io.set_text(msg)
 
             # build trajectory
             flipper_home = np.array([-1, 1, 1, -1]) * np.deg2rad(15 + 45)
-            self.base.clear_trajectories()
+            self.base.chassis_traj = None
             self.base.set_flipper_trajectory(t_now, 5.0, p=flipper_home)
 
             g = hebi.arm.Goal(self.arm.size)
@@ -393,14 +403,15 @@ class TreadyControl:
             base.clear_color()
             # Print Instructions
             self.mobile_io.clear_text()
-            instructions = 'Robot Ready to Control\nB1: Reset\nB6: Joined Flipper\nB8 - Quit'
+            instructions = 'Robot Ready to Control\nB1: Reset\nB2: Arm Motion Enable\nB4: Arm Lock\nB5: Close Gripper\nB6: Joined Flipper\nB8 - Quit'
             self.mobile_io.set_text(instructions)
             self.mobile_io.set_led_color("green")
 
         elif state is DemoState.STOPPED:
             print("TRANSITIONING TO STOPPED")
-            base.clear_trajectories()
-            base.set_color('blue')
+            self.base.chassis_traj = None
+            self.base.flipper_traj = None
+            self.base.set_color('blue')
 
         elif state is DemoState.EXIT:
             print("TRANSITIONING TO EXIT")
@@ -470,6 +481,12 @@ def setup_arm_6dof(lookup, family):
         lookup=lookup)
 
     arm.load_gains(os.path.join(root_dir, 'gains/A-2240-06.xml'))
+
+    # Add the gripper
+    gripper = hebi.arm.Gripper(lookup.get_group_from_names([family], ['gripperSpool']), -5, 1)
+    gripper.load_gains(os.path.join(root_dir, 'gains/gripper_spool_gains.xml'))
+    arm.set_end_effector(gripper)
+
     return arm
 
 def config_mobile_io(m):
@@ -493,6 +510,7 @@ def config_mobile_io(m):
 
     arm_enable = 2
     arm_lock = 4
+    gripper_close = 5
 
     # set mobileIO control config
     m.set_led_color("blue")
@@ -504,6 +522,7 @@ def config_mobile_io(m):
     m.set_button_mode(joined_flipper_btn, 1)
     m.set_button_mode(arm_enable, 1)
     m.set_button_mode(arm_lock, 1)
+    m.set_button_mode(gripper_close, 1)
 
     m.set_button_output(reset_pose_btn, 1)
     m.set_button_output(quit_btn, 1)
@@ -543,7 +562,8 @@ def config_mobile_io(m):
             np.copy(m.position),
             rotation,
             m.get_button_state(arm_lock),
-            m.get_button_state(arm_enable))
+            m.get_button_state(arm_enable),
+            m.get_button_state(gripper_close))
 
         return DemoInputs(should_exit, should_reset, tready_inputs, arm_inputs)
 

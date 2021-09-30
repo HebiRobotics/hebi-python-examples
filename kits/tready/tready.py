@@ -41,13 +41,10 @@ class TreadedBase:
         self.group.get_next_feedback(reuse_fbk=self.fbk)
         t_now = time()
 
-        times = np.array([0.0, chassis_ramp_time]) + t_now
-        self.chassis_traj = hebi.trajectory.create_trajectory(times, np.zeros((3, 2)))
-        times = np.array([0.0, flipper_ramp_time]) + t_now
-        self.flipper_traj = hebi.trajectory.create_trajectory(times, np.zeros((4, 2)))
-
         self.cmd.position = self.fbk.position
         self.t_prev = t_now
+        self.aligned_flipper_mode = False
+        self.clear_trajectories()
 
     def has_active_trajectory(self, t_now):
         if self.chassis_traj is not None and t_now < self.chassis_traj.end_time:
