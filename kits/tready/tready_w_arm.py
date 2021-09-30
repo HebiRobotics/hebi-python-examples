@@ -224,14 +224,14 @@ class TreadyControl:
         # 5 DoF home
         #self.arm_xyz_home = [0.34, 0.0, 0.23]
         # 6 DoF home
-        self.arm_xyz_home = [0.55, 0.0, 0.15]
+        self.arm_xyz_home = [0.4, 0.0, 0.0]
         self.arm_rot_home = R.from_euler('z', np.pi / 2) * R.from_euler('x', np.pi)
         self.arm_rot_home = self.arm_rot_home.as_matrix()
 
         # 5 DoF seed
         #self.arm_seed_ik = np.array([0.25, -1.0, 0, -0.75, 0])
         # 6 DoF seed
-        self.arm_seed_ik = np.array([0, 1, 1.5, 2, -1.5, -1])
+        self.arm_seed_ik = np.array([0, 0.5, 2, 3, -1.5, 0])
         self.arm_home = self.arm.ik_target_xyz_so3(
             self.arm_seed_ik,
             self.arm_xyz_home,
