@@ -31,11 +31,11 @@ class TreadedBase:
     def __init__(self, group, chassis_ramp_time, flipper_ramp_time):
         self.group = group
         self.fbk = hebi.GroupFeedback(group.size)
-        self.flipper_fbk = self.fbk.create_view([0, 1, 2, 3])
-        self.wheel_fbk = self.fbk.create_view([4, 5, 6, 7])
+        self.wheel_fbk = self.fbk.create_view([0, 1, 2, 3])
+        self.flipper_fbk = self.fbk.create_view([4, 5, 6, 7])
         self.cmd = hebi.GroupCommand(group.size)
-        self.flipper_cmd = self.cmd.create_view([0, 1, 2, 3])
-        self.wheel_cmd = self.cmd.create_view([4, 5, 6, 7])
+        self.wheel_cmd = self.cmd.create_view([0, 1, 2, 3])
+        self.flipper_cmd = self.cmd.create_view([4, 5, 6, 7])
 
         self.chassis_ramp_time = chassis_ramp_time
         self.flipper_ramp_time = flipper_ramp_time
@@ -45,7 +45,6 @@ class TreadedBase:
         self.cmd.position = self.fbk.position
         self.t_prev = time()
         self._aligned_flipper_mode = False
-        self._aligning = False
 
         self.chassis_traj = None
         self.flipper_traj = None
@@ -60,10 +59,6 @@ class TreadedBase:
     @property
     def aligned_flipper_mode(self):
         return self._aligned_flipper_mode
-
-    @property
-    def aligning(self):
-        return self._aligning
 
     @property
     def wheel_to_chassis_vel(self):
@@ -85,11 +80,11 @@ class TreadedBase:
 
     @property
     def flipper_aligned_front(self):
-        return (self.flipper_fbk.position_command[0] + self.flipper_fbk.position_command[1]) < 0.01
+        return np.abs(self.flipper_fbk.position_command[0] + self.flipper_fbk.position_command[1]) < 0.01
 
     @property
     def flipper_aligned_back(self):
-        return (self.flipper_fbk.position_command[2] + self.flipper_fbk.position_command[3]) < 0.01
+        return np.abs(self.flipper_fbk.position_command[2] + self.flipper_fbk.position_command[3]) < 0.01
 
     @property
     def flippers_aligned(self):
@@ -108,10 +103,6 @@ class TreadedBase:
         if self.flipper_traj is None and self.chassis_traj is None:
             print("No trajectories, zeroing velocity")
             self.cmd.velocity = 0.0
-        # finished aligning flippers
-        elif self.aligning and self.flippers_aligned:
-            print("Done aligning")
-            self._aligning = False
         else:
             if self.chassis_traj is not None:
                 # chassis update
@@ -140,10 +131,6 @@ class TreadedBase:
         self.group.send_command(self.cmd)
 
     def set_flipper_trajectory(self, t_now, ramp_time, p=None, v=None):
-        # Don't allow setting new trajectory while flippers are aligning
-        if self.aligning:
-            return
-
         times = [t_now, t_now + ramp_time]
         positions = np.empty((4, 2))
         velocities = np.empty((4, 2))
@@ -164,10 +151,6 @@ class TreadedBase:
         self.flipper_traj = hebi.trajectory.create_trajectory(times, positions, velocities, accelerations)
 
     def set_chassis_vel_trajectory(self, t_now, ramp_time, v):
-        # Don't allow setting new trajectory while flippers are aligning
-        if self.aligning:
-            return
-
         times = [t_now, t_now + ramp_time]
         positions = np.empty((3, 2))
         velocities = np.empty((3, 2))
@@ -188,16 +171,16 @@ class TreadedBase:
         self.chassis_traj = hebi.trajectory.create_trajectory(times, positions, velocities, efforts)
 
     def align_flippers(self, t_now):
-        print("Aligning flippers")
+        print("FLIPPER ALIGNMENT ON")
         self._aligned_flipper_mode = True
-        self._aligning = True
         self.chassis_traj = None
-        self.set_flipper_trajectory(t_now, 3.0, p=self.aligned_flipper_position)
+        if not self.flippers_aligned:
+            print("Setting aligning trajectory")
+            self.set_flipper_trajectory(t_now, 3.0, p=self.aligned_flipper_position)
 
     def unlock_flippers(self):
-        print("End aligning flippers")
+        print("FLIPPER ALIGNMENT OFF")
         self._aligned_flipper_mode = False
-        self._aligning = False
 
     def set_color(self, color):
         color_cmd = hebi.GroupCommand(self.group.size)
@@ -213,6 +196,7 @@ class TreadedBase:
 class DemoState(Enum):
     STARTUP = auto()
     HOMING = auto()
+    ALIGNING = auto()
     TELEOP = auto()
     STOPPED = auto()
     EXIT = auto()
@@ -288,19 +272,24 @@ class TreadyControl:
                 return True
 
             elif self.state is DemoState.HOMING:
-                if not self.base.has_active_trajectory(t_now):
+                base_complete = not self.base.has_active_trajectory(t_now)
+                if base_complete:
                     self.transition_to(t_now, DemoState.TELEOP)
+                return True
+
+            elif self.state is DemoState.ALIGNING:
+                should_align_flippers = demo_input.chassis.align_flippers
+                if self.base.flippers_aligned or not should_align_flippers:
+                    self.transition_to(t_now, DemoState.TELEOP)
+
                 return True
 
             elif self.state is DemoState.TELEOP:
                 should_align_flippers = demo_input.chassis.align_flippers
-
-                if not should_align_flippers and self.base.aligned_flipper_mode:
+                if should_align_flippers and not self.base.aligned_flipper_mode:
+                    self.transition_to(t_now, DemoState.ALIGNING)
+                elif not should_align_flippers and self.base.aligned_flipper_mode:
                     self.base.unlock_flippers()
-                elif self.base.aligning:
-                    pass
-                elif should_align_flippers and not self.base.aligned_flipper_mode:
-                    self.base.align_flippers(t_now)
                 else:
                     chassis_vels, flipper_vels = self.compute_velocities(demo_input)
                     self.base.set_chassis_vel_trajectory(t_now, self.base.chassis_ramp_time, chassis_vels)
@@ -328,6 +317,10 @@ class TreadyControl:
             flipper_home = np.array([-1, 1, 1, -1]) * np.deg2rad(15 + 45)
             self.base.chassis_traj = None
             self.base.set_flipper_trajectory(t_now, 5.0, p=flipper_home)
+
+        elif state is DemoState.ALIGNING:
+            print("TRANSITIONING TO ALIGNING")
+            self.base.align_flippers(t_now)
 
         elif state is DemoState.TELEOP:
             print("TRANSITIONING TO TELEOP")
@@ -379,9 +372,9 @@ def setup_base(lookup, base_family):
     wheel_names = [f'T{n+1}_J2_track' for n in range(4)]
 
     # Create base group
-    group = lookup.get_group_from_names([base_family], flipper_names + wheel_names)
+    group = lookup.get_group_from_names([base_family], wheel_names + flipper_names)
     if group is None:
-        raise RuntimeError(f"Could not find modules: {flipper_names + wheel_names} in family '{base_family}'")
+        raise RuntimeError(f"Could not find modules: {wheel_names + flipper_names} in family '{base_family}'")
     load_gains(group, "gains/r-tready-gains.xml")
 
     return TreadedBase(group, 0.25, 0.33)
