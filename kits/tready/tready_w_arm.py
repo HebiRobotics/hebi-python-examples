@@ -133,8 +133,10 @@ class TreadedBase:
 
                 self.flipper_cmd.position += vel * dt
 
-        self.group.send_command(self.cmd)
         self.t_prev = t_now
+
+    def send(self):
+        self.group.send_command(self.cmd)
 
     def set_flipper_trajectory(self, t_now, ramp_time, p=None, v=None):
         # Don't allow setting new trajectory while flippers are aligning
@@ -142,21 +144,23 @@ class TreadedBase:
             return
 
         times = [t_now, t_now + ramp_time]
-        print(f"times: {times}")
         positions = np.empty((4, 2))
         velocities = np.empty((4, 2))
+        accelerations = np.empty((4, 2))
 
         if self.flipper_traj is not None:
             t = min(t_now, self.flipper_traj.end_time)
-            positions[:, 0], velocities[:, 0], _ = self.flipper_traj.get_state(t)
+            positions[:, 0], velocities[:, 0], accelerations[:, 0] = self.flipper_traj.get_state(t)
         else:
             positions[:, 0] = base.flipper_fbk.position
             velocities[:, 0] = self.flipper_fbk.velocity
+            accelerations[:, 0] = self.flipper_fbk.effort_command
 
         positions[:, 1] = np.nan if p is None else p
         velocities[:, 1] = 0.0 if v is None else v
+        accelerations[:, 1] = 0.0
 
-        self.flipper_traj = hebi.trajectory.create_trajectory(times, positions, velocities)
+        self.flipper_traj = hebi.trajectory.create_trajectory(times, positions, velocities, accelerations)
 
     def set_chassis_vel_trajectory(self, t_now, ramp_time, v):
         # Don't allow setting new trajectory while flippers are aligning
@@ -183,7 +187,6 @@ class TreadedBase:
         self.chassis_traj = hebi.trajectory.create_trajectory(times, positions, velocities, efforts)
 
     def align_flippers(self, t_now):
-        print('aligning flippers')
         self._aligned_flipper_mode = True
         self._aligning = True
         self.clear_trajectories()
@@ -266,7 +269,6 @@ class TreadyControl:
             rot_mat = self.phone_rot_home
             arm_xyz_target = self.arm_xyz_home + xyz_scale * (rot_mat.T @ phone_offset)
             arm_rot_target = rot_mat.T @ phone_rot @ self.arm_rot_home
-            print(f"XYZ Target: {arm_xyz_target}")
 
             joint_target = self.arm.ik_target_xyz_so3(
                 self.arm_seed_ik,
@@ -309,6 +311,8 @@ class TreadyControl:
     def update(self, t_now: float, demo_input=None):
         self.base.update(t_now)
         self.arm.update()
+
+        self.base.send()
         self.arm.send()
 
         if self.state is DemoState.EXIT:
@@ -341,10 +345,13 @@ class TreadyControl:
                 return True
 
             elif self.state is DemoState.TELEOP:
-                if demo_input.chassis.align_flippers and self.base.aligning:
-                    pass
-                elif demo_input.chassis.align_flippers and not self.base.flippers_aligned:
+                if not demo_input.chassis.align_flippers and self.base.aligned_flipper_mode:
+                    self.base.unlock_flippers()
+                elif demo_input.chassis.align_flippers and not self.base.aligned_flipper_mode:
                     self.base.align_flippers(t_now)
+                elif self.base.aligning:
+                    # do nothing while waiting for flippers to align
+                    pass
                 else:
                     chassis_vels, flipper_vels = self.compute_velocities(demo_input)
                     self.base.set_chassis_vel_trajectory(t_now, self.base.chassis_ramp_time, chassis_vels)
@@ -576,7 +583,6 @@ if __name__ == "__main__":
 
     while True:
         t = time()
-
         demo_inputs = None
         if m.update(0.0):
             demo_inputs = input_parser(m)
