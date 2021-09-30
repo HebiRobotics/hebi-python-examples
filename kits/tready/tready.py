@@ -375,7 +375,9 @@ def setup_base(lookup, base_family):
     group = lookup.get_group_from_names([base_family], wheel_names + flipper_names)
     if group is None:
         raise RuntimeError(f"Could not find modules: {wheel_names + flipper_names} in family '{base_family}'")
-    load_gains(group, "gains/r-tready-gains.xml")
+
+    root_dir, _ = os.path.split(__file__)
+    load_gains(group, os.path.join(root_dir, "gains/r-tready-gains.xml"))
 
     return TreadedBase(group, 0.25, 0.33)
 
