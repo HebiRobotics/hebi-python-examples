@@ -13,6 +13,23 @@ from hebi.util import create_mobile_io
 from tready import TreadedBase
 
 
+def set_instructions(mobile_io, mode_button):
+    if mobile_io.get_button_state(mode_button):
+        mode_text = 'Arm Rot. Mode'
+    else:
+        mode_text = 'Base Drive Mode'
+    instructions = ('Robot Ready to Control\n'
+                    'B1: Reset\n'
+                    'B2: {}\n'
+                    'B3: Toggle Gripper\n'
+                    'B4: Arm Home\n'
+                    'B5/7: Arm Up/Down\n'
+                    'B6: Joined Flipper\n'
+                    'B8 - Quit')
+    mobile_io.clear_text()
+    mobile_io.set_text(instructions.format(mode_text))
+
+
 class DemoState(Enum):
     STARTUP = auto()
     HOMING = auto()
@@ -62,19 +79,24 @@ class TreadyControl:
     def compute_arm_goal(self, t_now, inputs):
         arm_goal = hebi.arm.Goal(self.arm.size)
         if inputs.arm.locked:
-            arm_goal.add_waypoint(position=self.arm_home)
+            arm_goal.add_waypoint(t=3.0, position=self.arm_home)
             return arm_goal
         else:
             rot_curr = np.empty((3,3))
             xyz_curr = self.arm.FK(self.arm.last_feedback.position_command, orientation_out=rot_curr)
+
             arm_xyz_target = xyz_curr + inputs.arm.delta_xyz
+
             r_x = R.from_euler('x', inputs.arm.delta_rot_xyz[0])
             r_y = R.from_euler('y', inputs.arm.delta_rot_xyz[1])
             r_z = R.from_euler('z', inputs.arm.delta_rot_xyz[2])
             arm_rot_target = R.from_matrix(rot_curr) * r_x * r_y * r_z
 
+            curr_seed_ik = self.arm.last_feedback.position_command
+            curr_seed_ik[2] = abs(curr_seed_ik[2])
+
             joint_target = self.arm.ik_target_xyz_so3(
-                self.arm_seed_ik,
+                curr_seed_ik,
                 arm_xyz_target,
                 arm_rot_target.as_matrix())
 
@@ -170,8 +192,7 @@ class TreadyControl:
                     self.base.set_chassis_vel_trajectory(t_now, self.base.chassis_ramp_time, chassis_vels)
                     self.base.set_flipper_trajectory(t_now, self.base.flipper_ramp_time, v=flipper_vels)
 
-                arm_goal = self.compute_arm_goal(t_now, demo_input)
-                if arm_goal is not None:
+                arm_goal = self.compute_arm_goal(t_now, demo_input) if arm_goal is not None:
                     self.arm.set_goal(arm_goal)
                 gripper_closed = self.arm.end_effector.state == 1.0
                 if demo_input.arm.gripper_closed and not gripper_closed:
@@ -214,9 +235,7 @@ class TreadyControl:
             print("TRANSITIONING TO TELEOP")
             base.clear_color()
             # Print Instructions
-            self.mobile_io.clear_text()
-            instructions = 'Robot Ready to Control\nB1: Reset\nB2: Arm Rot. Enable\nB3: Toggle Gripper\nB4: Arm Home\nB5/7: Arm Up/Down\nB6: Joined Flipper\nB8 - Quit'
-            self.mobile_io.set_text(instructions)
+            set_instructions(self.mobile_io, 2)
             self.mobile_io.set_led_color("green")
 
         elif state is DemoState.STOPPED:
@@ -367,6 +386,11 @@ def config_mobile_io(m):
         flip3 = m.get_axis_state(slider_flip3)
         flip4 = m.get_axis_state(slider_flip4)
 
+        # Update instruction text if mode has just changed
+        btn_val = m.get_button_diff(arm_rot_ctrl)
+        if btn_val in [2, 3]: # Value just changed (either ToOff or ToOn)
+            set_instructions(m, arm_rot_ctrl)
+
         if m.get_button_state(arm_rot_ctrl):
             base_vel_fwd = 0.0
             base_vel_rot = 0.0
@@ -380,8 +404,9 @@ def config_mobile_io(m):
             arm_dry = 0.0
             arm_drz = 0.0
 
-        arm_dx = 0.7 * m.get_axis_state(joy_arm_x)
-        arm_dy = -0.7 * m.get_axis_state(joy_arm_y)
+        arm_dx = 0.3 * m.get_axis_state(joy_arm_x)
+        arm_dy = -0.3 * m.get_axis_state(joy_arm_y)
+
         arm_dz = 0.0
         if m.get_button_state(z_up):
             arm_dz = 0.1

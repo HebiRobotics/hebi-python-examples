@@ -9,7 +9,7 @@ from hebi.util import create_mobile_io
 
 DEMOS = {
     'Tready No Arm': 'tready.py',
-    'Tready Joy Arm': 'tready_arm_joy_control.py',
+    'Tready Joystick Arm': 'tready_arm_joystick_control.py',
     'Tready MobileIO Arm': 'tready_arm_io_control.py',
 }
 
