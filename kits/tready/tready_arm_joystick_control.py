@@ -192,7 +192,8 @@ class TreadyControl:
                     self.base.set_chassis_vel_trajectory(t_now, self.base.chassis_ramp_time, chassis_vels)
                     self.base.set_flipper_trajectory(t_now, self.base.flipper_ramp_time, v=flipper_vels)
 
-                arm_goal = self.compute_arm_goal(t_now, demo_input) if arm_goal is not None:
+                arm_goal = self.compute_arm_goal(t_now, demo_input)
+                if arm_goal is not None:
                     self.arm.set_goal(arm_goal)
                 gripper_closed = self.arm.end_effector.state == 1.0
                 if demo_input.arm.gripper_closed and not gripper_closed:
