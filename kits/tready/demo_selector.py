@@ -63,7 +63,8 @@ if __name__ == "__main__":
         #######################
         while True:
             if m.update():
-                if next_demo := select_demo(m):
+                next_demo = select_demo(m)
+                if next_demo is not None:
                     # delete the mobileIO group so it doesn't interfere w/ demo
                     del m # does this actually delete the group?
                     launch_demo(next_demo) # blocking
