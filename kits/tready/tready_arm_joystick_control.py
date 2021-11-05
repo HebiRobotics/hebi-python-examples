@@ -16,8 +16,11 @@ from tready import TreadedBase
 def set_instructions(mobile_io, mode_button):
     if mobile_io.get_button_state(mode_button):
         mode_text = 'Arm Rot. Mode'
+        m.set_led_color("yellow")
     else:
         mode_text = 'Base Drive Mode'
+        m.set_led_color("green")
+
     instructions = ('Robot Ready to Control\n'
                     'B1: Reset\n'
                     'B2: {}\n'
@@ -83,7 +86,10 @@ class TreadyControl:
             return arm_goal
         else:
             rot_curr = np.empty((3,3))
-            xyz_curr = self.arm.FK(self.arm.last_feedback.position_command, orientation_out=rot_curr)
+            try:
+                xyz_curr = self.arm.FK(self.arm.last_feedback.position_command, orientation_out=rot_curr)
+            except ValueError:
+                xyz_curr = self.arm.FK(self.arm.last_feedback.position, orientation_out=rot_curr)
 
             arm_xyz_target = xyz_curr + inputs.arm.delta_xyz
 
