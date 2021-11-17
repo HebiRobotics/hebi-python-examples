@@ -10,17 +10,11 @@ from scipy.spatial.transform import Rotation as R
 import hebi
 from hebi.util import create_mobile_io
 
-from tready import TreadedBase
+from tready import TreadedBase, TreadyControl, ChassisVelocity, TreadyInputs
+from tready_utils import set_mobile_io_instructions, setup_base, setup_arm_6dof
 
 
-def set_instructions(mobile_io, mode_button):
-    if mobile_io.get_button_state(mode_button):
-        mode_text = 'Arm Rot. Mode'
-        m.set_led_color("yellow")
-    else:
-        mode_text = 'Base Drive Mode'
-        m.set_led_color("green")
-
+def set_mobile_io_mode_text(mobile_io, mode_button):
     instructions = ('Robot Ready to Control\n'
                     'B1: Reset\n'
                     'B2: {}\n'
@@ -29,37 +23,33 @@ def set_instructions(mobile_io, mode_button):
                     'B5/7: Arm Up/Down\n'
                     'B6: Joined Flipper\n'
                     'B8 - Quit')
-    mobile_io.clear_text()
-    mobile_io.set_text(instructions.format(mode_text))
+
+    if mobile_io.get_button_state(mode_button):
+        set_mobile_io_instructions(mobile_io, instructions.format('Arm Rot. Mode'), color='yellow')
+    else:
+        set_mobile_io_instructions(mobile_io, instructions.format('Base Drive Mode'), color='green')
 
 
 class DemoState(Enum):
     STARTUP = auto()
     HOMING = auto()
-    ALIGNING = auto()
     TELEOP = auto()
     STOPPED = auto()
     EXIT = auto()
 
 
-ChassisVelocity = namedtuple('ChassisVelocity', ['x', 'rz'])
-TreadyInputs = namedtuple('TreadyInputs', ['base_motion', 'flippers', 'align_flippers'])
 ArmInputs = namedtuple('ArmInputs', ['delta_xyz', 'delta_rot_xyz', 'locked', 'gripper_closed'])
 DemoInputs = namedtuple('DemoInputs', ['should_exit', 'should_reset', 'chassis', 'arm'])
 
 
-class TreadyControl:
+class TreadyArmJoystickControl(TreadyControl):
 
     FLIPPER_VEL_SCALE = 1  # rad/sec
 
     def __init__(self, mobile_io, base: TreadedBase, arm: hebi.arm.Arm):
-        self.state = DemoState(DemoState.STARTUP)
-        self.mobile_io = mobile_io
-        self.base = base
-        self.arm = arm
+        super(TreadyArmJoystickControl, self).__init__(mobile_io, base)
 
-        self.SPEED_MAX_LIN = 0.15  # m/s
-        self.SPEED_MAX_ROT = self.SPEED_MAX_LIN / base.WHEEL_BASE  # rad/s
+        self.arm = arm
 
         # 5 DoF home
         # self.arm_xyz_home = [0.55, -0.1, 0.0]
@@ -78,64 +68,36 @@ class TreadyControl:
             self.arm_xyz_home,
             self.arm_rot_home)
 
-
-    def compute_arm_goal(self, t_now, inputs):
-        arm_goal = hebi.arm.Goal(self.arm.size)
-        if inputs.arm.locked:
+    def compute_arm_goal(self, arm_inputs):
+        arm = self.arm
+        arm_goal = hebi.arm.Goal(arm.size)
+        if arm_inputs.locked:
             arm_goal.add_waypoint(t=3.0, position=self.arm_home)
             return arm_goal
         else:
-            rot_curr = np.empty((3,3))
+            rot_curr = np.empty((3, 3))
             try:
-                xyz_curr = self.arm.FK(self.arm.last_feedback.position_command, orientation_out=rot_curr)
+                xyz_curr = arm.FK(arm.last_feedback.position_command, orientation_out=rot_curr)
             except ValueError:
-                xyz_curr = self.arm.FK(self.arm.last_feedback.position, orientation_out=rot_curr)
+                xyz_curr = arm.FK(arm.last_feedback.position, orientation_out=rot_curr)
 
-            arm_xyz_target = xyz_curr + inputs.arm.delta_xyz
+            arm_xyz_target = xyz_curr + arm_inputs.delta_xyz
 
-            r_x = R.from_euler('x', inputs.arm.delta_rot_xyz[0])
-            r_y = R.from_euler('y', inputs.arm.delta_rot_xyz[1])
-            r_z = R.from_euler('z', inputs.arm.delta_rot_xyz[2])
+            r_x = R.from_euler('x', arm_inputs.delta_rot_xyz[0])
+            r_y = R.from_euler('y', arm_inputs.delta_rot_xyz[1])
+            r_z = R.from_euler('z', arm_inputs.delta_rot_xyz[2])
             arm_rot_target = R.from_matrix(rot_curr) * r_x * r_y * r_z
 
-            curr_seed_ik = self.arm.last_feedback.position_command
+            curr_seed_ik = arm.last_feedback.position_command
             curr_seed_ik[2] = abs(curr_seed_ik[2])
 
-            joint_target = self.arm.ik_target_xyz_so3(
+            joint_target = arm.ik_target_xyz_so3(
                 curr_seed_ik,
                 arm_xyz_target,
                 arm_rot_target.as_matrix())
 
             arm_goal.add_waypoint(position=joint_target)
             return arm_goal
-
-    def compute_velocities(self, inputs):
-        # Flipper Control
-        [flip1, flip2, flip3, flip4] = inputs.chassis.flippers
-
-        if inputs.chassis.align_flippers:
-            f_vel1 = max(abs(flip1), abs(flip2)) * np.sign(flip1 + flip2) * self.FLIPPER_VEL_SCALE
-            f_vel2 = -f_vel1
-            f_vel3 = max(abs(flip3), abs(flip4)) * np.sign(flip3 + flip4) * self.FLIPPER_VEL_SCALE
-            f_vel4 = -f_vel3
-
-        else:
-            f_vel1 = flip1 * self.FLIPPER_VEL_SCALE
-            f_vel2 = -1 * flip2 * self.FLIPPER_VEL_SCALE
-            f_vel3 = flip3 * self.FLIPPER_VEL_SCALE
-            f_vel4 = -1 * flip4 * self.FLIPPER_VEL_SCALE
-
-        flipper_vels = [f_vel1, f_vel2, f_vel3, f_vel4]
-
-        # Mobile Base Control
-
-        vel_x = self.SPEED_MAX_LIN * inputs.chassis.base_motion.x
-        vel_y = 0
-        vel_rot = self.SPEED_MAX_ROT * inputs.chassis.base_motion.rz
-
-        chassis_vels = [vel_x, vel_y, vel_rot]
-
-        return chassis_vels, flipper_vels
 
     def update(self, t_now: float, demo_input=None):
         self.base.update(t_now)
@@ -171,34 +133,19 @@ class TreadyControl:
                     self.transition_to(t_now, DemoState.TELEOP)
                 return True
 
-            elif self.state is DemoState.ALIGNING:
-                should_align_flippers = demo_input.chassis.align_flippers
-                if self.base.flippers_aligned or not should_align_flippers:
-                    self.transition_to(t_now, DemoState.TELEOP)
-
-                arm_goal = self.compute_arm_goal(t_now, demo_input)
-                if arm_goal is not None:
-                    self.arm.set_goal(arm_goal)
-                gripper_closed = self.arm.end_effector.state == 1.0
-                if demo_input.arm.gripper_closed and not gripper_closed:
-                    self.arm.end_effector.close()
-                elif not demo_input.arm.gripper_closed and gripper_closed:
-                    self.arm.end_effector.open()
-
-                return True
-
             elif self.state is DemoState.TELEOP:
-                should_align_flippers = demo_input.chassis.align_flippers
-                if should_align_flippers and not self.base.aligned_flipper_mode:
-                    self.transition_to(t_now, DemoState.ALIGNING)
-                elif not should_align_flippers and self.base.aligned_flipper_mode:
-                    self.base.unlock_flippers()
+                desired_flipper_mode = demo_input.chassis.align_flippers
+                if self.base.aligned_flipper_mode != desired_flipper_mode:
+                    self.base.aligned_flipper_mode = desired_flipper_mode
+                elif self.base.is_aligning:
+                    # ignore new base commands while flippers are aligning
+                    pass
                 else:
-                    chassis_vels, flipper_vels = self.compute_velocities(demo_input)
+                    chassis_vels, flipper_vels = self.compute_velocities(demo_input.chassis)
                     self.base.set_chassis_vel_trajectory(t_now, self.base.chassis_ramp_time, chassis_vels)
                     self.base.set_flipper_trajectory(t_now, self.base.flipper_ramp_time, v=flipper_vels)
 
-                arm_goal = self.compute_arm_goal(t_now, demo_input)
+                arm_goal = self.compute_arm_goal(demo_input.arm)
                 if arm_goal is not None:
                     self.arm.set_goal(arm_goal)
                 gripper_closed = self.arm.end_effector.state == 1.0
@@ -221,9 +168,9 @@ class TreadyControl:
         if state is DemoState.HOMING:
             print("TRANSITIONING TO HOMING")
             self.base.set_color('magenta')
-            self.mobile_io.clear_text()
-            msg = 'Robot Homing Sequence\nPlease wait...'
-            self.mobile_io.set_text(msg)
+            msg = ('Robot Homing Sequence\n'
+                   'Please wait...')
+            set_mobile_io_instructions(self.mobile_io, msg)
 
             # build trajectory
             flipper_home = np.array([-1, 1, 1, -1]) * np.deg2rad(15 + 45)
@@ -234,16 +181,11 @@ class TreadyControl:
             g.add_waypoint(position=self.arm_home)
             self.arm.set_goal(g)
 
-        elif state is DemoState.ALIGNING:
-            print("TRANSITIONING TO ALIGNING")
-            self.base.align_flippers(t_now)
-
         elif state is DemoState.TELEOP:
             print("TRANSITIONING TO TELEOP")
             base.clear_color()
             # Print Instructions
-            set_instructions(self.mobile_io, 2)
-            self.mobile_io.set_led_color("green")
+            set_mobile_io_mode_text(self.mobile_io, 2)
 
         elif state is DemoState.STOPPED:
             print("TRANSITIONING TO STOPPED")
@@ -253,83 +195,15 @@ class TreadyControl:
 
         elif state is DemoState.EXIT:
             print("TRANSITIONING TO EXIT")
-            # unset mobileIO control config
-            self.mobile_io.set_led_color("red")
             self.base.set_color("red")
 
+            # unset mobileIO control config
             self.mobile_io.set_button_mode(6, 0)
             self.mobile_io.set_button_output(1, 0)
             self.mobile_io.set_button_output(8, 0)
-            self.mobile_io.clear_text()
-            self.mobile_io.set_text('Demo Stopped.')
+            set_mobile_io_instructions(self.mobile_io, "Demo Stopped.", color="red")
 
         self.state = state
-
-
-def load_gains(group, gains_file):
-    gains_command = hebi.GroupCommand(group.size)
-    sleep(0.1)
-
-    try:
-        gains_command.read_gains(gains_file)
-    except Exception as e:
-        print(f'Warning - Could not load gains: {e}')
-        return
-
-    # Send gains multiple times
-    for i in range(3):
-        group.send_command(gains_command)
-        sleep(0.1)
-
-
-def setup_base(lookup, base_family):
-    flipper_names = [f'T{n+1}_J1_flipper' for n in range(4)]
-    wheel_names = [f'T{n+1}_J2_track' for n in range(4)]
-
-    # Create base group
-    group = lookup.get_group_from_names([base_family], wheel_names + flipper_names)
-    if group is None:
-        raise RuntimeError(f"Could not find modules: {wheel_names + flipper_names} in family '{base_family}'")
-
-    root_dir, _ = os.path.split(__file__)
-    load_gains(group, os.path.join(root_dir, "gains/r-tready-gains.xml"))
-
-    return TreadedBase(group, 0.25, 0.33)
-
-
-def setup_arm(lookup, family):
-    root_dir, _ = os.path.split(__file__)
-    # arm setup
-    arm = hebi.arm.create(
-        [family],
-        ['J1_base', 'J2A_shoulder1', 'J3_shoulder2', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
-        hrdf_file=os.path.join(root_dir, 'hrdf/tready-arm.hrdf'),
-        lookup=lookup)
-
-    mirror_group = lookup.get_group_from_names([family], ['J2B_shoulder1'])
-    arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
-
-    arm.load_gains(os.path.join(root_dir, 'gains/tready-arm-gains.xml'))
-    return arm
-
-
-def setup_arm_6dof(lookup, family):
-    root_dir, _ = os.path.split(__file__)
-    # arm setup
-    arm = hebi.arm.create(
-        [family],
-        ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
-        hrdf_file=os.path.join(root_dir, 'hrdf/tready-arm-A2240-06G.hrdf'),
-        lookup=lookup)
-
-    arm.load_gains(os.path.join(root_dir, 'gains/A-2240-06.xml'))
-
-    # Add the gripper
-    gripper = hebi.arm.Gripper(lookup.get_group_from_names([family], ['gripperSpool']), -5, 1)
-    gripper.load_gains(os.path.join(root_dir, 'gains/gripper_spool_gains.xml'))
-    arm.set_end_effector(gripper)
-
-    return arm
 
 
 def config_mobile_io(m):
@@ -395,8 +269,8 @@ def config_mobile_io(m):
 
         # Update instruction text if mode has just changed
         btn_val = m.get_button_diff(arm_rot_ctrl)
-        if btn_val in [2, 3]: # Value just changed (either ToOff or ToOn)
-            set_instructions(m, arm_rot_ctrl)
+        if btn_val in [2, 3]:  # Value just changed (either ToOff or ToOn)
+            set_mobile_io_mode_text(m, arm_rot_ctrl)
 
         if m.get_button_state(arm_rot_ctrl):
             base_vel_fwd = 0.0
@@ -461,20 +335,19 @@ if __name__ == "__main__":
 
     arm = setup_arm_6dof(lookup, family)
 
-    demo_controller = TreadyControl(m, base, arm)
+    demo_controller = TreadyArmJoystickControl(m, base, arm)
 
     #######################
     ## Main Control Loop ##
     #######################
 
-    while True:
+    should_continue = True
+    while should_continue:
         t = time()
         demo_inputs = None
         if m.update(0.0):
             demo_inputs = input_parser(m)
 
         should_continue = demo_controller.update(t, demo_inputs)
-        if not should_continue:
-            break
 
     sys.exit(0)
