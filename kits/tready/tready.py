@@ -245,7 +245,7 @@ class TreadyControl:
         # Flipper Control
         [flip1, flip2, flip3, flip4] = chassis_inputs.flippers
 
-        if chassis_inputs.chassis.align_flippers:
+        if chassis_inputs.align_flippers:
             f_vel1 = max(abs(flip1), abs(flip2)) * np.sign(flip1 + flip2) * self.FLIPPER_VEL_SCALE
             f_vel2 = -f_vel1
             f_vel3 = max(abs(flip3), abs(flip4)) * np.sign(flip3 + flip4) * self.FLIPPER_VEL_SCALE

@@ -2,10 +2,10 @@ from time import sleep
 import os
 
 import hebi
-from .tready import TreadedBase
 
 
 def setup_base(lookup, base_family):
+    from tready import TreadedBase
     flipper_names = [f'T{n+1}_J1_flipper' for n in range(4)]
     wheel_names = [f'T{n+1}_J2_track' for n in range(4)]
 

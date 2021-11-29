@@ -10,7 +10,7 @@ from scipy.spatial.transform import Rotation as R
 import hebi
 from hebi.util import create_mobile_io
 
-from tready import TreadedBase, TreadyControl, ChassisVelocity, TreadyInputs
+from tready import TreadedBase, TreadyControl, DemoState, ChassisVelocity, TreadyInputs
 from tready_utils import set_mobile_io_instructions, setup_base, setup_arm_6dof
 
 
@@ -28,14 +28,6 @@ def set_mobile_io_mode_text(mobile_io, mode_button):
         set_mobile_io_instructions(mobile_io, instructions.format('Arm Rot. Mode'), color='yellow')
     else:
         set_mobile_io_instructions(mobile_io, instructions.format('Base Drive Mode'), color='green')
-
-
-class DemoState(Enum):
-    STARTUP = auto()
-    HOMING = auto()
-    TELEOP = auto()
-    STOPPED = auto()
-    EXIT = auto()
 
 
 ArmInputs = namedtuple('ArmInputs', ['delta_xyz', 'delta_rot_xyz', 'locked', 'gripper_closed'])
@@ -77,9 +69,11 @@ class TreadyArmJoystickControl(TreadyControl):
         else:
             rot_curr = np.empty((3, 3))
             try:
-                xyz_curr = arm.FK(arm.last_feedback.position_command, orientation_out=rot_curr)
+                curr_pos = arm.last_feedback.position_command
             except ValueError:
-                xyz_curr = arm.FK(arm.last_feedback.position, orientation_out=rot_curr)
+                curr_pos = arm.last_feedback.position
+
+            xyz_curr = arm.FK(curr_pos)
 
             arm_xyz_target = xyz_curr + arm_inputs.delta_xyz
 
@@ -88,7 +82,7 @@ class TreadyArmJoystickControl(TreadyControl):
             r_z = R.from_euler('z', arm_inputs.delta_rot_xyz[2])
             arm_rot_target = R.from_matrix(rot_curr) * r_x * r_y * r_z
 
-            curr_seed_ik = arm.last_feedback.position_command
+            curr_seed_ik = curr_pos
             curr_seed_ik[2] = abs(curr_seed_ik[2])
 
             joint_target = arm.ik_target_xyz_so3(
@@ -114,51 +108,50 @@ class TreadyArmJoystickControl(TreadyControl):
                 print("mobileIO timeout, disabling motion")
                 self.transition_to(t_now, DemoState.STOPPED)
             return True
-        else:
+
+        self.mobile_last_fbk_t = t_now
+
+        if demo_input.should_exit:
+            self.transition_to(t_now, DemoState.EXIT)
+        elif demo_input.should_reset:
+            self.transition_to(t_now, DemoState.HOMING)
+
+        if self.state is DemoState.STOPPED:
             self.mobile_last_fbk_t = t_now
+            self.transition_to(t_now, DemoState.TELEOP)
+            return True
 
-            if demo_input.should_exit:
-                self.transition_to(t_now, DemoState.EXIT)
-            elif demo_input.should_reset:
-                self.transition_to(t_now, DemoState.HOMING)
-
-            if self.state is DemoState.STOPPED:
-                self.mobile_last_fbk_t = t_now
+        elif self.state is DemoState.HOMING:
+            base_complete = not self.base.has_active_trajectory
+            if base_complete and self.arm.at_goal:
                 self.transition_to(t_now, DemoState.TELEOP)
-                return True
+            return True
 
-            elif self.state is DemoState.HOMING:
-                base_complete = not self.base.has_active_trajectory(t_now)
-                if base_complete and self.arm.at_goal:
-                    self.transition_to(t_now, DemoState.TELEOP)
-                return True
+        elif self.state is DemoState.TELEOP:
+            desired_flipper_mode = demo_input.chassis.align_flippers
+            if self.base.aligned_flipper_mode != desired_flipper_mode:
+                self.base.aligned_flipper_mode = desired_flipper_mode
+            elif self.base.is_aligning:
+                # ignore new base commands while flippers are aligning
+                pass
+            else:
+                chassis_vels, flipper_vels = self.compute_velocities(demo_input.chassis)
+                self.base.set_chassis_vel_trajectory(t_now, self.base.chassis_ramp_time, chassis_vels)
+                self.base.set_flipper_trajectory(t_now, self.base.flipper_ramp_time, v=flipper_vels)
 
-            elif self.state is DemoState.TELEOP:
-                desired_flipper_mode = demo_input.chassis.align_flippers
-                if self.base.aligned_flipper_mode != desired_flipper_mode:
-                    self.base.aligned_flipper_mode = desired_flipper_mode
-                elif self.base.is_aligning:
-                    # ignore new base commands while flippers are aligning
-                    pass
-                else:
-                    chassis_vels, flipper_vels = self.compute_velocities(demo_input.chassis)
-                    self.base.set_chassis_vel_trajectory(t_now, self.base.chassis_ramp_time, chassis_vels)
-                    self.base.set_flipper_trajectory(t_now, self.base.flipper_ramp_time, v=flipper_vels)
+            arm_goal = self.compute_arm_goal(demo_input.arm)
+            if arm_goal is not None: self.arm.set_goal(arm_goal)
+            gripper_closed = self.arm.end_effector.state == 1.0
+            if demo_input.arm.gripper_closed and not gripper_closed:
+                self.arm.end_effector.close()
+            elif not demo_input.arm.gripper_closed and gripper_closed:
+                self.arm.end_effector.open()
 
-                arm_goal = self.compute_arm_goal(demo_input.arm)
-                if arm_goal is not None:
-                    self.arm.set_goal(arm_goal)
-                gripper_closed = self.arm.end_effector.state == 1.0
-                if demo_input.arm.gripper_closed and not gripper_closed:
-                    self.arm.end_effector.close()
-                elif not demo_input.arm.gripper_closed and gripper_closed:
-                    self.arm.end_effector.open()
+            return True
 
-                return True
-
-            elif self.state is DemoState.STARTUP:
-                self.transition_to(t_now, DemoState.HOMING)
-                return True
+        elif self.state is DemoState.STARTUP:
+            self.transition_to(t_now, DemoState.HOMING)
+            return True
 
     def transition_to(self, t_now, state):
         # self transitions are noop
