@@ -64,15 +64,22 @@ if __name__ == "__main__":
 
     demo_state = MimicDemoState.Unaligned
 
+    input_arm.update()
+    output_arm.update()
+    angle_remainders = output_arm.last_feedback.position % np.pi
+    angle_offsets = output_arm.last_feedback.position - angle_remainders
+    print(angle_offsets)
+
     while demo_state != MimicDemoState.Exit:
         input_arm.update()
         output_arm.update()
-        diff = output_arm.last_feedback.position - input_arm.position
+        adjusted_output_position = output_arm.last_feedback.position - angle_offsets
+        diff = adjusted_output_position - input_arm.position
 
         if demo_state == MimicDemoState.Aligned:
             output_goal.clear()
             # change this t value to adjust how "snappy" the output arm is to the input arm's position
-            output_goal.add_waypoint(t=0.1, position=input_arm.position)
+            output_goal.add_waypoint(t=0.1, position=input_arm.position + angle_offsets)
             output_arm.set_goal(output_goal)
 
             # Uncomment this section and the output arm can "disconnect"
@@ -82,6 +89,7 @@ if __name__ == "__main__":
         elif demo_state == MimicDemoState.Unaligned:
             print(f'Diffs: {np.around(np.rad2deg(diff), decimals=0)}')
             if np.rad2deg(np.max(np.abs(diff))) <= 15.0:
+                print('Arm Aligned!')
                 demo_state = MimicDemoState.Aligned
 
         output_arm.send()
