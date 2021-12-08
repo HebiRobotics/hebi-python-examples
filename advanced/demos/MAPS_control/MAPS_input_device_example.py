@@ -9,6 +9,9 @@ from hebi.robot_model import endeffector_position_objective
 from hebi.robot_model import endeffector_so3_objective
 from hebi.robot_model import custom_objective
 
+from dynamic_comp import DynamicCompEffortPlugin
+
+
 class ContinuousAngleMaps:
 
     def __init__(self, group, offsets):
@@ -18,7 +21,7 @@ class ContinuousAngleMaps:
         self.prev_angles = np.zeros(group.size)
 
         self.group.feedback_frequency = 200.0
-        self.input_model = hebi.robot_model.import_from_hrdf('mapsArm_7DoF_standard.hrdf')
+        self.input_model = hebi.robot_model.import_from_hrdf('hrdf/mapsArm_7DoF_standard.hrdf')
 
     def update(self):
         self.group.get_next_feedback(reuse_fbk=self.group_fbk)
@@ -52,6 +55,7 @@ class ContinuousAngleMaps:
 
 class MimicDemoState(Enum):
     Startup = auto()
+    Homing = auto()
     Unaligned = auto()
     Aligning = auto()
     Aligned = auto()
@@ -71,18 +75,30 @@ if __name__ == "__main__":
     angle_offsets = np.array([0.0, np.pi/2, -np.pi, -np.pi/2, -np.pi/2, -np.pi/2, 0.0])
     input_arm = ContinuousAngleMaps(maps_group, angle_offsets)
 
-    def obj_func(positions, errors, user_data):
+    # objective function for use w/ IK later
+    def arm_MAPS_mse(positions, errors, user_data):
         errors[0] = np.sum((input_arm.position - positions) ** 2)
-
-    input_arm_error_objective = custom_objective(1, obj_func)
 
     output_arm = hebi.arm.create(
             ['Arm'],
             ['J1_base', 'J2A_shoulder1', 'J3_shoulder2', 'J4_elbow1', 'J5_elbow2', 'J6_wrist1', 'J7_wrist2'],
-            hrdf_file='A-2303-01.hrdf',
+            hrdf_file='hrdf/A-2303-01.hrdf',
             lookup=lookup)
+
     mirror_group = lookup.get_group_from_names(['Arm'], ['J2B_shoulder1'])
+    # mirror the position/velocity/effort of module 1 ('J2A_shoulder1') to the module
+    # in the mirror group ('J2B_shoulder1')
+    # Keeps the two modules in the double shoulder bracket in sync
     output_arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
+
+    # Updates feedforward efforts based on hrdf physical dynamics model
+    output_arm.add_plugin(DynamicCompEffortPlugin())
+
+    output_arm.load_gains('gains/A-2303-01.xml')
+    # need to update the gains for the mirror group also
+    gains_cmd = hebi.GroupCommand(1)
+    gains_cmd.read_gains('gains/mirror_shoulder.xml')
+    mirror_group.send_command_with_acknowledgement(gains_cmd)
 
     output_arm.cancel_goal()
     output_goal = hebi.arm.Goal(output_arm.size)
@@ -105,30 +121,37 @@ if __name__ == "__main__":
     # used later for storing IK results
     target_joints = np.empty(7, dtype=np.float64)
 
+    # allowed angular difference (°) per joint before starting align
+    allowed_diff = np.array([30.0, 20.0, 30.0, 20.0, 45.0, 45.0, 360.0])
+
     while demo_state != MimicDemoState.Exit:
         try:
             input_arm.update()
             output_arm.update()
-            diff = output_arm.last_feedback.position - input_arm.position
 
             if demo_state == MimicDemoState.Startup:
                 # Go to arm home pose
                 output_goal.clear()
                 output_goal.add_waypoint(t=3.0, position=output_joints_home)
                 output_arm.set_goal(output_goal)
-                demo_state = MimicDemoState.Unaligned
+                demo_state = MimicDemoState.Homing
+
+            elif demo_state == MimicDemoState.Homing:
+                if output_arm.at_goal:
+                    demo_state = MimicDemoState.Unaligned
 
             elif demo_state == MimicDemoState.Unaligned:
                 # Wait until all the joints of the arm and MAPS are
-                # within 30° of each other, then align
+                # within allowed_diff of each other, then align
 
                 # Because the arm is commanded to its home position,
                 # MAPS angles need to be kept within [-π, π]
                 input_arm.rebalance()
+                diff = output_arm.last_feedback.position - input_arm.position
 
                 print(f'Diffs: {np.around(np.rad2deg(diff), decimals=0)}')
-                if np.rad2deg(np.max(np.abs(diff))) <= 30.0:
-                    print('Arm Aligned!')
+                if np.all(np.rad2deg(np.abs(diff)) <= allowed_diff):
+                    print("Aligning w/ MAPS config")
                     input_fk = input_arm.get_fk()
                     input_xyz_home = input_fk[:3, 3]
                     input_rot_home = input_fk[:3, :3]
@@ -139,7 +162,6 @@ if __name__ == "__main__":
                     output_goal.add_waypoint(t=2.0, position=input_arm.position)
                     last_angles = input_arm.position
                     output_arm.set_goal(output_goal)
-                    print("Aligning w/ MAPS config")
                     demo_state = MimicDemoState.Aligning
 
             elif demo_state == MimicDemoState.Aligning:
@@ -174,7 +196,7 @@ if __name__ == "__main__":
                     output_arm.robot_model.solve_inverse_kinematics(output_arm.last_feedback.position_command,
                                                                     endeffector_position_objective(xyz_target),
                                                                     endeffector_so3_objective(rot_target),
-                                                                    input_arm_error_objective,
+                                                                    custom_objective(1, arm_MAPS_mse, weight=0.1),
                                                                     output=target_joints)
 
                     output_goal.clear()
