@@ -241,6 +241,13 @@ class TreadyControl:
         self.SPEED_MAX_LIN = 0.15  # m/s
         self.SPEED_MAX_ROT = self.SPEED_MAX_LIN / base.WHEEL_BASE  # rad/s
 
+    def start_logging(self):
+        self.base.group.start_log("logs", mkdirs=True)
+
+    def cycle_log(self):
+        self.base.group.stop_log()
+        self.base.group.start_log("logs", mkdirs=True)
+
     def compute_velocities(self, chassis_inputs: ChassisVelocity):
         # Flipper Control
         [flip1, flip2, flip3, flip4] = chassis_inputs.flippers
@@ -449,6 +456,8 @@ if __name__ == "__main__":
     #######################
 
     should_continue = True
+    demo_controller.start_logging()
+    last_log_start_time = time()
     while should_continue:
         t = time()
         demo_inputs = None
@@ -456,5 +465,8 @@ if __name__ == "__main__":
             demo_inputs = input_parser(m)
 
         should_continue = demo_controller.update(t, demo_inputs)
+        if t - last_log_start_time > 60:
+            demo_controller.cycle_log()
+            last_log_start_time = t
 
     sys.exit(0)
