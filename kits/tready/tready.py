@@ -32,7 +32,11 @@ class TreadedBase:
 
     def __init__(self, group, chassis_ramp_time, flipper_ramp_time):
         self.group = group
-        self.fbk = hebi.GroupFeedback(group.size)
+
+        self.fbk = self.group.get_next_feedback()
+        while self.fbk == None:
+            self.fbk = self.group.get_next_feedback()
+
         self.wheel_fbk = self.fbk.create_view([0, 1, 2, 3])
         self.flipper_fbk = self.fbk.create_view([4, 5, 6, 7])
         self.cmd = hebi.GroupCommand(group.size)
@@ -42,9 +46,9 @@ class TreadedBase:
         self.chassis_ramp_time = chassis_ramp_time
         self.flipper_ramp_time = flipper_ramp_time
 
-        self.group.get_next_feedback(reuse_fbk=self.fbk)
+        self.flipper_cmd.position = self.flipper_fbk.position
+        self.wheel_cmd.position = np.nan
 
-        self.cmd.position = self.fbk.position
         self.t_prev = time()
         self._aligned_flipper_mode = False
         self._is_aligning = False
@@ -293,10 +297,13 @@ class TreadyControl:
 
             if demo_input.should_exit:
                 self.transition_to(t_now, DemoState.EXIT)
+                return True
+
             elif demo_input.should_reset:
                 self.transition_to(t_now, DemoState.HOMING)
+                return True
 
-            if self.state is DemoState.STOPPED:
+            elif self.state is DemoState.STOPPED:
                 self.mobile_last_fbk_t = t_now
                 self.transition_to(t_now, DemoState.TELEOP)
                 return True
@@ -335,12 +342,14 @@ class TreadyControl:
             self.base.set_color('magenta')
             msg = ('Robot Homing Sequence\n'
                    'Please wait...')
-            set_mobile_io_instructions(self.mobile_io, msg)
+            set_mobile_io_instructions(self.mobile_io, msg, color="blue")
 
             # build trajectory
             flipper_home = np.array([-1, 1, 1, -1]) * np.deg2rad(15 + 45)
-            self.base.chassis_traj = None
+            self.base.set_chassis_vel_trajectory(t_now, 0.25, [0, 0, 0])
+
             self.base.set_flipper_trajectory(t_now, 5.0, p=flipper_home)
+            #print(f'Flipper Home: {flipper_home}')
 
         elif state is DemoState.TELEOP:
             print("TRANSITIONING TO TELEOP")
@@ -465,7 +474,7 @@ if __name__ == "__main__":
             demo_inputs = input_parser(m)
 
         should_continue = demo_controller.update(t, demo_inputs)
-        if t - last_log_start_time > 60:
+        if t - last_log_start_time > 3600:
             demo_controller.cycle_log()
             last_log_start_time = t
 
