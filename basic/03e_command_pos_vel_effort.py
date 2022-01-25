@@ -56,6 +56,7 @@ while t < duration:
 # Stop logging. `log_file` contains the contents of the file
 log_file = group.stop_log()
 
-hebi.util.plot_logs(log_file, 'position', figure_spec=101)
-hebi.util.plot_logs(log_file, 'velocity', figure_spec=102)
-hebi.util.plot_logs(log_file, 'effort', figure_spec=103)
+if log_file is not None:
+  hebi.util.plot_logs(log_file, 'position', figure_spec=101)
+  hebi.util.plot_logs(log_file, 'velocity', figure_spec=102)
+  hebi.util.plot_logs(log_file, 'effort', figure_spec=103)

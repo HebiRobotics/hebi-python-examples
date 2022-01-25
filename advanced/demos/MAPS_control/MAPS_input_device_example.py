@@ -34,9 +34,6 @@ class ContinuousAngleMaps:
             elif diff < -np.pi:
                 self.angle_offsets[i] += 2*np.pi 
 
-    def print_angles(self):
-        print(f'Angles: {np.around(np.rad2deg(self.positions), decimals=0)}')
-
     def rebalance(self):
         '''Adjusts angles so they lie in [-π, π]'''
         for i in range(len(self.angle_offsets)):
@@ -86,6 +83,10 @@ if __name__ == "__main__":
             lookup=lookup)
 
     mirror_group = lookup.get_group_from_names(['Arm'], ['J2B_shoulder1'])
+    while mirror_group is None:
+        print('Still looking for mirror group...')
+        sleep(1)
+        mirror_group = lookup.get_group_from_names(['Arm'], ['J2B_shoulder1'])
     # mirror the position/velocity/effort of module 1 ('J2A_shoulder1') to the module
     # in the mirror group ('J2B_shoulder1')
     # Keeps the two modules in the double shoulder bracket in sync
@@ -123,6 +124,11 @@ if __name__ == "__main__":
 
     # allowed angular difference (°) per joint before starting align
     allowed_diff = np.array([30.0, 20.0, 30.0, 20.0, 45.0, 45.0, 360.0])
+
+    input_xyz_home = np.empty((3, 3))
+    input_rot_home = np.empty((3, 3))
+
+    last_angles = input_arm.position
 
     while demo_state != MimicDemoState.Exit:
         try:

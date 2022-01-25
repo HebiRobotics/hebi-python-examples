@@ -59,7 +59,7 @@ def execute_trajectory(group, model, trajectory, feedback):
     # Gravity Compensation uses knowledge of the arm's kinematics and mass to
     # compensate for the weight of the arm. Dynamic Compensation uses the
     # kinematics and mass to compensate for the commanded accelerations of the arm.
-    eff_cmd = math_utils.get_grav_comp_efforts(model, feedback.position, [0, 0, 1])
+    eff_cmd = model.get_grav_comp_efforts(feedback.position, [0, 0, 1])
     # NOTE: dynamic compensation effort computation has not yet been added to the APIs
 
     # Fill in the command and send commands to the arm
@@ -107,7 +107,7 @@ waypoints = np.empty((group.size, 2))
 group.get_next_feedback(reuse_fbk=feedback)
 waypoints[:, 0] = feedback.position
 waypoints[:, 1] = joint_targets[:, 0]
-time_vector = [0, 5]  # Seconds for the motion - do this slowly
+time_vector = [0.0, 5.0]  # Seconds for the motion - do this slowly
 trajectory = hebi.trajectory.create_trajectory(time_vector, waypoints)
 
 # Call helper function to execute this motion on the robot
@@ -123,6 +123,7 @@ for col in range(xyz_cols - 1):
 
 # Stop logging
 log_file = group.stop_log()
-hebi.util.plot_logs(log_file, 'position', figure_spec=101)
-hebi.util.plot_logs(log_file, 'velocity', figure_spec=102)
-hebi.util.plot_logs(log_file, 'effort', figure_spec=103)
+if log_file is not None:
+  hebi.util.plot_logs(log_file, 'position', figure_spec=101)
+  hebi.util.plot_logs(log_file, 'velocity', figure_spec=102)
+  hebi.util.plot_logs(log_file, 'effort', figure_spec=103)
