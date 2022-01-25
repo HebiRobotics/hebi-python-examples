@@ -105,26 +105,26 @@ while not abort_flag:
     continue
 
   # B1 - Return to home position
-  if m.get_button_diff(1) == 3: # "ToOn"
+  if m.get_button_diff(1) == 1: # "ToOn"
     m.set_led_color("yellow")
     run_mode = "waiting"
     arm.set_goal(softstart)
 
   # B3 - Start AR Control
-  if m.get_button_diff(3) == 3 and run_mode != "ar_mode": # "ToOn"
+  if m.get_button_diff(3) == 1 and run_mode != "ar_mode": # "ToOn"
     m.set_led_color("green")
     run_mode = "ar_mode"
     xyz_phone_init = m.position.copy()
     rot_phone_init = quat2rotMat(m.orientation)
 
   # B6 - Grav Comp Mode
-  if m.get_button_diff(6) == 3: # "ToOn"
+  if m.get_button_diff(6) == 1: # "ToOn"
     m.set_led_color("blue")
     run_mode = "grav_comp"
     arm.cancel_goal()
 
   # B8 - Quit
-  if m.get_button_diff(8) == 3: # "ToOn"
+  if m.get_button_diff(8) == 1: # "ToOn"
     m.set_led_color("transparent")
     abort_flag = True
     break

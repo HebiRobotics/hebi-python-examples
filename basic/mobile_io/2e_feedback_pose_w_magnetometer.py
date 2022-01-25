@@ -64,6 +64,8 @@ while current_time < end_time:
     continue
 
   orient = fbk[0].ar_orientation
+  # reorder w,x,y,z to x,y,z,w
+  orient = [*orient[1:], orient[0]]
   pos = fbk[0].ar_position
   # Scale pos for eye candy
   pos = pos*2
@@ -102,4 +104,5 @@ while current_time < end_time:
 print('All done!')
 
 log_file = group.stop_log()
-hebi.util.plot_logs(log_file, 'position', figure_spec=101)
+if log_file is not None:
+  hebi.util.plot_logs(log_file, 'position', figure_spec=101)

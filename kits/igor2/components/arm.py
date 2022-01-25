@@ -202,7 +202,7 @@ class Arm(PeripheralBody):
     np.multiply(Arm.damper_gains, self._vel_error, out=self._vel_error)
     np.add(self._pos_error, self._vel_error, out=self._impedance_err)
     np.dot(self.current_j_actual.T, np.asarray(self._impedance_err), out=self._impedance_torque)
-    np.copyto(self._grav_comp_torque.ravel(), math_utils.get_grav_comp_efforts(self._robot, positions, -pose[2, 0:3]))
+    self._robot.get_grav_comp_efforts(positions, -pose[2, 0:3], output=self._grav_comp_torque.ravel())
 
     np.multiply(soft_start, self._impedance_torque, out=self._joint_efforts)
     np.add(self._joint_efforts, self._grav_comp_torque, out=self._joint_efforts)

@@ -12,20 +12,45 @@ sleep(2)
 
 # Arm setup
 arm_family   = "Arm"
-module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
-hrdf_file    = "hrdf/A-2085-06G.hrdf"
-gains_file   = "gains/A-2085-06.xml"
+module_names = ['J1_base', 'J2A_shoulder1', 'J3_shoulder2', 'J4_elbow1', 'J5_elbow2', 'J6_wrist1', 'J7_wrist2']
+hrdf_file    = "hrdf/A-2303-01G.hrdf"
+gains_file   = "gains/A-2303-01.xml"
 
 # Create Arm object
 arm = arm_api.create([arm_family],
                      names=module_names,
-                     hrdf_file=hrdf_file)
+                     hrdf_file=hrdf_file,
+                     lookup=lookup)
+
+mirror_group = lookup.get_group_from_names([arm_family], ['J2B_shoulder1'])
+while mirror_group is None:
+  print("Looking for double shoulder module...")
+  sleep(1)
+  mirror_group = lookup.get_group_from_names([arm_family], ['J2B_shoulder1'])
+
+# mirror the position/velocity/effort of module 1 ('J2A_shoulder1') to the module
+# in the mirror group ('J2B_shoulder1')
+# Keeps the two modules in the double shoulder bracket in sync
+arm.add_plugin(arm_api.DoubledJointMirror(1, mirror_group))
+
 arm.load_gains(gains_file)
+# need to update the gains for the mirror group also
+gains_cmd = hebi.GroupCommand(1)
+gains_cmd.read_gains('gains/mirror_shoulder.xml')
+mirror_group.send_command_with_acknowledgement(gains_cmd)
+
 
 # Add the gripper 
 gripper_family = arm_family
 gripper_name   = 'gripperSpool'
-gripper = arm_api.Gripper(lookup.get_group_from_names([gripper_family], [gripper_name]), -5, 1)
+
+gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
+while gripper_group is None:
+  print(f"Looking for gripper module {gripper_family} / {gripper_name} ...")
+  sleep(1)
+  gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
+
+gripper = arm_api.Gripper(gripper_group, -5, 1)
 gripper.load_gains("gains/gripper_spool_gains.xml")
 arm.set_end_effector(gripper)
 
@@ -55,7 +80,7 @@ A3 - Up/down for longer/shorter time to waypoint
 B8 - Quit
 """
 print(instructions)
-m.set_text(instructions)
+m.add_text(instructions)
 
 #######################
 ## Main Control Loop ##
@@ -64,15 +89,16 @@ m.set_text(instructions)
 while not abort_flag:
   # If there is a goal pending, set it on the arm and clear the flag
   arm.update()
+  arm.send()
     
-  if not m.update():
+  if not m.update(0.0):
     print("Failed to get feedback from MobileIO")
     continue
 
   slider3 = m.get_axis_state(3)
 
   # Check for quit
-  if m.get_button_diff(8) == 3: # "ToOn"
+  if m.get_button_diff(8) == 1: # "ToOn"
     m.set_led_color("transparent")
     m.clear_text()
     abort_flag = True
@@ -80,12 +106,12 @@ while not abort_flag:
 
   if run_mode == "training":
     # B1 add waypoint (stop)
-    if m.get_button_diff(1) == 3: # "ToOn"
+    if m.get_button_diff(1) == 1: # "ToOn"
       print("Stop waypoint added")
       goal.add_waypoint(t=slider3 + 3.0, position=arm.last_feedback.position, aux=gripper.state, velocity=[0]*arm.size)
 
     # B2 add waypoint (stop) and toggle the gripper
-    if m.get_button_diff(2) == 3: # "ToOn"
+    if m.get_button_diff(2) == 1: # "ToOn"
       # Add 2 waypoints to allow the gripper to open or close
       print("Stop waypoint added and gripper toggled")
       position = arm.last_feedback.position
@@ -94,12 +120,12 @@ while not abort_flag:
       goal.add_waypoint(t=2.0, position=position, aux=gripper.state, velocity=[0]*arm.size)
 
     # B3 add waypoint (flow)
-    if m.get_button_diff(3) == 3: # "ToOn"
+    if m.get_button_diff(3) == 1: # "ToOn"
       print("Flow waypoint added")
       goal.add_waypoint(t=slider3 + 3.0, position=arm.last_feedback.position, aux=gripper.state)
 
     # B5 toggle training/playback
-    if m.get_button_diff(5) == 3: # "ToOn"
+    if m.get_button_diff(5) == 1: # "ToOn"
       # Check for more than 2 waypoints
       if goal.waypoint_count > 1:
         print("Transitioning to playback mode")
@@ -110,13 +136,13 @@ while not abort_flag:
         print("At least two waypoints are needed")
 
     # B6 clear waypoints
-    if m.get_button_diff(6) == 3: # "ToOn"
+    if m.get_button_diff(6) == 1: # "ToOn"
       print("Waypoints cleared")
       goal.clear()
 
   elif run_mode == "playback":    
     # B5 toggle training/playback
-    if m.get_button_diff(5) == 3: # "ToOn"
+    if m.get_button_diff(5) == 1: # "ToOn"
       print("Transitioning to training mode")
       run_mode = "training"
       m.set_led_color("blue")
@@ -125,5 +151,3 @@ while not abort_flag:
     # replay through the path again once the goal has been reached
     if arm.at_goal:
       arm.set_goal(goal)
-
-  arm.send()
