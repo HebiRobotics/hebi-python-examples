@@ -125,6 +125,11 @@ if __name__ == "__main__":
     # allowed angular difference (°) per joint before starting align
     allowed_diff = np.array([30.0, 20.0, 30.0, 20.0, 45.0, 45.0, 360.0])
 
+    input_xyz_home = np.empty((3, 3))
+    input_rot_home = np.empty((3, 3))
+
+    last_angles = input_arm.position
+
     while demo_state != MimicDemoState.Exit:
         try:
             input_arm.update()
