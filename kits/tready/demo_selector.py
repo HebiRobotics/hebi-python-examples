@@ -51,7 +51,7 @@ if __name__ == "__main__":
         print("mobileIO device found.")
         m.clear_text()
         demos_text = [f'B{i+1}: {k}\n' for i, k in enumerate(DEMOS.keys())]
-        m.set_text(''.join(demos_text))
+        m.add_text(''.join(demos_text))
         # clear buttons before demo selection
         m.set_led_color('white')
         for i in range(8):

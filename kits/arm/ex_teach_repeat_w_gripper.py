@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
 import hebi
-import numpy as np
-from time import sleep
+from time import time, sleep
 from hebi import arm as arm_api
 from hebi.util import create_mobile_io
 
@@ -80,19 +79,26 @@ A3 - Up/down for longer/shorter time to waypoint
 B8 - Quit
 """
 print(instructions)
+m.clear_text()
 m.add_text(instructions)
 
 #######################
 ## Main Control Loop ##
 #######################
 
+last_mio_recv = time()
+
 while not abort_flag:
   # If there is a goal pending, set it on the arm and clear the flag
   arm.update()
   arm.send()
-    
-  if not m.update(0.0):
-    print("Failed to get feedback from MobileIO")
+
+  t = time()
+  if m.update(0.0):
+    last_mio_recv = t
+  else:
+    if t - last_mio_recv > 1.0:
+      print("Failed to get feedback from MobileIO")
     continue
 
   slider3 = m.get_axis_state(3)

@@ -11,6 +11,13 @@ from hebi.util import create_mobile_io
 
 from tready_utils import set_mobile_io_instructions, setup_base
 
+import typing
+if typing.TYPE_CHECKING:
+    from typing import Optional
+    import numpy.typing as npt
+    from hebi._internal.group import Group
+    from hebi._internal.mobile_io import MobileIO
+
 
 class TreadedBase:
     # FRAME CONVENTION:
@@ -30,7 +37,7 @@ class TreadedBase:
 
     WHEEL_RADIUS = WHEEL_DIAMETER / 2
 
-    def __init__(self, group, chassis_ramp_time, flipper_ramp_time):
+    def __init__(self, group: 'Group', chassis_ramp_time: float, flipper_ramp_time: float):
         self.group = group
 
         self.fbk = self.group.get_next_feedback()
@@ -49,7 +56,7 @@ class TreadedBase:
         self.flipper_cmd.position = self.flipper_fbk.position
         self.wheel_cmd.position = np.nan
 
-        self.t_prev = time()
+        self.t_prev: float = time()
         self._aligned_flipper_mode = False
         self._is_aligning = False
 
@@ -83,7 +90,7 @@ class TreadedBase:
             self.unlock_flippers()
 
     @property
-    def wheel_to_chassis_vel(self):
+    def wheel_to_chassis_vel(self) -> 'npt.NDArray[np.float64]':
         wr = self.WHEEL_RADIUS / (self.WHEEL_BASE / 2)
         return np.array([
             [self.WHEEL_RADIUS, -self.WHEEL_RADIUS, self.WHEEL_RADIUS, -self.WHEEL_RADIUS],
@@ -92,7 +99,7 @@ class TreadedBase:
         ])
 
     @property
-    def chassis_to_wheel_vel(self):
+    def chassis_to_wheel_vel(self) -> 'npt.NDArray[np.float64]':
         return np.array([
             [1 / self.WHEEL_RADIUS, 0, self.WHEEL_BASE / (2 * self.WHEEL_RADIUS)],
             [-1 / self.WHEEL_RADIUS, 0, self.WHEEL_BASE / (2 * self.WHEEL_RADIUS)],
@@ -113,12 +120,12 @@ class TreadedBase:
         return self.flipper_aligned_front and self.flipper_aligned_back
 
     @property
-    def aligned_flipper_position(self):
+    def aligned_flipper_position(self) -> 'npt.NDArray[np.float64]':
         front_mean = np.mean([self.flipper_fbk.position_command[0], -1 * self.flipper_fbk.position_command[1]])
         back_mean = np.mean([self.flipper_fbk.position_command[2], -1 * self.flipper_fbk.position_command[3]])
         return np.array([front_mean, -front_mean, back_mean, -back_mean], dtype=np.float64)
 
-    def update(self, t_now):
+    def update(self, t_now: float):
         dt = t_now - self.t_prev
         self.group.get_next_feedback(reuse_fbk=self.fbk)
 
@@ -152,7 +159,7 @@ class TreadedBase:
     def send(self):
         self.group.send_command(self.cmd)
 
-    def set_flipper_trajectory(self, t_now, ramp_time, p=None, v=None):
+    def set_flipper_trajectory(self, t_now: float, ramp_time: float, p=None, v=None):
         # This is set to true after this call, if the trajectory is an aligning one
         # Otherwise we want it set to False, so clear it now
         self._is_aligning = False
@@ -175,7 +182,7 @@ class TreadedBase:
 
         self.flipper_traj = hebi.trajectory.create_trajectory(times, positions, velocities, accelerations)
 
-    def set_chassis_vel_trajectory(self, t_now, ramp_time, v):
+    def set_chassis_vel_trajectory(self, t_now: float, ramp_time: float, v):
         times = [t_now, t_now + ramp_time]
         positions = np.empty((3, 2))
         velocities = np.empty((3, 2))
@@ -195,7 +202,7 @@ class TreadedBase:
 
         self.chassis_traj = hebi.trajectory.create_trajectory(times, positions, velocities, efforts)
 
-    def align_flippers(self, t_now=None):
+    def align_flippers(self, t_now: 'Optional[float]'=None):
         t_now = t_now or self.t_prev
         print("FLIPPER ALIGNMENT ON")
         self._aligned_flipper_mode = True
@@ -237,7 +244,7 @@ class TreadyControl:
 
     FLIPPER_VEL_SCALE = 1  # rad/sec
 
-    def __init__(self, mobile_io, base: TreadedBase):
+    def __init__(self, mobile_io: 'MobileIO', base: TreadedBase):
         self.state = DemoState(DemoState.STARTUP)
         self.mobile_io = mobile_io
         self.base = base
@@ -252,7 +259,7 @@ class TreadyControl:
         self.base.group.stop_log()
         self.base.group.start_log("logs", mkdirs=True)
 
-    def compute_velocities(self, chassis_inputs: ChassisVelocity):
+    def compute_velocities(self, chassis_inputs: TreadyInputs):
         # Flipper Control
         [flip1, flip2, flip3, flip4] = chassis_inputs.flippers
 
@@ -276,11 +283,11 @@ class TreadyControl:
         vel_y = 0
         vel_rot = self.SPEED_MAX_ROT * chassis_inputs.base_motion.rz
 
-        chassis_vels = [vel_x, vel_y, vel_rot]
+        chassis_vels: 'npt.NDArray[np.float64]' = np.array([vel_x, vel_y, vel_rot], dtype=np.float64)
 
         return chassis_vels, flipper_vels
 
-    def update(self, t_now: float, demo_input=None):
+    def update(self, t_now: float, demo_input: 'Optional[DemoInputs]'=None):
         self.base.update(t_now)
         self.base.send()
 
@@ -332,7 +339,7 @@ class TreadyControl:
                 self.transition_to(t_now, DemoState.HOMING)
                 return True
 
-    def transition_to(self, t_now, state):
+    def transition_to(self, t_now: float, state: DemoState):
         # self transitions are noop
         if state == self.state:
             return
@@ -379,7 +386,7 @@ class TreadyControl:
         self.state = state
 
 
-def config_mobile_io(m):
+def config_mobile_io(m: 'MobileIO'):
     """Sets up mobileIO interface.
 
     Return a function that parses mobileIO feedback into the format
@@ -411,7 +418,7 @@ def config_mobile_io(m):
     m.set_button_output(reset_pose_btn, 1)
     m.set_button_output(quit_btn, 1)
 
-    def parse_mobile_io_feedback(m):
+    def parse_mobile_io_feedback(m: 'MobileIO'):
         should_exit = m.get_button_state(quit_btn)
         should_reset = m.get_button_state(reset_pose_btn)
         # Chassis Control

@@ -98,9 +98,20 @@ rot_phone_init = np.zeros((3,3))
 # # Target variables
 # target_joints = np.zeros(arm.size)
 
+instructions = (
+        "Mode: {}\n"
+        "A3: Gripper Control\n"
+        "B1: Home\n"
+        "B3: AR Control\n"
+        "B6: Grav Comp\n"
+        "B8: Quit")
+m.clear_text()
+m.add_text(instructions.format(run_mode))
+
 #######################
 ## Main Control Loop ##
 #######################
+
 
 while not abort_flag:
   arm.update() # update the arm
@@ -114,6 +125,8 @@ while not abort_flag:
     if arm.at_goal:
       m.set_led_color("yellow")
       run_mode = "waiting"
+      m.clear_text()
+      m.add_text(instructions.format(run_mode))
       continue
     arm.send()
     continue
@@ -122,12 +135,16 @@ while not abort_flag:
   if m.get_button_diff(1) == 1: # Edge Down
     m.set_led_color("yellow")
     run_mode = "waiting"
+    m.clear_text()
+    m.add_text(instructions.format(run_mode))
     arm.set_goal(softstart)
 
   # B3 - Start AR Control
   if m.get_button_diff(3) == 1 and run_mode != "ar_mode":
     m.set_led_color("green")
     run_mode = "ar_mode"
+    m.clear_text()
+    m.add_text(instructions.format(run_mode))
     xyz_phone_init = m.position.copy()
     rot_phone_init = quat2rotMat(m.orientation)
 
@@ -135,6 +152,8 @@ while not abort_flag:
   if m.get_button_diff(6) == 1:
     m.set_led_color("blue")
     run_mode = "grav_comp"
+    m.clear_text()
+    m.add_text(instructions.format(run_mode))
     arm.cancel_goal()
 
   # B8 - Quit

@@ -3,8 +3,14 @@ import os
 
 import hebi
 
+import typing
+if typing.TYPE_CHECKING:
+    from hebi._internal.group import Group
+    from hebi._internal.mobile_io import MobileIO
+    from hebi import Lookup
 
-def setup_base(lookup, base_family):
+
+def setup_base(lookup: 'Lookup', base_family: str):
     from tready import TreadedBase
     flipper_names = [f'T{n+1}_J1_flipper' for n in range(4)]
     wheel_names = [f'T{n+1}_J2_track' for n in range(4)]
@@ -20,15 +26,15 @@ def setup_base(lookup, base_family):
     return TreadedBase(group, 0.25, 0.33)
 
 
-def set_mobile_io_instructions(mobile_io, message, color=None):
+def set_mobile_io_instructions(mobile_io: 'MobileIO', message, color=None):
     # Print Instructions
     mobile_io.clear_text()
-    mobile_io.set_text(message)
+    mobile_io.add_text(message)
     if color is not None:
         mobile_io.set_led_color(color)
 
 
-def load_gains(group, gains_file):
+def load_gains(group: 'Group', gains_file: str):
     gains_command = hebi.GroupCommand(group.size)
     sleep(0.1)
 
@@ -39,12 +45,12 @@ def load_gains(group, gains_file):
         return
 
     # Send gains multiple times
-    for i in range(3):
+    for _ in range(3):
         group.send_command(gains_command)
         sleep(0.1)
 
 
-def setup_arm(lookup, family):
+def setup_arm(lookup: 'Lookup', family: str):
     root_dir, _ = os.path.split(__file__)
     # arm setup
     arm = hebi.arm.create(
@@ -54,13 +60,18 @@ def setup_arm(lookup, family):
         lookup=lookup)
 
     mirror_group = lookup.get_group_from_names([family], ['J2B_shoulder1'])
+    while mirror_group is None:
+        print(f'Looking for double shoulder module "{family}/J2B_shoulder1"...')
+        sleep(1)
+        mirror_group = lookup.get_group_from_names([family], ['J2B_shoulder1'])
+
     arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
 
     arm.load_gains(os.path.join(root_dir, 'gains/tready-arm-gains.xml'))
     return arm
 
 
-def setup_arm_6dof(lookup, family):
+def setup_arm_6dof(lookup: 'Lookup', family: str):
     root_dir, _ = os.path.split(__file__)
     # arm setup
     arm = hebi.arm.create(
@@ -72,7 +83,13 @@ def setup_arm_6dof(lookup, family):
     arm.load_gains(os.path.join(root_dir, 'gains/A-2240-06.xml'))
 
     # Add the gripper
-    gripper = hebi.arm.Gripper(lookup.get_group_from_names([family], ['gripperSpool']), -5, 1)
+    gripper_group = lookup.get_group_from_names([family], ['gripperSpool'])
+    while gripper_group is None:
+        print(f'Looking for gripper module "{family}/gripperSpool"...')
+        sleep(1)
+        gripper_group = lookup.get_group_from_names([family], ['gripperSpool'])
+
+    gripper = hebi.arm.Gripper(gripper_group, -5, 1)
     gripper.load_gains(os.path.join(root_dir, 'gains/gripper_spool_gains.xml'))
     arm.set_end_effector(gripper)
 

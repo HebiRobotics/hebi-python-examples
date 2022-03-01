@@ -13,6 +13,11 @@ from hebi.util import create_mobile_io
 from tready import TreadedBase, TreadyControl, ChassisVelocity, TreadyInputs
 from tready_utils import set_mobile_io_instructions, setup_base, setup_arm_6dof
 
+import typing
+if typing.TYPE_CHECKING:
+    from typing import Optional
+    from hebi._internal.group import Group
+    from hebi._internal.mobile_io import MobileIO
 
 class DemoState(Enum):
     STARTUP = auto()
@@ -51,7 +56,7 @@ class TreadyArmIOControl(TreadyControl):
             self.arm_xyz_home,
             self.arm_rot_home)
 
-    def compute_arm_goal(self, arm_inputs):
+    def compute_arm_goal(self, arm_inputs: ArmInputs):
         xyz_scale = np.array([1.0, 1.0, 1.0])
 
         phone_xyz = arm_inputs.phone_pos
@@ -62,10 +67,10 @@ class TreadyArmIOControl(TreadyControl):
             self.phone_xyz_home = phone_xyz
 
         arm_goal = hebi.arm.Goal(self.arm.size)
-        if arm_inputs.arm.locked:
+        if arm_inputs.locked:
             arm_goal.add_waypoint(position=self.arm_home)
             return arm_goal
-        elif arm_inputs.arm.active:
+        elif arm_inputs.active:
             phone_offset = phone_xyz - self.phone_xyz_home
             rot_mat = self.phone_rot_home
             arm_xyz_target = self.arm_xyz_home + xyz_scale * (rot_mat.T @ phone_offset)
@@ -81,7 +86,7 @@ class TreadyArmIOControl(TreadyControl):
 
         return None
 
-    def update(self, t_now: float, demo_input=None):
+    def update(self, t_now: float, demo_input: 'Optional[DemoInputs]'=None):
         self.base.update(t_now)
         self.arm.update()
 
@@ -110,7 +115,7 @@ class TreadyArmIOControl(TreadyControl):
                 return True
 
             elif self.state is DemoState.HOMING:
-                base_complete = not self.base.has_active_trajectory(t_now)
+                base_complete = not self.base.has_active_trajectory
                 if base_complete and self.arm.at_goal:
                     self.phone_xyz_home = demo_input.arm.phone_pos
                     self.phone_rot_home = demo_input.arm.phone_rot
@@ -144,7 +149,7 @@ class TreadyArmIOControl(TreadyControl):
                 self.transition_to(t_now, DemoState.HOMING)
                 return True
 
-    def transition_to(self, t_now, state):
+    def transition_to(self, t_now: float, state: DemoState):
         # self transitions are noop
         if state == self.state:
             return
@@ -197,7 +202,7 @@ class TreadyArmIOControl(TreadyControl):
         self.state = state
 
 
-def config_mobile_io(m):
+def config_mobile_io(m: 'MobileIO'):
     """Sets up mobileIO interface.
 
     Return a function that parses mobileIO feedback into the format
@@ -239,7 +244,7 @@ def config_mobile_io(m):
     m.set_button_output(arm_enable, 1)
     m.set_button_output(arm_lock, 1)
 
-    def parse_mobile_io_feedback(m):
+    def parse_mobile_io_feedback(m: 'MobileIO'):
         should_exit = m.get_button_state(quit_btn)
         should_reset = m.get_button_state(reset_pose_btn)
         # Chassis Control

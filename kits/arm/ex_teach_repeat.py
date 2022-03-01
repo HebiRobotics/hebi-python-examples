@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
 import hebi
-import numpy as np
-from time import sleep
+from time import time, sleep
 from hebi import arm as arm_api
 from hebi.util import create_mobile_io
 
@@ -20,7 +19,8 @@ gains_file   = "gains/A-2303-01.xml"
 # Create Arm object
 arm = arm_api.create([arm_family],
                      names=module_names,
-                     hrdf_file=hrdf_file)
+                     hrdf_file=hrdf_file,
+                     lookup=lookup)
 
 mirror_group = lookup.get_group_from_names([arm_family], ['J2B_shoulder1'])
 while mirror_group is None:
@@ -68,12 +68,18 @@ m.add_text(instructions)
 ## Main Control Loop ##
 #######################
 
+last_mio_recv = time()
+
 while not abort_flag:
   arm.update() # update the arm
   arm.send()
 
-  if not m.update(0.0):
-    print("Failed to get feedback from MobileIO")
+  t = time()
+  if m.update(0.0):
+    last_mio_recv = t
+  else:
+    if t - last_mio_recv > 1.0:
+      print("Failed to get feedback from MobileIO")
     continue
 
   slider3 = m.get_axis_state(3)
