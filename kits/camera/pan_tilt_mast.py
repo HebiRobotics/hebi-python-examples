@@ -73,7 +73,7 @@ class HebiCameraMast:
         self.trajectory = hebi.trajectory.create_trajectory([t_now, t_now+duration], p)
 
 
-class MastState(Enum):
+class MastControlState(Enum):
     STARTUP = auto()
     HOMING = auto()
     TELEOP = auto()
@@ -102,7 +102,7 @@ class MastControl:
     TILT_SCALING = 1.0
 
     def __init__(self, camera_mast: HebiCameraMast, zoom_camera: HebiCamera):
-        self.state = MastState.STARTUP
+        self.state = MastControlState.STARTUP
         self.mast = camera_mast
         self.camera = zoom_camera
 
@@ -152,7 +152,7 @@ class MastControl:
 
                 self.mast.set_velocity(t_now, Δt, [Δpan, Δtilt])
 
-    def transition_to(self, new_state: MastState):
+    def transition_to(self, new_state: MastControlState):
         if new_state is self.state:
             return
 

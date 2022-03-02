@@ -72,26 +72,26 @@ class ArmMobileIOControl:
         if not arm_input:
             if t_now - self.last_input_time > 1.0 and self.state is not self.state.DISCONNECTED:
                 print("mobileIO timeout, disabling motion")
-                self.transition_to(t_now, self.state.DISCONNECTED)
+                self.transition_to(self.state.DISCONNECTED)
             return True
         else:
             self.last_input_time = t_now
 
             if self.state is self.state.DISCONNECTED:
                 self.last_input_time = t_now
-                self.transition_to(t_now, self.state.TELEOP)
+                self.transition_to(self.state.TELEOP)
                 return True
 
             elif self.state is self.state.HOMING:
                 if self.arm.at_goal:
                     self.phone_xyz_home = arm_input.phone_pos
                     self.phone_rot_home = arm_input.phone_rot
-                    self.transition_to(t_now, self.state.TELEOP)
+                    self.transition_to(self.state.TELEOP)
                 return True
 
             elif self.state is self.state.TELEOP:
                 if arm_input.locked:
-                    self.transition_to(t_now, self.state.HOMING)
+                    self.transition_to(self.state.HOMING)
                 else:
                     arm_goal = self.compute_arm_goal(arm_input)
                     if arm_goal is not None:
@@ -106,10 +106,10 @@ class ArmMobileIOControl:
                 return True
 
             elif self.state is self.state.STARTUP:
-                self.transition_to(t_now, self.state.HOMING)
+                self.transition_to(self.state.HOMING)
                 return True
 
-    def transition_to(self, t_now: float, state: ArmControlState):
+    def transition_to(self, state: ArmControlState):
         # self transitions are noop
         if state == self.state:
             return

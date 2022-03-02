@@ -10,17 +10,14 @@ from hebi.util import create_mobile_io
 from util.lookup_utils import try_get_group_until_found
 
 from ..camera.camera import HebiCamera
-from ..camera.pan_tilt_mast import MastControl, HebiCameraMast, MastInputs
-from ..arm.arm_ar_state_machine import ArmInputs, ArmMobileIOControl
+from ..camera.pan_tilt_mast import HebiCameraMast, MastControl, MastControlState, MastInputs
+from ..arm.arm_ar_state_machine import ArmMobileIOControl, ArmControlState, ArmInputs
+from jackal_control import JackalControl, JackalControlState, JackalInputs
 
 import typing
 if typing.TYPE_CHECKING:
-    from typing import Sequence, Optional
-    import numpy.typing as npt
     from hebi import Lookup
     from hebi._internal.mobile_io import MobileIO
-    from hebi._internal.group import Group
-    from hebi._internal.trajectory import Trajectory
 
 
 def setup_arm_6dof(lookup: 'Lookup', family: str):
@@ -84,7 +81,7 @@ def setup_mobile_io(m: 'MobileIO'):
 
 def parse_mobile_feedback(m: 'MobileIO'):
     if not m.update(0.0):
-        return None, None
+        return None, None, None
 
     try:
         # reorder quaternion components
@@ -96,6 +93,10 @@ def parse_mobile_feedback(m: 'MobileIO'):
         rotation = np.eye(3)
 
     home = m.get_button_state(1)
+
+    linear = m.get_axis_state(8)
+    angular = m.get_axis_state(7)
+    base_inputs = JackalInputs(linear, angular)
 
     arm_inputs = ArmInputs(
         np.copy(m.position),
@@ -119,7 +120,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
         flood_light,
         spot_light)
 
-    return arm_inputs, mast_inputs
+    return base_inputs, arm_inputs, mast_inputs
 
 if __name__ == "__main__":
     lookup = hebi.Lookup()
@@ -141,6 +142,8 @@ if __name__ == "__main__":
     cam_group = try_get_group_until_found(lookup, 'CW1', ['CW1-0004'], 'Looking for camera...')
     camera = HebiCamera(cam_group)
 
+    base_control = JackalControl()
+
     # Setup MobileIO
     print('Looking for Mobile IO...')
     m = create_mobile_io(lookup, family)
@@ -152,18 +155,21 @@ if __name__ == "__main__":
     m.update()
     setup_mobile_io(m)
 
-
     #######################
     ## Main Control Loop ##
     #######################
 
-    running = True
-
-    while running:
+    while base_control.running and arm_control.running and mast_control.running:
         t = time()
-        arm_inputs, mast_inputs = parse_mobile_feedback(m)
-        arm_control.update(t, arm_inputs)
-        mast_control.update(t, mast_inputs)
+        try:
+            base_inputs, arm_inputs, mast_inputs = parse_mobile_feedback(m)
+            base_control.update(t, None)
+            arm_control.update(t, arm_inputs)
+            mast_control.update(t, mast_inputs)
+        except KeyboardInterrupt:
+            base_control.transition_to(JackalControlState.EXIT)
+            arm_control.transition_to(ArmControlState.EXIT)
+            mast_control.transition_to(MastControlState.EXIT)
 
         camera.update()
         # Update wide-angle camera flood light
@@ -175,4 +181,3 @@ if __name__ == "__main__":
         arm_control.send()
         mast_control.send()
         camera.send()
-        running = mast_control.running
