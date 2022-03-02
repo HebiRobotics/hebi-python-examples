@@ -1,10 +1,8 @@
-
-from multiprocessing.connection import Client
-import struct
 from time import time, sleep
 from enum import Enum, auto
 import hebi
 from hebi.util import create_mobile_io
+from hebi.arm import Gripper
 
 import typing
 if typing.TYPE_CHECKING:
@@ -12,38 +10,37 @@ if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
 
 
-class JackalControlState(Enum):
+class GripperControlState(Enum):
     STARTUP = auto()
     TELEOP = auto()
     DISCONNECTED = auto()
     EXIT = auto()
 
 
-class JackalInputs:
-    def __init__(self, linear, angular):
-        self.linear = linear
-        self.angular = angular
+class GripperInputs:
+    def __init__(self, gripper_target):
+        self.gripper_target = gripper_target
 
 
-class JackalControl:
-    def __init__(self, ip: str='localhost', port: int=6000, authkey: bytes=b'test'):
-        self.state = JackalControlState.STARTUP
-        self.conn = Client((ip, port), authkey=authkey)
-        self.payload = struct.pack('<f', 0.0) + struct.pack('<f', 0.0)
+class GripperControl:
+    def __init__(self, gripper: 'Gripper'):
+        self.state = GripperControlState.STARTUP
+        self.gripper = gripper
+        self.last_input_time = time()
 
     @property
     def running(self):
         return self.state is not self.state.EXIT
 
     def send(self):
-        self.conn.send_bytes(self.payload)
+        self.gripper.send()
 
-    def update(self, t_now: float, base_input: 'Optional[JackalInputs]'):
+    def update(self, t_now: float, gripper_input: 'Optional[GripperInputs]'):
 
         if self.state is self.state.EXIT:
             return False
 
-        if not base_input:
+        if not gripper_input:
             if t_now - self.last_input_time > 1.0 and self.state is not self.state.DISCONNECTED:
                 print("mobileIO timeout, disabling motion")
                 self.transition_to(self.state.DISCONNECTED)
@@ -57,14 +54,15 @@ class JackalControl:
                 return True
 
             elif self.state is self.state.TELEOP:
-                self.payload = struct.pack('<f', base_input.linear) + struct.pack('<f', base_input.angular)
+                self.gripper.update(gripper_input.gripper_target)
+                # do something with input here
                 return True
 
             elif self.state is self.state.STARTUP:
                 self.transition_to(self.state.TELEOP)
                 return True
 
-    def transition_to(self, state: JackalControlState):
+    def transition_to(self, state: GripperControlState):
         # self transitions are noop
         if state == self.state:
             return
@@ -74,7 +72,6 @@ class JackalControl:
 
         elif state is self.state.DISCONNECTED:
             print("TRANSITIONING TO STOPPED")
-            self.payload = struct.pack('<f', 0.0) + struct.pack('<f', 0.0)
 
         elif state is self.state.EXIT:
             print("TRANSITIONING TO EXIT")
@@ -86,18 +83,45 @@ def parse_mobile_feedback(m: 'MobileIO'):
     if not m.update(0.0):
         return None
 
-    turn  = m.get_axis_state(1)
-    move = m.get_axis_state(2)
+    if m.get_button_diff(2) == 1:
+        gripper_target = 1.0
+        m.set_axis_value(3, 1.0)
+    elif m.get_button_diff(4) == 1:
+        gripper_target = 0.0
+        m.set_axis_value(3, -1.0)
+    else:
+        # rescale to range [0, 1]
+        gripper_target = (m.get_axis_state(3) + 1.0) / 2.0
 
-    return JackalInputs(move, turn)
+    # Build an input object using the Mobile IO state
+    return GripperInputs(gripper_target)
+
+
+def setup_mobile_io(m: 'MobileIO'):
+    m.set_button_label(2, 'close')
+    m.set_button_label(4, 'open')
+    m.set_axis_label(3, 'grip')
+    m.set_axis_value(3, -1.0)
 
 
 if __name__ == '__main__':
     lookup = hebi.Lookup()
     sleep(2)
 
-    family = "Jackal"
-    base_control = JackalControl()
+    # Create the gripper 
+    family = 'Arm'
+    name   = 'gripperSpool'
+
+    gripper_group = lookup.get_group_from_names([family], [name])
+    while gripper_group is None:
+        print(f'Looking for gripper module {family} / {name} ...')
+        sleep(1)
+        gripper_group = lookup.get_group_from_names([family], [name])
+
+    gripper = Gripper(gripper_group, -5, 1)
+    gripper.load_gains('arm/gains/gripper_spool_gains.xml')
+
+    control = GripperControl(gripper)
 
     # Setup MobileIO
     print('Looking for Mobile IO...')
@@ -107,12 +131,17 @@ if __name__ == '__main__':
         sleep(1)
         m = create_mobile_io(lookup, family)
 
+    setup_mobile_io(m)
+
     #######################
     ## Main Control Loop ##
     #######################
-    
-    while base_control.running:
+
+    while control.running:
         t = time()
-        inputs = parse_mobile_feedback(m)
-        base_control.update(t, inputs)
-        base_control.send()
+        try:
+            inputs = parse_mobile_feedback(m)
+            control.update(t, inputs)
+            control.send()
+        except KeyboardInterrupt:
+            control.transition_to(GripperControlState.EXIT)

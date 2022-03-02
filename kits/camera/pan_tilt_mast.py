@@ -112,7 +112,7 @@ class MastControl:
 
     @property
     def running(self):
-        return not self.state is self.state.EXIT
+        return self.state is not self.state.EXIT
 
     def send(self):
         self.mast.send()

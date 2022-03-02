@@ -57,7 +57,7 @@ class ArmMobileIOControl:
 
     @property
     def running(self):
-        return not self.state is self.state.EXIT
+        return self.state is not self.state.EXIT
 
     def send(self):
         self.arm.send()
@@ -97,11 +97,13 @@ class ArmMobileIOControl:
                     if arm_goal is not None:
                         self.arm.set_goal(arm_goal)
 
-                gripper_closed = self.arm.end_effector.state == 1.0
-                if arm_input.gripper_closed and not gripper_closed:
-                    self.arm.end_effector.close()
-                elif not arm_input.gripper_closed and gripper_closed:
-                    self.arm.end_effector.open()
+                gripper = self.arm.end_effector
+                if gripper is not None:
+                    gripper_closed = gripper.state == 1.0
+                    if arm_input.gripper_closed and not gripper_closed:
+                        gripper.close()
+                    elif not arm_input.gripper_closed and gripper_closed:
+                        gripper.open()
 
                 return True
 
