@@ -46,14 +46,14 @@ class JackalControl:
         if not base_input:
             if t_now - self.last_input_time > 1.0 and self.state is not self.state.DISCONNECTED:
                 print("mobileIO timeout, disabling motion")
-                self.transition_to(self.state.DISCONNECTED)
+                self.transition_to(t_now, self.state.DISCONNECTED)
             return True
         else:
             self.last_input_time = t_now
 
             if self.state is self.state.DISCONNECTED:
                 self.last_input_time = t_now
-                self.transition_to(self.state.TELEOP)
+                self.transition_to(t_now, self.state.TELEOP)
                 return True
 
             elif self.state is self.state.TELEOP:
@@ -61,10 +61,10 @@ class JackalControl:
                 return True
 
             elif self.state is self.state.STARTUP:
-                self.transition_to(self.state.TELEOP)
+                self.transition_to(t_now, self.state.TELEOP)
                 return True
 
-    def transition_to(self, state: JackalControlState):
+    def transition_to(self, t_now: float, state: JackalControlState):
         # self transitions are noop
         if state == self.state:
             return

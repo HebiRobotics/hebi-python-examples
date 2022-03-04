@@ -6,7 +6,6 @@ from time import time, sleep
 from hebi.util import create_mobile_io
 from enum import Enum, auto
 
-from util.lookup_utils import try_get_group_until_found
 from .camera import HebiCamera
 
 import typing
@@ -17,8 +16,6 @@ if typing.TYPE_CHECKING:
     from hebi._internal.group import Group
     from hebi._internal.trajectory import Trajectory
 
-# 192.168.131.116 : zoom
-# 192.168.131.117 : wide angle
 
 class HebiCameraMast:
     def __init__(self, pan_tilt_group: 'Group'):
@@ -29,11 +26,11 @@ class HebiCameraMast:
         self.cmd = hebi.GroupCommand(self.group.size)
         self.trajectory: 'Optional[Trajectory]' = None
 
-    def update(self):
+    def update(self, t_now: float):
         self.group.get_next_feedback(reuse_fbk=self.fbk)
         # execute current trajectory
         if self.trajectory is not None:
-            p, v, _ = self.trajectory.get_state(t)
+            p, v, _ = self.trajectory.get_state(t_now)
             self.cmd.position = p
             self.cmd.velocity = v
 
@@ -52,7 +49,7 @@ class HebiCameraMast:
             velocities[:, 0] = self.fbk.velocity
             accelerations[:, 0] = 0
         else:
-            p, v, a = self.trajectory.get_state(t)
+            p, v, a = self.trajectory.get_state(t_now)
             positions[:, 0] = p
             velocities[:, 0] = v
             accelerations[:, 0] = a
@@ -119,32 +116,32 @@ class MastControl:
         self.camera.send()
 
     def update(self, t_now: float, inputs: 'Optional[MastInputs]'):
-        self.mast.update()
+        self.mast.update(t_now)
+        self.camera.update()
         if not inputs:
             if t_now - self.last_input_time > 1.0 and self.state is not self.state.DISCONNECTED:
                 print("Warning, lost signal to Mobile IO, going into safety state!")
-                self.transition_to(self.state.DISCONNECTED)
+                self.transition_to(t_now, self.state.DISCONNECTED)
+            return
 
-        else:
-            self.last_input_time = t_now
-            if self.state is self.state.DISCONNECTED:
-                self.transition_to(self.state.HOMING)
+        self.last_input_time = t_now
+        if self.state is self.state.DISCONNECTED:
+            self.transition_to(t_now, self.state.HOMING)
 
-            self.camera.zoom_level = inputs.zoom
-            self.camera.flood_light = inputs.flood_light
-            self.camera.spot_light = inputs.spot_light
-
+        self.camera.zoom_level = inputs.zoom
+        self.camera.flood_light = inputs.flood_light
+        self.camera.spot_light = inputs.spot_light
 
         if self.state is self.state.STARTUP:
-            self.transition_to(self.state.HOMING)
+            self.transition_to(t_now, self.state.HOMING)
 
         elif self.state is self.state.HOMING:
             if t_now > self.mast.trajectory.end_time:
-                self.transition_to(self.state.TELEOP)
+                self.transition_to(t_now, self.state.TELEOP)
 
         elif self.state is self.state.TELEOP:
             if inputs.home:
-                self.transition_to(self.state.HOMING)
+                self.transition_to(t_now, self.state.HOMING)
             else:
                 Δpan  = inputs.pan * self.PAN_SCALING
                 Δtilt = inputs.tilt * self.TILT_SCALING
@@ -152,7 +149,7 @@ class MastControl:
 
                 self.mast.set_velocity(t_now, Δt, [Δpan, Δtilt])
 
-    def transition_to(self, new_state: MastControlState):
+    def transition_to(self, t_now: float, new_state: MastControlState):
         if new_state is self.state:
             return
 
@@ -163,7 +160,7 @@ class MastControl:
 
         elif new_state is self.state.HOMING:
             print("Transitioning to Homing")
-            self.mast.set_position(t, 3.0, self.home_pose)
+            self.mast.set_position(t_now, 3.0, self.home_pose)
 
         elif new_state is self.state.TELEOP:
             print("Transitioning to Manual Control")
@@ -218,9 +215,23 @@ if __name__ == "__main__":
     family = "Mast"
     module_names = ['J1_pan', 'J2_tilt']
 
-    group = try_get_group_until_found(lookup, family, module_names, 'Looking for pan/tilt modules...')
-    zoom_group = try_get_group_until_found(lookup, 'C10', ['C10-0001'], 'Looking for zoom camera...')
-    cam_group = try_get_group_until_found(lookup, 'CW1', ['CW1-0004'], 'Looking for camera...')
+    group = lookup.get_group_from_names(family, module_names)
+    while group is None:
+        print('Looking for pan/tilt modules...')
+        sleep(1)
+        group = lookup.get_group_from_names(family, module_names)
+
+    zoom_group = lookup.get_group_from_names('C10', ['C10-0001'])
+    while zoom_group is None:
+        print('Looking for zoom camera...')
+        sleep(1)
+        zoom_group = lookup.get_group_from_names('C10', ['C10-0001'])
+
+    cam_group = lookup.get_group_from_names('CW1', ['CW1-0004'])
+    while cam_group is None:
+        print('Looking for camera...')
+        sleep(1)
+        cam_group = lookup.get_group_from_names('CW1', ['CW1-0004'])
     
     mast = HebiCameraMast(group)
     zoom_camera = HebiCamera(zoom_group)

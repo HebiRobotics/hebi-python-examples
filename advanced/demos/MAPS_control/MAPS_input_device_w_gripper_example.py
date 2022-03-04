@@ -57,7 +57,6 @@ if __name__ == "__main__":
     # need these b/c MAPS joint zeros are in different locations
     angle_offsets = np.array([0.0, np.pi/2, -np.pi, -np.pi/2, -np.pi/2, -np.pi/2, 0.0])
     input_arm = ContinuousAngleMaps(maps_group, angle_offsets)
-
     output_arm = hebi.arm.create(
             ['Arm'],
             ['J1_base', 'J2A_shoulder1', 'J3_shoulder2', 'J4_elbow1', 'J5_elbow2', 'J6_wrist1', 'J7_wrist2'],

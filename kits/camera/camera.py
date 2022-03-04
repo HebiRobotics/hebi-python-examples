@@ -1,6 +1,6 @@
 
 import hebi
-from util.math_utils import quat2rot
+from scipy.spatial.transform import Rotation as R
 
 import typing
 if typing.TYPE_CHECKING:
@@ -23,7 +23,9 @@ class HebiCamera:
 
     @property
     def orientation(self):
-        return quat2rot(self.fbk.orientation)
+        wxyz = self.fbk.orientation
+        xyzw = [wxyz[1:], wxyz[0]]
+        return R.from_quat(xyzw).as_matrix()
 
     @property
     def zoom_level(self):

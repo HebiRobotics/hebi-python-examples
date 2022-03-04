@@ -24,7 +24,15 @@ class ArmControlState(Enum):
     EXIT = auto()
 
 
-class ArmInputs:
+class ArmJoystickInputs:
+    def __init__(self, home, delta_xyz, delta_rot_xyz, gripper_closed):
+        self.home = home
+        self.delta_xyz = delta_xyz
+        self.delta_rot_xyz = delta_rot_xyz
+        self.gripper_closed = gripper_closed
+
+
+class ArmMobileIOInputs:
     def __init__(self, phone_pos: 'npt.NDArray[np.float32]', phone_rot: 'npt.NDArray[np.float64]',
                  locked: bool, active: bool, gripper_closed: bool):
 
@@ -35,8 +43,120 @@ class ArmInputs:
         self.gripper_closed = gripper_closed
 
 
+class ArmJoystickControl:
+    def __init__(self, arm: hebi.arm.Arm):
+        self.arm = arm
+
+        self.arm_xyz_home = [0.4, 0.0, 0.0]
+        self.arm_rot_home = R.from_euler('y', np.pi)
+        self.arm_rot_home = self.arm_rot_home.as_matrix()
+
+        self.arm_seed_ik = np.array([0, 1.0, 2, 3, -1.5, 0])
+        self.arm_home = self.arm.ik_target_xyz_so3(
+            self.arm_seed_ik,
+            self.arm_xyz_home,
+            self.arm_rot_home)
+
+    @property
+    def running(self):
+        return self.state is not self.state.EXIT
+
+    def send(self):
+        self.arm.send()
+
+    def update(self, t_now: float, demo_input: 'Optional[ArmJoystickInputs]'=None):
+        self.arm.update()
+        self.arm.send()
+
+        if self.state is self.state.EXIT:
+            return
+
+        if demo_input is None:
+            if t_now - self.mobile_last_fbk_t > 1.0:
+                print("mobileIO timeout, disabling motion")
+                self.transition_to(t_now, self.state.DISCONNECTED)
+            return
+
+        self.mobile_last_fbk_t = t_now
+
+        if self.state is self.state.DISCONNECTED:
+            self.mobile_last_fbk_t = t_now
+            self.transition_to(t_now, self.state.TELEOP)
+
+        elif self.state is self.state.HOMING:
+            if self.arm.at_goal:
+                self.transition_to(t_now, self.state.TELEOP)
+
+        elif self.state is self.state.TELEOP:
+            if demo_input.home:
+                self.transition_to(t_now, self.state.HOMING)
+                return
+
+            arm_goal = self.compute_arm_goal(demo_input)
+            if arm_goal is not None:
+                self.arm.set_goal(arm_goal)
+            gripper_closed = self.arm.end_effector.state == 1.0
+            if demo_input.gripper_closed and not gripper_closed:
+                self.arm.end_effector.close()
+            elif not demo_input.gripper_closed and gripper_closed:
+                self.arm.end_effector.open()
+
+        elif self.state is self.state.STARTUP:
+            self.transition_to(t_now, self.state.HOMING)
+
+    def transition_to(self, t_now: float, state: ArmControlState):
+        # self transitions are noop
+        if state == self.state:
+            return
+
+        if state is self.state.HOMING:
+            print("TRANSITIONING TO HOMING")
+            g = hebi.arm.Goal(self.arm.size)
+            g.add_waypoint(t=10.0, position=self.arm_home)
+            self.arm.set_goal(g)
+
+        elif state is self.state.TELEOP:
+            print("TRANSITIONING TO TELEOP")
+
+        elif state is self.state.DISCONNECTED:
+            print("TRANSITIONING TO DISCONNECTED")
+
+        elif state is self.state.EXIT:
+            print("TRANSITIONING TO EXIT")
+
+        self.state = state
+
+    def compute_arm_goal(self, arm_inputs: ArmJoystickInputs):
+        arm_goal = hebi.arm.Goal(self.arm.size)
+        rot_curr = np.empty((3, 3))
+        try:
+            curr_pos = self.arm.last_feedback.position_command
+        except ValueError:
+            curr_pos = self.arm.last_feedback.position
+
+        xyz_curr = self.arm.FK(curr_pos)
+
+        arm_xyz_target = xyz_curr + arm_inputs.delta_xyz
+
+        r_x = R.from_euler('x', arm_inputs.delta_rot_xyz[0])
+        r_y = R.from_euler('y', arm_inputs.delta_rot_xyz[1])
+        r_z = R.from_euler('z', arm_inputs.delta_rot_xyz[2])
+        arm_rot_target = R.from_matrix(rot_curr) * r_x * r_y * r_z
+
+        curr_seed_ik = curr_pos
+        curr_seed_ik[2] = abs(curr_seed_ik[2])
+
+        joint_target = self.arm.ik_target_xyz_so3(
+            curr_seed_ik,
+            arm_xyz_target,
+            arm_rot_target.as_matrix())
+
+        arm_goal.add_waypoint(position=joint_target)
+        return arm_goal
+
+
 class ArmMobileIOControl:
-    def __init__(self, arm: Arm):
+    def __init__(self, arm: 'Arm'):
         self.state = ArmControlState.STARTUP
         self.arm = arm
 
@@ -62,7 +182,7 @@ class ArmMobileIOControl:
     def send(self):
         self.arm.send()
 
-    def update(self, t_now: float, arm_input: 'Optional[ArmInputs]'):
+    def update(self, t_now: float, arm_input: 'Optional[ArmMobileIOInputs]'):
         self.arm.update()
         self.arm.send()
 
@@ -72,26 +192,26 @@ class ArmMobileIOControl:
         if not arm_input:
             if t_now - self.last_input_time > 1.0 and self.state is not self.state.DISCONNECTED:
                 print("mobileIO timeout, disabling motion")
-                self.transition_to(self.state.DISCONNECTED)
+                self.transition_to(t_now, self.state.DISCONNECTED)
             return True
         else:
             self.last_input_time = t_now
 
             if self.state is self.state.DISCONNECTED:
                 self.last_input_time = t_now
-                self.transition_to(self.state.TELEOP)
+                self.transition_to(t_now, self.state.TELEOP)
                 return True
 
             elif self.state is self.state.HOMING:
                 if self.arm.at_goal:
                     self.phone_xyz_home = arm_input.phone_pos
                     self.phone_rot_home = arm_input.phone_rot
-                    self.transition_to(self.state.TELEOP)
+                    self.transition_to(t_now, self.state.TELEOP)
                 return True
 
             elif self.state is self.state.TELEOP:
                 if arm_input.locked:
-                    self.transition_to(self.state.HOMING)
+                    self.transition_to(t_now, self.state.HOMING)
                 else:
                     arm_goal = self.compute_arm_goal(arm_input)
                     if arm_goal is not None:
@@ -108,10 +228,10 @@ class ArmMobileIOControl:
                 return True
 
             elif self.state is self.state.STARTUP:
-                self.transition_to(self.state.HOMING)
+                self.transition_to(t_now, self.state.HOMING)
                 return True
 
-    def transition_to(self, state: ArmControlState):
+    def transition_to(self, t_now: float, state: ArmControlState):
         # self transitions are noop
         if state == self.state:
             return
@@ -133,7 +253,7 @@ class ArmMobileIOControl:
 
         self.state = state
 
-    def compute_arm_goal(self, arm_inputs: ArmInputs):
+    def compute_arm_goal(self, arm_inputs: ArmMobileIOInputs):
         xyz_scale = np.array([1.0, 1.0, 1.0])
 
         phone_xyz = arm_inputs.phone_pos
@@ -183,7 +303,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
 
     home = m.get_button_state(1)
 
-    arm_inputs = ArmInputs(
+    arm_inputs = ArmMobileIOInputs(
         np.copy(m.position),
         rotation,
         home,
