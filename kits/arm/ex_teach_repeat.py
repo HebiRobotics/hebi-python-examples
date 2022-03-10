@@ -11,9 +11,9 @@ sleep(2)
 
 # Arm setup
 arm_family   = "Arm"
-module_names = ['J1_base', 'J2A_shoulder1', 'J3_shoulder2', 'J4_elbow1', 'J5_elbow2', 'J6_wrist1', 'J7_wrist2']
-hrdf_file    = "hrdf/A-2303-01.hrdf"
-gains_file   = "gains/A-2303-01.xml"
+module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
+hrdf_file    = "hrdf/A-2085-06.hrdf"
+gains_file   = "gains/A-2085-06.xml"
 
 
 # Create Arm object
@@ -21,17 +21,6 @@ arm = arm_api.create([arm_family],
                      names=module_names,
                      hrdf_file=hrdf_file,
                      lookup=lookup)
-
-mirror_group = lookup.get_group_from_names([arm_family], ['J2B_shoulder1'])
-while mirror_group is None:
-  print("Looking for double shoulder module...")
-  sleep(1)
-  mirror_group = lookup.get_group_from_names([arm_family], ['J2B_shoulder1'])
-
-# mirror the position/velocity/effort of module 1 ('J2A_shoulder1') to the module
-# in the mirror group ('J2B_shoulder1')
-# Keeps the two modules in the double shoulder bracket in sync
-arm.add_plugin(arm_api.DoubledJointMirror(1, mirror_group))
 
 arm.load_gains(gains_file)
 
