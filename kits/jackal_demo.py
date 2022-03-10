@@ -29,7 +29,7 @@ def setup_arm_6dof(lookup: 'Lookup', family: str):
     arm = hebi.arm.create(
         [family],
         ['J1_base', 'J2A_shoulder', 'J3_elbow1', 'J4_elbow2', 'J5_wrist1', 'J6_wrist2'],
-        hrdf_file=os.path.join(root_dir, 'arm/hrdf/A-2240-06G.hrdf'),
+        hrdf_file=os.path.join(root_dir, 'arm/hrdf/A-2303-06G.hrdf'),
         lookup=lookup)
 
     mirror_group = lookup.get_group_from_names([family], ['J2B_shoulder'])
@@ -40,7 +40,7 @@ def setup_arm_6dof(lookup: 'Lookup', family: str):
 
     arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
 
-    arm.load_gains(os.path.join(root_dir, 'arm/gains/A-2240-06.xml'))
+    arm.load_gains(os.path.join(root_dir, 'arm/gains/A-2303-06.xml'))
 
     # Add the gripper
     gripper_group = lookup.get_group_from_names([family], ['gripperSpool'])
@@ -87,8 +87,9 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_button_label(5, 'arm')
     m.set_button_mode(5, 1)
     m.set_button_label(6, '\u21E7')
-    m.set_button_label(7, '\u21E9')
+    m.set_button_label(7, 'grip')
     m.set_button_mode(7, 1)
+    m.set_button_label(8, '\u21E9')
 
     m.set_axis_label(3, '\U0001F50E')
     m.set_axis_value(3, -0.9)
@@ -115,8 +116,8 @@ def parse_mobile_feedback(m: 'MobileIO'):
     base_rz = m.get_axis_state(7)
 
     if m.get_button_state(5):
-        arm_dx = 0.3 * m.get_axis_state(7)
-        arm_dy = -0.3 * m.get_axis_state(8)
+        arm_dx =  0.3 * m.get_axis_state(8)
+        arm_dy = -0.3 * m.get_axis_state(7)
 
         arm_dz = 0.0
         if m.get_button_state(6):
@@ -132,8 +133,8 @@ def parse_mobile_feedback(m: 'MobileIO'):
         arm_dy = 0.0
         arm_dz = 0.0
 
-        arm_drx = 0.5 * m.get_axis_state(7)
-        arm_dry = 0.5 * m.get_axis_state(8)
+        arm_drx =  0.5 * m.get_axis_state(7)
+        arm_dry = -0.5 * m.get_axis_state(8)
         arm_drz = 0.0
 
     gripper_closed = m.get_button_state(7)
@@ -148,7 +149,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
     if m.get_button_state(4):
         spot_light = light_level
 
-    mast_pan = m.get_axis_state(1)
+    mast_pan = -1.0 * m.get_axis_state(1)
     mast_tilt = m.get_axis_state(2)
     camera_zoom = m.get_axis_state(3)
 
@@ -178,8 +179,8 @@ if __name__ == "__main__":
     family = "Mast"
     module_names = ['J1_pan', 'J2_tilt']
 
-    arm = setup_arm_6dof(lookup, 'Arm')
-    arm_control = ArmJoystickControl(arm)
+    arm = setup_arm_6dof(lookup, 'Jackal')
+    arm_control = ArmJoystickControl(arm, [0, -2, 1, 0, 0.5, 0], homing_time=7.0)
 
     group = lookup.get_group_from_names(family, module_names)
     while group is None:
@@ -188,22 +189,22 @@ if __name__ == "__main__":
         group = lookup.get_group_from_names(family, module_names)
     mast = HebiCameraMast(group)
 
-    zoom_group = lookup.get_group_from_names('C10', ['C10-0001'])
+    zoom_group = lookup.get_group_from_names('Mast', ['C10-0001'])
     while zoom_group is None:
         print('Looking for zoom camera...')
         sleep(1)
-        zoom_group = lookup.get_group_from_names('C10', ['C10-0001'])
+        zoom_group = lookup.get_group_from_names('Mast', ['C10-0001'])
     zoom_camera = HebiCamera(zoom_group)
     mast_control = MastControl(mast, zoom_camera)
 
-    cam_group = lookup.get_group_from_names('CW1', ['CW1-0004'])
+    cam_group = lookup.get_group_from_names('Jackal', ['CW1-0004'])
     while cam_group is None:
         print('Looking for camera...')
         sleep(1)
-        cam_group = lookup.get_group_from_names('CW1', ['CW1-0004'])
+        cam_group = lookup.get_group_from_names('Jackal', ['CW1-0004'])
     camera = HebiCamera(cam_group)
 
-    base_control = JackalControl()
+    #base_control = JackalControl()
 
     # Setup MobileIO
     print('Looking for Mobile IO...')
@@ -219,28 +220,34 @@ if __name__ == "__main__":
     #######################
     ## Main Control Loop ##
     #######################
+    camera_angle_cmd = hebi.GroupCommand(1)
 
+    #while base_control.running and arm_control.running and mast_control.running:
     #while mast_control.running and arm_control.running:
-    while base_control.running and arm_control.running and mast_control.running:
+    while mast_control.running:
         t = time()
         try:
             base_inputs, arm_inputs, mast_inputs = parse_mobile_feedback(m)
-            base_control.update(t, None)
-            arm_control.update(t, arm_inputs)
+            #base_control.update(t, None)
+            #arm_control.update(t, arm_inputs)
             mast_control.update(t, mast_inputs)
-            camera.update()
+            #camera.update()
+            # Update mobileIO stream angle
+            if mast_inputs:
+                camera_angle_cmd.io.c.set_float(1, mast_control.camera.roll)
+                m._group.send_command(camera_angle_cmd)
         except KeyboardInterrupt:
-            base_control.transition_to(t, JackalControlState.EXIT)
-            arm_control.transition_to(t, ArmControlState.EXIT)
+            #base_control.transition_to(t, JackalControlState.EXIT)
+            #arm_control.transition_to(t, ArmControlState.EXIT)
             mast_control.transition_to(t, MastControlState.EXIT)
 
         # Update wide-angle camera flood light
-        if m.get_button_state(2):
-            camera.flood_light = (m.get_axis_state(4) + 1.0) / 2.0
-        else:
-            camera.flood_light = 0.0
+        #if m.get_button_state(2):
+        #    camera.flood_light = (m.get_axis_state(4) + 1.0) / 2.0
+        #else:
+        #    camera.flood_light = 0.0
 
-        base_control.send()
-        arm_control.send()
+        #base_control.send()
+        #arm_control.send()
         mast_control.send()
-        camera.send()
+        #camera.send()

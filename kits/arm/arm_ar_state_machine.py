@@ -25,10 +25,10 @@ class ArmControlState(Enum):
 
 
 class ArmJoystickInputs:
-    def __init__(self, home, delta_xyz, delta_rot_xyz, gripper_closed):
+    def __init__(self, home: bool, delta_xyz, delta_rot_xyz, gripper_closed: bool):
         self.home = home
-        self.delta_xyz = delta_xyz
-        self.delta_rot_xyz = delta_rot_xyz
+        self.delta_xyz: 'npt.NDArray[np.float64]' = np.array(delta_xyz, dtype=np.float64)
+        self.delta_rot_xyz: 'npt.NDArray[np.float64]' = np.array(delta_rot_xyz, dtype=np.float64)
         self.gripper_closed = gripper_closed
 
 
@@ -44,18 +44,15 @@ class ArmMobileIOInputs:
 
 
 class ArmJoystickControl:
-    def __init__(self, arm: hebi.arm.Arm):
+    def __init__(self, arm: hebi.arm.Arm, home_pose: 'Sequence[float] | npt.NDArray[np.float64]', homing_time: float=5.0):
+        self.state = ArmControlState.STARTUP
         self.arm = arm
 
-        self.arm_xyz_home = [0.4, 0.0, 0.0]
-        self.arm_rot_home = R.from_euler('y', np.pi)
-        self.arm_rot_home = self.arm_rot_home.as_matrix()
+        self.arm_home = home_pose
+        self.homing_time = homing_time
 
-        self.arm_seed_ik = np.array([0, 1.0, 2, 3, -1.5, 0])
-        self.arm_home = self.arm.ik_target_xyz_so3(
-            self.arm_seed_ik,
-            self.arm_xyz_home,
-            self.arm_rot_home)
+        self.xyz_curr = np.empty(3)
+        self.rot_curr = np.empty((3, 3))
 
     @property
     def running(self):
@@ -66,7 +63,6 @@ class ArmJoystickControl:
 
     def update(self, t_now: float, demo_input: 'Optional[ArmJoystickInputs]'=None):
         self.arm.update()
-        self.arm.send()
 
         if self.state is self.state.EXIT:
             return
@@ -112,7 +108,7 @@ class ArmJoystickControl:
         if state is self.state.HOMING:
             print("TRANSITIONING TO HOMING")
             g = hebi.arm.Goal(self.arm.size)
-            g.add_waypoint(t=10.0, position=self.arm_home)
+            g.add_waypoint(t=self.homing_time, position=self.arm_home)
             self.arm.set_goal(g)
 
         elif state is self.state.TELEOP:
@@ -128,22 +124,24 @@ class ArmJoystickControl:
 
     def compute_arm_goal(self, arm_inputs: ArmJoystickInputs):
         arm_goal = hebi.arm.Goal(self.arm.size)
-        rot_curr = np.empty((3, 3))
         try:
-            curr_pos = self.arm.last_feedback.position_command
+            pos_curr = self.arm.last_feedback.position_command
+            if np.any(pos_curr == np.nan):
+                pos_curr = self.arm.last_feedback.position
+
         except ValueError:
-            curr_pos = self.arm.last_feedback.position
+            pos_curr = self.arm.last_feedback.position
 
-        xyz_curr = self.arm.FK(curr_pos)
+        self.arm.FK(pos_curr, xyz_out=self.xyz_curr, orientation_out=self.rot_curr)
 
-        arm_xyz_target = xyz_curr + arm_inputs.delta_xyz
+        arm_xyz_target = self.xyz_curr + arm_inputs.delta_xyz
 
         r_x = R.from_euler('x', arm_inputs.delta_rot_xyz[0])
         r_y = R.from_euler('y', arm_inputs.delta_rot_xyz[1])
         r_z = R.from_euler('z', arm_inputs.delta_rot_xyz[2])
-        arm_rot_target = R.from_matrix(rot_curr) * r_x * r_y * r_z
+        arm_rot_target = R.from_matrix(self.rot_curr) * r_x * r_y * r_z
 
-        curr_seed_ik = curr_pos
+        curr_seed_ik = pos_curr
         curr_seed_ik[2] = abs(curr_seed_ik[2])
 
         joint_target = self.arm.ik_target_xyz_so3(

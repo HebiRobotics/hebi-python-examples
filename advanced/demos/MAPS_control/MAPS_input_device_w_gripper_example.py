@@ -8,7 +8,6 @@ import hebi
 from hebi.util import create_mobile_io
 from hebi.arm import Gripper
 
-from dynamic_comp import DynamicCompEffortPlugin
 from gripper_control import GripperControl, GripperInputs
 
 from MAPS_input_device_example import ContinuousAngleMaps, LeaderFollowerControl, LeaderFollowerControlState, LeaderFollowerInputs
@@ -72,9 +71,6 @@ if __name__ == "__main__":
     # in the mirror group ('J2B_shoulder1')
     # Keeps the two modules in the double shoulder bracket in sync
     output_arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
-
-    # Updates feedforward efforts based on hrdf physical dynamics model
-    output_arm.add_plugin(DynamicCompEffortPlugin())
 
     output_arm.load_gains('gains/A-2303-01.xml')
     # need to update the gains for the mirror group also

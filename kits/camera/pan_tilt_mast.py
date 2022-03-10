@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
+import os
 import hebi
 import numpy as np
 from time import time, sleep
 from hebi.util import create_mobile_io
 from enum import Enum, auto
+from scipy.spatial.transform import Rotation as R
 
 from .camera import HebiCamera
 
@@ -15,10 +17,11 @@ if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
     from hebi._internal.group import Group
     from hebi._internal.trajectory import Trajectory
+    from hebi.robot_model import RobotModel
 
 
 class HebiCameraMast:
-    def __init__(self, pan_tilt_group: 'Group'):
+    def __init__(self, pan_tilt_group: 'Group', hrdf: 'RobotModel | str'=os.path.join(os.path.dirname(__file__), 'hrdf', 'pan_tilt_mast.hrdf')):
         self.group = pan_tilt_group
         self.fbk = self.group.get_next_feedback()
         while self.fbk is None:
@@ -26,8 +29,24 @@ class HebiCameraMast:
         self.cmd = hebi.GroupCommand(self.group.size)
         self.trajectory: 'Optional[Trajectory]' = None
 
+        if isinstance(hrdf, str):
+            self.robot_model = hebi.robot_model.import_from_hrdf(hrdf)
+        else:
+            self.robot_model = hrdf
+
+        self.output_frame = np.empty((4,4), dtype=np.float64)
+
     def update(self, t_now: float):
         self.group.get_next_feedback(reuse_fbk=self.fbk)
+
+        wxyz = self.fbk[0].orientation
+        xyzw = [*wxyz[1:], wxyz[0]]
+
+        base_frame = np.eye(4)
+        base_frame[:3, :3] = R.from_quat(xyzw).as_matrix()
+        self.robot_model.base_frame = base_frame
+        self.robot_model.get_end_effector(self.fbk.position, output=self.output_frame)
+
         # execute current trajectory
         if self.trajectory is not None:
             p, v, _ = self.trajectory.get_state(t_now)
@@ -145,7 +164,7 @@ class MastControl:
             else:
                 Δpan  = inputs.pan * self.PAN_SCALING
                 Δtilt = inputs.tilt * self.TILT_SCALING
-                Δt = 0.5 # sec
+                Δt = 0.25 # sec
 
                 self.mast.set_velocity(t_now, Δt, [Δpan, Δtilt])
 
@@ -201,7 +220,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
     if m.get_button_state(4):
         spot_light = light
 
-    pan  = m.get_axis_state(1)
+    pan  = -1.0 * m.get_axis_state(1)
     tilt = m.get_axis_state(2)
 
     return MastInputs([pan, tilt], m.get_button_state(1), zoom, flood_light, spot_light)
@@ -258,6 +277,10 @@ if __name__ == "__main__":
         t = time()
         inputs = parse_mobile_feedback(m)
         mast_control.update(t, inputs)
+        # Update mobileIO stream angle
+        if inputs:
+            m._cmd.io.c.set_float(1, mast_control.camera.roll)
+            m._group.send_command(m._cmd)
 
         camera.update()
         # Update Camera zoom/lights

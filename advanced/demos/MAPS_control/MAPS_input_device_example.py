@@ -10,14 +10,11 @@ from hebi.robot_model import endeffector_position_objective
 from hebi.robot_model import endeffector_so3_objective
 from hebi.robot_model import custom_objective
 
-from dynamic_comp import DynamicCompEffortPlugin
-
 import typing
 if typing.TYPE_CHECKING:
     from typing import Optional
     import numpy.typing as npt
     from hebi.arm import Arm
-    from hebi._internal.mobile_io import MobileIO
     from hebi._internal.group import Group
 
 
@@ -97,7 +94,7 @@ class LeaderFollowerControl:
         return self.state is not self.state.EXIT
 
     # objective function for use w/ IK later
-    def arm_MAPS_mse(self, positions, errors, user_data):
+    def arm_MAPS_mse(self, positions: 'npt.NDArray[np.float64]', errors: 'npt.NDArray[np.float64]', user_data: None):
         errors[0] = np.sum((self.input_arm.position - positions) ** 2)
 
     def send(self):
@@ -246,9 +243,6 @@ if __name__ == "__main__":
     # in the mirror group ('J2B_shoulder1')
     # Keeps the two modules in the double shoulder bracket in sync
     output_arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
-
-    # Updates feedforward efforts based on hrdf physical dynamics model
-    output_arm.add_plugin(DynamicCompEffortPlugin())
 
     output_arm.load_gains('gains/A-2303-01.xml')
     # need to update the gains for the mirror group also
