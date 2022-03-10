@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
-import os
 from enum import Enum, auto
-from time import time, sleep
+from time import sleep
 import numpy as np
 
 import hebi
@@ -12,9 +11,7 @@ from hebi.robot_model import custom_objective
 
 import typing
 if typing.TYPE_CHECKING:
-    from typing import Optional
     import numpy.typing as npt
-    from hebi.arm import Arm
     from hebi._internal.group import Group
 
 
