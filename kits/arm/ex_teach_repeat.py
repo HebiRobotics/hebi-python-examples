@@ -51,6 +51,7 @@ B4 - Clear waypoints
 B8 - Quit
 """
 print(instructions)
+m.clear_text()
 m.add_text(instructions)
 
 #######################
