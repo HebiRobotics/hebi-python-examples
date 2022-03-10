@@ -47,6 +47,7 @@ B6 - Grav Comp Mode
 B8 - Quit
 """
 print(instructions)
+m.clear_text()
 m.add_text(instructions)
 
 #######################
