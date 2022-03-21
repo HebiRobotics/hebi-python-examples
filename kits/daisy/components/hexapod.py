@@ -203,7 +203,6 @@ class Hexapod:
     self._on_stop()
 
   def _create_startup_trajectories(self, startup_seconds):
-    startup_trajectories = self._startup_trajectories
     legs = self._legs
 
     # Note: It is very unclear what the C++ code is doing in the `first_run` block here.
@@ -218,6 +217,7 @@ class Hexapod:
     velocities = np.zeros((num_joints, 5))
     accelerations = np.zeros((num_joints, 5))
 
+    startup_trajectories: 'list[hebi.trajectory._Trajectory]' = []
     for i in range(6):
       leg = legs[i]
       leg_start = leg._feedback_view.position
@@ -241,19 +241,18 @@ class Hexapod:
       accelerations[:, 1] = nan
       accelerations[:, 3] = nan
 
-      startup_trajectories[i] = create_trajectory(times, positions, velocities, accelerations)
+      startup_trajectories.append(create_trajectory(times, positions, velocities, accelerations))
+    return startup_trajectories
 
   def _soft_startup(self, first_run, startup_seconds):
     group = self._group
     group_feedback = self._group_feedback
     group_command = self._group_command
 
-    startup_trajectories = self._startup_trajectories
-
     group.send_feedback_request()
     self._wait_for_feedback()
 
-    self._create_startup_trajectories(startup_seconds)
+    startup_trajectories = self._create_startup_trajectories(startup_seconds)
 
     foot_forces = self._foot_forces
 
@@ -316,7 +315,6 @@ class Hexapod:
 
     # TODO: This seems strange. See if it should be increased/decreased.
     startup_seconds = 4.5
-    self._startup_trajectories = [None] * 6
 
     while True:
       self._soft_startup(first_run, startup_seconds)

@@ -11,9 +11,9 @@ sleep(2)
 
 # Arm setup
 arm_family   = "Arm"
-module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
-hrdf_file    = "hrdf/A-2085-06.hrdf"
-gains_file   = "gains/A-2085-06.xml"
+module_names = ['J1_base', 'J2A_shoulder1', 'J3_shoulder2', 'J4_elbow1', 'J5_elbow2', 'J6_wrist1', 'J7_wrist2']
+hrdf_file    = "hrdf/A-2303-01.hrdf"
+gains_file   = "gains/A-2303-01.xml"
 
 
 # Create Arm object
