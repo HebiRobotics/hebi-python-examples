@@ -2,23 +2,6 @@ import numpy as np
 from math import atan2, cos, isnan, sin
 
 
-def sign(val):
-  """
-  Mimics MATLAB's sign function
-
-  :param val: Input value
-  :type val:  float
-  :return:    The sign of ``val``
-  :rtype:     float
-  """
-  if val > 0.0:
-    return 1.0
-  elif val == 0.0:
-    return 0.0
-  else:
-    return -1.0
-
-
 def zero_on_nan(val):
   """
   :param val: Input value
@@ -39,15 +22,6 @@ def any_nan(mat):
   :rtype:  bool
   """
   return np.any(np.isnan(mat))
-
-
-def assert_not_nan(val, msg):
-  """
-  :param msg:
-  :type msg:  str
-  """
-  if isnan(val):
-    raise ValueError('{0} is nan'.format(msg))
 
 
 def rotate_x(angle, dtype=np.float64, output=None):
@@ -171,33 +145,6 @@ def quat2rot(quaternion, output=None):
 
   return output
 
-
-def gravity_from_quaternion(quaternion, output=None):
-  """
-  Retrieve the gravity vector from the given quaternion
-  """
-  if output is None:
-    output = np.empty(3, dtype=np.float32)
-
-  X = quaternion[1]
-  Y = quaternion[2]
-  Z = quaternion[3]
-  W = quaternion[0]
-
-  xx = X*X
-  xz = X*Z
-  xw = X*W
-  yy = Y*Y
-  yz = Y*Z
-  yw = Y*W
-
-  output[0] = -2.0*(xz-yw)
-  output[1] = -2.0*(yz+xw)
-  output[2] = -1.0+2.0*(xx+yy)
-
-  return output
-
-
 def rot2ea(R, output=None):
   """
   Retrieve the Euler angle from the input rotation matrix
@@ -236,101 +183,3 @@ def rot2ea(R, output=None):
   output[1] = y
   output[2] = z
   return output
-
-
-def rot2axisangle(R):
-  """
-  Retrieves the axis + angle from the input rotation matrix
-  """
-  axis = np.empty(3, np.float64)
-  axis[0] = R[2, 1] - R[1, 2]
-  axis[1] = R[0, 2] - R[2, 0]
-  axis[2] = R[1, 0] - R[0, 1]
-
-  y = np.hypot(axis[0], np.hypot(axis[1], axis[2]))
-  axis = axis / y
-  return axis, atan2(y, R[:3, :3].diagonal().sum()-1)
-
-
-def get_grav_comp_efforts(robot, positions, gravity, output=None):
-  """
-  :param robot:
-  :param positions:
-  :param gravity:
-
-  :param output:
-  :type output:  np.ndarray, NoneType
-
-  :return:
-  :rtype:  np.ndarray
-  """
-  g_norm = np.linalg.norm(gravity)
-  if g_norm > 0.0:
-    gravity = gravity/g_norm*9.81
-
-  jacobians = robot.get_jacobians('CoM', positions)
-  if output is None:
-    comp_torque = np.zeros(robot.dof_count)
-  else:
-    comp_torque = output
-  wrench = np.zeros(6)
-  num_frames = robot.get_frame_count('CoM')
-
-  masses = robot.masses
-
-  for i in range(num_frames):
-    # Add the torques for each joint to support the mass at this frame
-    wrench[0:3] = gravity*masses[i]
-    comp_torque += jacobians[i].T @ wrench
-
-  return comp_torque
-
-
-def get_dynamic_comp_efforts(fbk_positions, cmd_positions, cmd_velocities, cmd_accels, robot, dt=1e-3):
-  """
-  :param fbk_positions:
-  :param cmd_positions:
-  :param cmd_velocities:
-  :param cmd_accels:
-  :param robot:
-  :param dt:
-
-  :return:
-  :rtype:  np.ndarray
-  """
-  dt_s = dt*dt
-  dt_s_inv = 1/dt_s
-  cmd_v_dt = cmd_velocities*dt
-  cmd_accel_dt = .5*cmd_accels*dt_s
-
-  # get positions at +/- dt
-  cmd_positions_last = cmd_positions-cmd_v_dt+cmd_accel_dt
-  cmd_positions_next = cmd_positions+cmd_v_dt+cmd_accel_dt
-
-  # Get Forward kinematics for all 3 sets of angles
-  cmd_frames_last = [entry[:3, 3] for entry in robot.get_forward_kinematics('CoM', cmd_positions_last)]
-  cmd_frames_now = [entry[:3, 3] for entry in robot.get_forward_kinematics('CoM', cmd_positions)]
-  cmd_frames_next = [entry[:3, 3] for entry in robot.get_forward_kinematics('CoM', cmd_positions_next)]
-
-  # Build wrench vector and calculate compensatory torques
-  efforts = np.zeros(robot.dof_count)
-  jacobians = robot.get_jacobians('CoM', fbk_positions)
-  masses = robot.masses
-  wrench = np.zeros(6)
-
-  for module in range(len(masses)):
-    # Calculate XYZ accelerations of the CoM
-    lastv = cmd_frames_last[module]
-    nowv = cmd_frames_now[module]
-    nextv = cmd_frames_next[module]
-
-    accel = ((lastv+nextv)-(2*nowv))*dt_s_inv
-
-    # Set translational part of wrench vector (rotational stays zero)
-    wrench[0:3] = accel * masses[module]
-
-    # compEffort = J' * wrench
-    efforts += jacobians[module].T @ wrench
-
-  return efforts
-

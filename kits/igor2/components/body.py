@@ -200,9 +200,8 @@ class PeripheralBody(BaseBody):
     :return: 
     :rtype:  np.array
     """
-    kin = self._kin
     positions = positions[self._group_indices]
-    return math_utils.get_grav_comp_efforts(kin, positions, gravity)
+    return self._kin.get_grav_comp_efforts(positions, gravity)
 
   def create_home_trajectory(self, positions, duration=3.0):
     """

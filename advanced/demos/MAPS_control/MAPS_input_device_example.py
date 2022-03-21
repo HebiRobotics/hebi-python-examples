@@ -9,16 +9,19 @@ from hebi.robot_model import endeffector_position_objective
 from hebi.robot_model import endeffector_so3_objective
 from hebi.robot_model import custom_objective
 
-from dynamic_comp import DynamicCompEffortPlugin
+import typing
+if typing.TYPE_CHECKING:
+    import numpy.typing as npt
+    from hebi._internal.group import Group
 
 
 class ContinuousAngleMaps:
 
-    def __init__(self, group, offsets):
+    def __init__(self, group: 'Group', offsets):
         self.group = group
         self.group_fbk = hebi.GroupFeedback(group.size)
-        self.angle_offsets = np.array(offsets)
-        self.prev_angles = np.zeros(group.size)
+        self.angle_offsets: 'npt.NDArray[np.float64]' = np.array(offsets)
+        self.prev_angles: 'npt.NDArray[np.float64]' = np.zeros(group.size, dtype=np.float64)
 
         self.group.feedback_frequency = 200.0
         self.input_model = hebi.robot_model.import_from_hrdf('hrdf/mapsArm_7DoF_standard.hrdf')
@@ -34,9 +37,6 @@ class ContinuousAngleMaps:
             elif diff < -np.pi:
                 self.angle_offsets[i] += 2*np.pi 
 
-    def print_angles(self):
-        print(f'Angles: {np.around(np.rad2deg(self.positions), decimals=0)}')
-
     def rebalance(self):
         '''Adjusts angles so they lie in [-π, π]'''
         for i in range(len(self.angle_offsets)):
@@ -45,7 +45,7 @@ class ContinuousAngleMaps:
             while self.angle_offsets[i] < -np.pi:
                 self.angle_offsets[i] += np.pi
 
-    def get_fk(self):
+    def get_fk(self) -> 'npt.NDArray[np.float64]':
         return np.copy(self.input_model.get_end_effector(self.group_fbk.position))
 
     @property
@@ -86,13 +86,14 @@ if __name__ == "__main__":
             lookup=lookup)
 
     mirror_group = lookup.get_group_from_names(['Arm'], ['J2B_shoulder1'])
+    while mirror_group is None:
+        print('Still looking for mirror group...')
+        sleep(1)
+        mirror_group = lookup.get_group_from_names(['Arm'], ['J2B_shoulder1'])
     # mirror the position/velocity/effort of module 1 ('J2A_shoulder1') to the module
     # in the mirror group ('J2B_shoulder1')
     # Keeps the two modules in the double shoulder bracket in sync
     output_arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
-
-    # Updates feedforward efforts based on hrdf physical dynamics model
-    output_arm.add_plugin(DynamicCompEffortPlugin())
 
     output_arm.load_gains('gains/A-2303-01.xml')
     # need to update the gains for the mirror group also

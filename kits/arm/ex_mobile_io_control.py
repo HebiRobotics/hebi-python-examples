@@ -23,10 +23,10 @@ arm.load_gains(gains_file)
 # mobileIO setup
 phone_name = "mobileIO"
 lookup = hebi.Lookup()
+print('Waiting for Mobile IO device to come online...')
 sleep(2)
 
 # Create mobileIO object
-print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, arm_family, phone_name)
 if m is None:
   raise RuntimeError("Could not find Mobile IO device")
@@ -47,7 +47,8 @@ B6 - Grav Comp Mode
 B8 - Quit
 """
 print(instructions)
-m.set_text(instructions)
+m.clear_text()
+m.add_text(instructions)
 
 #######################
 ## Main Control Loop ##
@@ -61,21 +62,21 @@ while not abort_flag:
     continue
 
   # B1 - Waypoint 1
-  if m.get_button_diff(1) == 3: # "ToOn"
+  if m.get_button_diff(1) == 1: # "ToOn"
     m.set_led_color("green")
     goal.clear()
     goal.add_waypoint(t=3, position=waypoint_1)
     arm.set_goal(goal)
 
   # B2 - Waypoint 2
-  if m.get_button_diff(2) == 3: # "ToOn"
+  if m.get_button_diff(2) == 1: # "ToOn"
     m.set_led_color("green")
     goal.clear()
     goal.add_waypoint(t=3, position=waypoint_2)
     arm.set_goal(goal)
 
   # B3 - Waypoint 3
-  if m.get_button_diff(3) == 3: # "ToOn"
+  if m.get_button_diff(3) == 1: # "ToOn"
     m.set_led_color("green")
     goal.clear()
     goal.add_waypoint(t=3, position=waypoint_3)

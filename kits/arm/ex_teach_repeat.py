@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 
 import hebi
-import numpy as np
-from time import sleep
+from time import time, sleep
 from hebi import arm as arm_api
 from hebi.util import create_mobile_io
+
+# Set up to find actuators on the network
+lookup = hebi.Lookup()
+sleep(2)
 
 # Arm setup
 arm_family   = "Arm"
@@ -16,13 +19,13 @@ gains_file   = "gains/A-2085-06.xml"
 # Create Arm object
 arm = arm_api.create([arm_family],
                      names=module_names,
-                     hrdf_file=hrdf_file)
+                     hrdf_file=hrdf_file,
+                     lookup=lookup)
+
 arm.load_gains(gains_file)
 
 # mobileIO setup
 phone_name = "mobileIO"
-lookup = hebi.Lookup()
-sleep(2)
 
 # Create mobileIO object
 print('Waiting for Mobile IO device to come online...')
@@ -48,23 +51,31 @@ B4 - Clear waypoints
 B8 - Quit
 """
 print(instructions)
-m.set_text(instructions)
+m.clear_text()
+m.add_text(instructions)
 
 #######################
 ## Main Control Loop ##
 #######################
 
+last_mio_recv = time()
+
 while not abort_flag:
   arm.update() # update the arm
+  arm.send()
 
-  if not m.update():
-    print("Failed to get feedback from MobileIO")
+  t = time()
+  if m.update(0.0):
+    last_mio_recv = t
+  else:
+    if t - last_mio_recv > 1.0:
+      print("Failed to get feedback from MobileIO")
     continue
 
   slider3 = m.get_axis_state(3)
 
   # B8 - Quit
-  if m.get_button_diff(8) == 3: # "ToOn"
+  if m.get_button_diff(8) == 1: # "ToOn"
     m.set_led_color("transparent")
     m.clear_text()
     abort_flag = True
@@ -72,17 +83,17 @@ while not abort_flag:
 
   if run_mode == "training":
     # B1 - add waypoint (stop)
-    if m.get_button_diff(1) == 3: # "ToOn"
+    if m.get_button_diff(1) == 1: # "ToOn"
       print("Stop waypoint added")
       goal.add_waypoint(t=slider3 + 3.0, position=arm.last_feedback.position, velocity=[0]*arm.size)
 
     # B2 - add waypoint (flow)
-    if m.get_button_diff(2) == 3: # "ToOn"
+    if m.get_button_diff(2) == 1: # "ToOn"
       print("Flow waypoint added")
       goal.add_waypoint(t=slider3 + 3.0, position=arm.last_feedback.position)
 
     # B3 - toggle training/playback
-    if m.get_button_diff(3) == 3: # "ToOn"
+    if m.get_button_diff(3) == 1: # "ToOn"
       # Check for more than 2 waypoints
       if goal.waypoint_count > 1:
         print("Switching to playback mode")
@@ -93,13 +104,13 @@ while not abort_flag:
         print("At least two waypoints are needed")
 
     # B4 - clear waypoints
-    if m.get_button_diff(4) == 3: # "ToOn"
+    if m.get_button_diff(4) == 1: # "ToOn"
       print("Waypoints cleared")
       goal.clear()
 
   elif run_mode == "playback":
     # B3 toggle training/playback
-    if m.get_button_diff(3) == 3: # "ToOn"
+    if m.get_button_diff(3) == 1: # "ToOn"
       print("Switching to training mode")
       arm.cancel_goal()
       run_mode = "training"
@@ -108,5 +119,3 @@ while not abort_flag:
     # replay through the path again once the goal has been reached
     if arm.at_goal:
       arm.set_goal(goal)
-
-  arm.send()

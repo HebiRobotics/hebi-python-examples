@@ -48,7 +48,8 @@ print('All done!')
 log = group.stop_log()  
 
 # Offline Visualization
-# Plot the logged position feedback
-hebi.util.plot_logs(log, 'position', figure_spec=101)
-# Plot the logged velocity feedback
-hebi.util.plot_logs(log, 'velocity', figure_spec=102)
+if log is not None:
+  # Plot the logged position feedback
+  hebi.util.plot_logs(log, 'position', figure_spec=101)
+  # Plot the logged velocity feedback
+  hebi.util.plot_logs(log, 'velocity', figure_spec=102)

@@ -64,6 +64,8 @@ while current_time < end_time:
     continue
 
   orient = fbk[0].ar_orientation
+  # reorder w,x,y,z to x,y,z,w
+  orient = [*orient[1:], orient[0]]
 
   try:
     r = R.from_quat(orient)

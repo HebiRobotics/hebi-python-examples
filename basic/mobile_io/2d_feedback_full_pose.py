@@ -64,6 +64,8 @@ while current_time < end_time:
     continue
 
   orient = fbk[0].ar_orientation
+  # reorder w,x,y,z to x,y,z,w
+  orient = [*orient[1:], orient[0]]
   pos = fbk[0].ar_position
   # Scale pos for eye candy
   pos = pos*2
