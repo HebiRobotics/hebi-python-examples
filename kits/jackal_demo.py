@@ -232,7 +232,7 @@ if __name__ == "__main__":
         t = time()
         try:
             base_inputs, arm_inputs, mast_inputs = parse_mobile_feedback(m)
-            base_control.update(t, None)
+            base_control.update(t, base_inputs)
             arm_control.update(t, arm_inputs)
             mast_control.update(t, mast_inputs)
             camera.update()
