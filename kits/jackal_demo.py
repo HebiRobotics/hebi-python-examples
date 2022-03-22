@@ -238,7 +238,7 @@ if __name__ == "__main__":
             camera.update()
             # Update mobileIO stream angle
             if mast_inputs:
-                camera_angle_cmd.io.c.set_float(1, mast_control.camera.roll)
+                camera_angle_cmd.io.c.set_float(2, mast_control.camera.roll)
                 m._group.send_command(camera_angle_cmd)
         except KeyboardInterrupt:
             base_control.transition_to(t, JackalControlState.EXIT)
