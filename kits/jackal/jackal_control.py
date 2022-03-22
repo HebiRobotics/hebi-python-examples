@@ -5,6 +5,7 @@ from time import time, sleep
 from enum import Enum, auto
 import hebi
 from hebi.util import create_mobile_io
+import numpy as np
 
 import typing
 if typing.TYPE_CHECKING:
@@ -29,8 +30,12 @@ class JackalControl:
     def __init__(self, ip: str='localhost', port: int=6000, authkey: bytes=b'test'):
         self.state = JackalControlState.STARTUP
         self.conn = Client((ip, port), authkey=authkey)
-        self.payload = struct.pack('<f', 0.0) + struct.pack('<f', 0.0)
+        self.linear = 0.0
+        self.angular = 0.0
+        self.payload = struct.pack('<f', self.linear) + struct.pack('<f', self.angular)
         self._transition_handlers: 'list[Callable[[JackalControl, JackalControlState], None]]' = []
+        self.trajectory = hebi.trajectory.create_trajectory([0, 0.5], np.zeros((2, 2)))
+        self.last_input_time = 0.0
 
     @property
     def running(self):
@@ -58,7 +63,20 @@ class JackalControl:
                 return True
 
             elif self.state is self.state.TELEOP:
-                self.payload = struct.pack('<f', base_input.linear) + struct.pack('<f', base_input.angular)
+                # replan at 10 Hz
+                if self.trajectory.start_time + 0.1 < t_now:
+                    waypoints = np.empty((2, 2))
+                    waypoints[0, 0] = self.linear
+                    waypoints[0, 1] = base_input.linear
+
+                    waypoints[1, 0] = self.angular
+                    waypoints[1, 1] = base_input.angular
+                    self.trajectory = hebi.trajectory.create_trajectory([t_now, t_now+0.5], waypoints)
+
+                p, _, _ = self.trajectory.get_state(t_now)
+                self.linear = p[0]
+                self.angular = p[0]
+                self.payload = struct.pack('<f', self.linear) + struct.pack('<f', self.angular)
                 return True
 
             elif self.state is self.state.STARTUP:
@@ -75,7 +93,9 @@ class JackalControl:
 
         elif state is self.state.DISCONNECTED:
             print("TRANSITIONING TO STOPPED")
-            self.payload = struct.pack('<f', 0.0) + struct.pack('<f', 0.0)
+            self.linear = 0.0
+            self.angular = 0.0
+            self.payload = struct.pack('<f', self.linear) + struct.pack('<f', self.angular)
 
         elif state is self.state.EXIT:
             print("TRANSITIONING TO EXIT")
