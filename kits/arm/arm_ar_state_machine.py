@@ -132,7 +132,11 @@ class ArmJoystickControl:
         except ValueError:
             pos_curr = self.arm.last_feedback.position
 
-        self.arm.FK(pos_curr, xyz_out=self.xyz_curr, orientation_out=self.rot_curr)
+        try:
+            self.arm.FK(pos_curr, xyz_out=self.xyz_curr, orientation_out=self.rot_curr)
+        except ValueError:
+            print(f'Cannot compute FK with input position: {pos_curr}')
+            exit()
 
         arm_xyz_target = self.xyz_curr + arm_inputs.delta_xyz
 
