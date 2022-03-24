@@ -145,7 +145,7 @@ class MastControl:
 
         self.last_input_time = t_now
         if self.state is self.state.DISCONNECTED:
-            self.transition_to(t_now, self.state.HOMING)
+            self.transition_to(t_now, self.state.TELEOP)
 
         self.camera.zoom_level = inputs.zoom
         self.camera.flood_light = inputs.flood_light

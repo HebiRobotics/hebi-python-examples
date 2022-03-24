@@ -42,6 +42,7 @@ class JackalControl:
         return self.state is not self.state.EXIT
 
     def send(self):
+        self.payload = struct.pack('<f', self.linear) + struct.pack('<f', self.angular)
         self.conn.send_bytes(self.payload)
 
     def update(self, t_now: float, base_input: 'Optional[JackalInputs]'):
@@ -63,20 +64,27 @@ class JackalControl:
                 return True
 
             elif self.state is self.state.TELEOP:
+                _, v, a = self.trajectory.get_state(t_now)
+                self.linear = v[0]
+                self.angular = v[1]
+
                 # replan at 10 Hz
                 if self.trajectory.start_time + 0.1 < t_now:
-                    waypoints = np.empty((2, 2))
-                    waypoints[0, 0] = self.linear
-                    waypoints[0, 1] = base_input.linear
+                    positions = np.zeros((2, 2))
+                    positions[:, 1] = np.nan
 
-                    waypoints[1, 0] = self.angular
-                    waypoints[1, 1] = base_input.angular
-                    self.trajectory = hebi.trajectory.create_trajectory([t_now, t_now+0.5], waypoints)
+                    velocities = np.empty((2, 2))
+                    velocities[0, 0] = self.linear
+                    velocities[0, 1] = base_input.linear
 
-                p, _, _ = self.trajectory.get_state(t_now)
-                self.linear = p[0]
-                self.angular = p[0]
-                self.payload = struct.pack('<f', self.linear) + struct.pack('<f', self.angular)
+                    velocities[1, 0] = self.angular
+                    velocities[1, 1] = base_input.angular
+
+                    accelerations = np.zeros((2, 2))
+                    accelerations[:, 0] = a
+
+                    self.trajectory = hebi.trajectory.create_trajectory([t_now, t_now+0.5], positions, velocities, accelerations)
+
                 return True
 
             elif self.state is self.state.STARTUP:
@@ -95,7 +103,6 @@ class JackalControl:
             print("TRANSITIONING TO STOPPED")
             self.linear = 0.0
             self.angular = 0.0
-            self.payload = struct.pack('<f', self.linear) + struct.pack('<f', self.angular)
 
         elif state is self.state.EXIT:
             print("TRANSITIONING TO EXIT")

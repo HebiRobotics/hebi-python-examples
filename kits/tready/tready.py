@@ -9,11 +9,9 @@ import numpy as np
 import hebi
 from hebi.util import create_mobile_io
 
-from tready_utils import set_mobile_io_instructions, setup_base
-
 import typing
 if typing.TYPE_CHECKING:
-    from typing import Optional
+    from typing import Optional, Callable
     import numpy.typing as npt
     from hebi._internal.group import Group
     from hebi._internal.mobile_io import MobileIO
@@ -164,9 +162,9 @@ class TreadedBase:
         # Otherwise we want it set to False, so clear it now
         self._is_aligning = False
         times = [t_now, t_now + ramp_time]
-        positions = np.empty((4, 2))
-        velocities = np.empty((4, 2))
-        accelerations = np.empty((4, 2))
+        positions = np.empty((4, 2), dtype=np.float64)
+        velocities = np.empty((4, 2), dtype=np.float64)
+        accelerations = np.empty((4, 2), dtype=np.float64)
 
         if self.flipper_traj is not None:
             t = min(t_now, self.flipper_traj.end_time)
@@ -216,7 +214,7 @@ class TreadedBase:
         print("FLIPPER ALIGNMENT OFF")
         self._aligned_flipper_mode = False
 
-    def set_color(self, color):
+    def set_color(self, color: 'hebi.Color | str'):
         color_cmd = hebi.GroupCommand(self.group.size)
         color_cmd.led.color = color
         self.group.send_command(color_cmd)
@@ -227,30 +225,43 @@ class TreadedBase:
         self.group.send_command(color_cmd)
 
 
-class DemoState(Enum):
+class TreadyControlState(Enum):
     STARTUP = auto()
     HOMING = auto()
     TELEOP = auto()
-    STOPPED = auto()
+    DISCONNECTED = auto()
     EXIT = auto()
 
 
-ChassisVelocity = namedtuple('ChassisVelocity', ['x', 'rz'])
-TreadyInputs = namedtuple('TreadyInputs', ['base_motion', 'flippers', 'align_flippers'])
-DemoInputs = namedtuple('DemoInputs', ['should_exit', 'should_reset', 'chassis'])
+class ChassisVelocity:
+    def __init__(self, x: float, rz: float):
+        self.x = x
+        self.rz = rz
+
+
+class TreadyInputs:
+    def __init__(self, home: bool, base_motion: 'ChassisVelocity', flippers: 'list[float]', align_flippers: bool):
+        self.home = home
+        self.base_motion = base_motion
+        self.flippers = flippers
+        self.align_flippers = align_flippers
 
 
 class TreadyControl:
 
     FLIPPER_VEL_SCALE = 1  # rad/sec
 
-    def __init__(self, mobile_io: 'MobileIO', base: TreadedBase):
-        self.state = DemoState(DemoState.STARTUP)
-        self.mobile_io = mobile_io
+    def __init__(self, base: TreadedBase):
+        self.state = TreadyControlState.STARTUP
         self.base = base
 
         self.SPEED_MAX_LIN = 0.15  # m/s
         self.SPEED_MAX_ROT = self.SPEED_MAX_LIN / base.WHEEL_BASE  # rad/s
+        self._transition_handlers: 'list[Callable[[TreadyControl, TreadyControlState], None]]' = []
+
+    @property
+    def running(self):
+        return self.state is not self.state.EXIT
 
     def start_logging(self):
         self.base.group.start_log("logs", mkdirs=True)
@@ -287,70 +298,57 @@ class TreadyControl:
 
         return chassis_vels, flipper_vels
 
-    def update(self, t_now: float, demo_input: 'Optional[DemoInputs]'=None):
-        self.base.update(t_now)
+    def send(self):
         self.base.send()
 
-        if self.state is DemoState.EXIT:
-            return False
+    def update(self, t_now: float, tready_input: 'Optional[TreadyInputs]'=None):
+        self.base.update(t_now)
 
-        if demo_input is None:
+        if self.state is self.state.EXIT:
+            return
+
+        if tready_input is None:
             if t_now - self.mobile_last_fbk_t > 1.0:
                 print("mobileIO timeout, disabling motion")
-                self.transition_to(t_now, DemoState.STOPPED)
-            return True
+                self.transition_to(t_now, self.state.DISCONNECTED)
+            return
         else:
             self.mobile_last_fbk_t = t_now
 
-            if demo_input.should_exit:
-                self.transition_to(t_now, DemoState.EXIT)
-                return True
+            if tready_input.home:
+                self.transition_to(t_now, self.state.HOMING)
 
-            elif demo_input.should_reset:
-                self.transition_to(t_now, DemoState.HOMING)
-                return True
-
-            elif self.state is DemoState.STOPPED:
+            elif self.state is self.state.DISCONNECTED:
                 self.mobile_last_fbk_t = t_now
-                self.transition_to(t_now, DemoState.TELEOP)
-                return True
+                self.transition_to(t_now, self.state.TELEOP)
 
-            elif self.state is DemoState.HOMING:
+            elif self.state is self.state.HOMING:
                 base_complete = not self.base.has_active_trajectory
                 if base_complete:
-                    self.transition_to(t_now, DemoState.TELEOP)
-                return True
+                    self.transition_to(t_now, self.state.TELEOP)
 
-            elif self.state is DemoState.TELEOP:
-                desired_flipper_mode = demo_input.chassis.align_flippers
+            elif self.state is self.state.TELEOP:
+                desired_flipper_mode = tready_input.align_flippers
                 if self.base.aligned_flipper_mode != desired_flipper_mode:
                     self.base.aligned_flipper_mode = desired_flipper_mode
                 elif self.base.is_aligning:
                     # ignore new base commands while flippers are aligning
                     pass
                 else:
-                    chassis_vels, flipper_vels = self.compute_velocities(demo_input.chassis)
+                    chassis_vels, flipper_vels = self.compute_velocities(tready_input)
                     self.base.set_chassis_vel_trajectory(t_now, self.base.chassis_ramp_time, chassis_vels)
                     self.base.set_flipper_trajectory(t_now, self.base.flipper_ramp_time, v=flipper_vels)
 
-                return True
+            elif self.state is self.state.STARTUP:
+                self.transition_to(t_now, self.state.HOMING)
 
-            elif self.state is DemoState.STARTUP:
-                self.transition_to(t_now, DemoState.HOMING)
-                return True
-
-    def transition_to(self, t_now: float, state: DemoState):
+    def transition_to(self, t_now: float, state: TreadyControlState):
         # self transitions are noop
         if state == self.state:
             return
 
-        if state is DemoState.HOMING:
+        if state is self.state.HOMING:
             print("TRANSITIONING TO HOMING")
-            self.base.set_color('magenta')
-            msg = ('Robot Homing Sequence\n'
-                   'Please wait...')
-            set_mobile_io_instructions(self.mobile_io, msg, color="blue")
-
             # build trajectory
             flipper_home = np.array([-1, 1, 1, -1]) * np.deg2rad(15 + 45)
             self.base.set_chassis_vel_trajectory(t_now, 0.25, [0, 0, 0])
@@ -358,31 +356,19 @@ class TreadyControl:
             self.base.set_flipper_trajectory(t_now, 5.0, p=flipper_home)
             #print(f'Flipper Home: {flipper_home}')
 
-        elif state is DemoState.TELEOP:
+        elif state is self.state.TELEOP:
             print("TRANSITIONING TO TELEOP")
-            self.base.clear_color()
-            msg = ('Robot Ready to Control\n'
-                   'B1: Reset\n'
-                   'B6: Joined Flipper\n'
-                   'B8 - Quit')
-            set_mobile_io_instructions(self.mobile_io, msg, color="green")
 
-        elif state is DemoState.STOPPED:
+        elif state is self.state.DISCONNECTED:
             print("TRANSITIONING TO STOPPED")
             self.base.chassis_traj = None
             self.base.flipper_traj = None
-            self.base.set_color('blue')
 
-        elif state is DemoState.EXIT:
+        elif state is self.state.EXIT:
             print("TRANSITIONING TO EXIT")
-            self.base.set_color("red")
 
-            # unset mobileIO control config
-            self.mobile_io.set_button_mode(6, 0)
-            self.mobile_io.set_button_output(1, 0)
-            self.mobile_io.set_button_output(8, 0)
-            set_mobile_io_instructions(self.mobile_io, 'Demo Stopped', color="red")
-
+        for handler in self._transition_handlers:
+            handler(self, state)
         self.state = state
 
 
@@ -419,7 +405,6 @@ def config_mobile_io(m: 'MobileIO'):
     m.set_button_output(quit_btn, 1)
 
     def parse_mobile_io_feedback(m: 'MobileIO'):
-        should_exit = m.get_button_state(quit_btn)
         should_reset = m.get_button_state(reset_pose_btn)
         # Chassis Control
         aligned_flipper_mode = m.get_button_state(joined_flipper_btn)
@@ -432,17 +417,16 @@ def config_mobile_io(m: 'MobileIO'):
         flip3 = m.get_axis_state(slider_flip3)
         flip4 = m.get_axis_state(slider_flip4)
 
-        tready_inputs = TreadyInputs(
-            ChassisVelocity(joy_vel_fwd, joy_vel_rot),
-            [flip1, flip2, flip3, flip4],
-            aligned_flipper_mode)
-
-        return DemoInputs(should_exit, should_reset, tready_inputs)
+        return TreadyInputs(should_reset,
+                            ChassisVelocity(joy_vel_fwd, joy_vel_rot),
+                            [flip1, flip2, flip3, flip4],
+                            aligned_flipper_mode)
 
     return parse_mobile_io_feedback
 
 
 if __name__ == "__main__":
+    from tready_utils import set_mobile_io_instructions, setup_base
 
     lookup = hebi.Lookup()
     sleep(2)
@@ -465,24 +449,61 @@ if __name__ == "__main__":
     print("mobileIO device found.")
     input_parser = config_mobile_io(m)
 
-    demo_controller = TreadyControl(m, base)
+    demo_controller = TreadyControl(base)
+
+    def update_mobile_io(controller: TreadyControl, new_state: TreadyControlState):
+        if new_state is controller.state.HOMING:
+            controller.base.set_color('magenta')
+            msg = ('Robot Homing Sequence\n'
+                   'Please wait...')
+            set_mobile_io_instructions(m, msg, color="blue")
+
+        elif new_state is controller.state.TELEOP:
+            controller.base.clear_color()
+            msg = ('Robot Ready to Control\n'
+                   'B1: Reset\n'
+                   'B6: Joined Flipper\n'
+                   'B8 - Quit')
+            set_mobile_io_instructions(m, msg, color="green")
+
+        elif new_state is controller.state.DISCONNECTED:
+            controller.base.set_color('blue')
+
+        elif new_state is controller.state.EXIT:
+            controller.base.set_color("red")
+
+            # unset mobileIO control config
+            m.set_button_mode(6, 0)
+            m.set_button_output(1, 0)
+            m.set_button_output(8, 0)
+            set_mobile_io_instructions(m, 'Demo Stopped', color="red")
+
+    demo_controller._transition_handlers.append(update_mobile_io)
 
     #######################
     ## Main Control Loop ##
     #######################
 
-    should_continue = True
     demo_controller.start_logging()
     last_log_start_time = time()
-    while should_continue:
+    while demo_controller.running:
         t = time()
         demo_inputs = None
         if m.update(0.0):
             demo_inputs = input_parser(m)
 
-        should_continue = demo_controller.update(t, demo_inputs)
+        try:
+            demo_controller.update(t, demo_inputs)
+            demo_controller.send()
+        except KeyboardInterrupt:
+            demo_controller.transition_to(t, TreadyControlState.EXIT)
+
+        if m.get_button_state(8):
+            demo_controller.transition_to(t, TreadyControlState.EXIT)
+
         if t - last_log_start_time > 3600:
             demo_controller.cycle_log()
             last_log_start_time = t
+
 
     sys.exit(0)
