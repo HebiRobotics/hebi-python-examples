@@ -20,7 +20,7 @@ class HebiCamera:
         self.cmd = hebi.GroupCommand(self.group.size)
 
     def update(self):
-        self.group.get_next_feedback(reuse_fbk=self.fbk)
+        self.group.get_next_feedback(reuse_fbk=self.fbk, timeout_ms=0.0)
         self.update_image_rotation()
 
     def send(self):
