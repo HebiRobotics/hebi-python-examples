@@ -10,7 +10,7 @@ from scipy.spatial.transform import Rotation as R
 import hebi
 from hebi.util import create_mobile_io
 
-from tready import TreadedBase, TreadyControl, DemoState, ChassisVelocity, TreadyInputs
+from tready import TreadedBase, TreadyControl, TreadyControlState, ChassisVelocity, TreadyInputs
 from tready_utils import set_mobile_io_instructions, setup_base, setup_arm_6dof
 
 import typing
@@ -105,34 +105,34 @@ class TreadyArmJoystickControl(TreadyControl):
         self.base.send()
         self.arm.send()
 
-        if self.state is DemoState.EXIT:
+        if self.state is TreadyControlState.EXIT:
             return False
 
         if demo_input is None:
             if t_now - self.mobile_last_fbk_t > 1.0:
                 print("mobileIO timeout, disabling motion")
-                self.transition_to(t_now, DemoState.STOPPED)
+                self.transition_to(t_now, TreadyControlState.DISCONNECTED)
             return True
 
         self.mobile_last_fbk_t = t_now
 
         if demo_input.should_exit:
-            self.transition_to(t_now, DemoState.EXIT)
+            self.transition_to(t_now, TreadyControlState.EXIT)
         elif demo_input.should_reset:
-            self.transition_to(t_now, DemoState.HOMING)
+            self.transition_to(t_now, TreadyControlState.HOMING)
 
-        if self.state is DemoState.STOPPED:
+        if self.state is TreadyControlState.DISCONNECTED:
             self.mobile_last_fbk_t = t_now
-            self.transition_to(t_now, DemoState.TELEOP)
+            self.transition_to(t_now, TreadyControlState.TELEOP)
             return True
 
-        elif self.state is DemoState.HOMING:
+        elif self.state is TreadyControlState.HOMING:
             base_complete = not self.base.has_active_trajectory
             if base_complete and self.arm.at_goal:
-                self.transition_to(t_now, DemoState.TELEOP)
+                self.transition_to(t_now, TreadyControlState.TELEOP)
             return True
 
-        elif self.state is DemoState.TELEOP:
+        elif self.state is TreadyControlState.TELEOP:
             desired_flipper_mode = demo_input.chassis.align_flippers
             if self.base.aligned_flipper_mode != desired_flipper_mode:
                 self.base.aligned_flipper_mode = desired_flipper_mode
@@ -154,16 +154,16 @@ class TreadyArmJoystickControl(TreadyControl):
 
             return True
 
-        elif self.state is DemoState.STARTUP:
-            self.transition_to(t_now, DemoState.HOMING)
+        elif self.state is TreadyControlState.STARTUP:
+            self.transition_to(t_now, TreadyControlState.HOMING)
             return True
 
-    def transition_to(self, t_now: float, state: DemoState):
+    def transition_to(self, t_now: float, state: TreadyControlState):
         # self transitions are noop
         if state == self.state:
             return
 
-        if state is DemoState.HOMING:
+        if state is TreadyControlState.HOMING:
             print("TRANSITIONING TO HOMING")
             self.base.set_color('magenta')
             msg = ('Robot Homing Sequence\n'
@@ -179,19 +179,19 @@ class TreadyArmJoystickControl(TreadyControl):
             g.add_waypoint(position=self.arm_home)
             self.arm.set_goal(g)
 
-        elif state is DemoState.TELEOP:
+        elif state is TreadyControlState.TELEOP:
             print("TRANSITIONING TO TELEOP")
             base.clear_color()
             # Print Instructions
             set_mobile_io_mode_text(self.mobile_io, 2)
 
-        elif state is DemoState.STOPPED:
+        elif state is TreadyControlState.DISCONNECTED:
             print("TRANSITIONING TO STOPPED")
             self.base.chassis_traj = None
             self.base.flipper_traj = None
             self.base.set_color('blue')
 
-        elif state is DemoState.EXIT:
+        elif state is TreadyControlState.EXIT:
             print("TRANSITIONING TO EXIT")
             self.base.set_color("red")
 

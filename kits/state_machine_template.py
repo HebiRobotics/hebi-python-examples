@@ -6,7 +6,7 @@ from hebi.util import create_mobile_io
 
 import typing
 if typing.TYPE_CHECKING:
-    from typing import Optional
+    from typing import Optional, Callable
     from hebi._internal.mobile_io import MobileIO
 
 
@@ -26,6 +26,7 @@ class Inputs:
 class Control:
     def __init__(self):
         self.state = ControlState.STARTUP
+        self._transition_handlers: 'list[Callable[[Control, ControlState], None]]' = []
 
     @property
     def running(self):
@@ -74,6 +75,8 @@ class Control:
         elif state is self.state.EXIT:
             print("TRANSITIONING TO EXIT")
 
+        for handler in self._transition_handlers:
+            handler(self, state)
         self.state = state
 
 

@@ -44,15 +44,18 @@ class ArmMobileIOInputs:
 
 
 class ArmJoystickControl:
-    def __init__(self, arm: hebi.arm.Arm, home_pose: 'Sequence[float] | npt.NDArray[np.float64]', homing_time: float=5.0):
+    def __init__(self, arm: hebi.arm.Arm, home_pose: 'Sequence[float] | npt.NDArray[np.float64]', homing_time: float=5.0, shoulder_flip_angle=-np.pi/2):
         self.state = ArmControlState.STARTUP
         self.arm = arm
 
         self.arm_home = home_pose
         self.homing_time = homing_time
+        # TODO: GENERALIZE THIS
+        self.shoulder_flip_angle = shoulder_flip_angle
 
         self.xyz_curr = np.empty(3)
         self.rot_curr = np.empty((3, 3))
+        self.joint_target = arm.last_feedback.position_command
 
     @property
     def running(self):
@@ -68,7 +71,7 @@ class ArmJoystickControl:
             return
 
         if demo_input is None:
-            if t_now - self.mobile_last_fbk_t > 1.0:
+            if t_now - self.mobile_last_fbk_t > 1.0 and self.state is not self.state.DISCONNECTED:
                 print("mobileIO timeout, disabling motion")
                 self.transition_to(t_now, self.state.DISCONNECTED)
             return
@@ -81,6 +84,7 @@ class ArmJoystickControl:
 
         elif self.state is self.state.HOMING:
             if self.arm.at_goal:
+                self.joint_target = self.arm.last_feedback.position_command
                 self.transition_to(t_now, self.state.TELEOP)
 
         elif self.state is self.state.TELEOP:
@@ -89,8 +93,8 @@ class ArmJoystickControl:
                 return
 
             arm_goal = self.compute_arm_goal(demo_input)
-            if arm_goal is not None:
-                self.arm.set_goal(arm_goal)
+            self.arm.set_goal(arm_goal)
+
             gripper_closed = self.arm.end_effector.state == 1.0
             if demo_input.gripper_closed and not gripper_closed:
                 self.arm.end_effector.close()
@@ -124,18 +128,16 @@ class ArmJoystickControl:
 
     def compute_arm_goal(self, arm_inputs: ArmJoystickInputs):
         arm_goal = hebi.arm.Goal(self.arm.size)
-        try:
-            pos_curr = self.arm.last_feedback.position_command
-            if np.any(pos_curr == np.nan):
-                pos_curr = self.arm.last_feedback.position
+        pos_curr = self.arm.last_feedback.position_command
 
-        except ValueError:
+        if np.any(np.isnan(pos_curr)):
+            print('No position command, falling back to feedback position')
             pos_curr = self.arm.last_feedback.position
 
         try:
             self.arm.FK(pos_curr, xyz_out=self.xyz_curr, orientation_out=self.rot_curr)
         except ValueError:
-            print(f'Cannot compute FK with input position: {pos_curr}')
+            print(f'ERROR: Cannot compute FK with input position: {pos_curr}')
             exit()
 
         arm_xyz_target = self.xyz_curr + arm_inputs.delta_xyz
@@ -145,15 +147,19 @@ class ArmJoystickControl:
         r_z = R.from_euler('z', arm_inputs.delta_rot_xyz[2])
         arm_rot_target = R.from_matrix(self.rot_curr) * r_x * r_y * r_z
 
-        curr_seed_ik = pos_curr
-        curr_seed_ik[2] = abs(curr_seed_ik[2])
+        #curr_seed_ik = pos_curr
+        #curr_seed_ik[2] = abs(curr_seed_ik[2])
 
-        joint_target = self.arm.ik_target_xyz_so3(
-            curr_seed_ik,
+        if self.joint_target[2] < self.shoulder_flip_angle:
+            diff = abs(self.joint_target[2] - self.shoulder_flip_angle)
+            self.joint_target[2] = self.shoulder_flip_angle + diff
+
+        self.joint_target = self.arm.ik_target_xyz_so3(
+            self.joint_target,
             arm_xyz_target,
             arm_rot_target.as_matrix())
 
-        arm_goal.add_waypoint(position=joint_target)
+        arm_goal.add_waypoint(position=self.joint_target)
         return arm_goal
 
 
