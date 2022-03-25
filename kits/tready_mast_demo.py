@@ -189,7 +189,7 @@ if __name__ == "__main__":
     module_names = ['J1_pan', 'J2_tilt']
 
     arm = setup_arm_6dof(lookup, 'Arm')
-    arm_control = ArmJoystickControl(arm, [-0.5, -1.9, 0.8, 0, 0.6, -0.4], homing_time=7.0)
+    arm_control = ArmJoystickControl(arm, [-0.5, -2, 1, 0, 0.5, -0.5], homing_time=7.0)
 
     group = lookup.get_group_from_names(family, module_names)
     while group is None:
@@ -260,7 +260,7 @@ if __name__ == "__main__":
             # Update mobileIO stream angle
             if mast_inputs:
                 camera_angle_cmd.io.c.set_float(1, mast_control.camera.roll)
-                camera_angle_cmd.io.c.set_float(2, camera.roll)
+                camera_angle_cmd.io.c.set_float(2, 0.0)
                 m._group.send_command(camera_angle_cmd)
         except KeyboardInterrupt:
             base_control.transition_to(t, TreadyControlState.EXIT)
