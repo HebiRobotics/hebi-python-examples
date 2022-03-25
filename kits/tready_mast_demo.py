@@ -189,7 +189,16 @@ if __name__ == "__main__":
     module_names = ['J1_pan', 'J2_tilt']
 
     arm = setup_arm_6dof(lookup, 'Arm')
-    arm_control = ArmJoystickControl(arm, [-0.5, -2, 1, 0, 0.5, -0.5], homing_time=7.0)
+    joint_limits = np.empty((6, 2))
+    joint_limits[:, 0] = -np.inf
+    joint_limits[:, 1] = np.inf
+
+    # base limits [-2, 2] (radians)
+    joint_limits[0, :] = [-2.0, 2.0]
+    # shoulder limits [-2, inf]
+    joint_limits[1, 0] = -2.0
+
+    arm_control = ArmJoystickControl(arm, [-0.5, -2, 1, 0, 0.5, -0.5], homing_time=7.0, joint_limits=joint_limits)
 
     group = lookup.get_group_from_names(family, module_names)
     while group is None:
@@ -249,6 +258,7 @@ if __name__ == "__main__":
     #######################
     camera_angle_cmd = hebi.GroupCommand(1)
 
+    m.set_led_color('blue')
     while base_control.running and arm_control.running and mast_control.running:
         t = time()
         try:
@@ -266,6 +276,7 @@ if __name__ == "__main__":
             base_control.transition_to(t, TreadyControlState.EXIT)
             arm_control.transition_to(t, ArmControlState.EXIT)
             mast_control.transition_to(t, MastControlState.EXIT)
+            m.set_led_color('red')
 
         # Update wide-angle camera flood light
         if m.get_button_state(2):

@@ -44,7 +44,7 @@ class ArmMobileIOInputs:
 
 
 class ArmJoystickControl:
-    def __init__(self, arm: hebi.arm.Arm, home_pose: 'Sequence[float] | npt.NDArray[np.float64]', homing_time: float=5.0, shoulder_flip_angle=-np.pi/2):
+    def __init__(self, arm: hebi.arm.Arm, home_pose: 'Sequence[float] | npt.NDArray[np.float64]', homing_time: float=5.0, shoulder_flip_angle=-np.pi/2, joint_limits=None):
         self.state = ArmControlState.STARTUP
         self.arm = arm
 
@@ -52,6 +52,12 @@ class ArmJoystickControl:
         self.homing_time = homing_time
         # TODO: GENERALIZE THIS
         self.shoulder_flip_angle = shoulder_flip_angle
+        if joint_limits is not None:
+            self.joint_limits = joint_limits
+        else:
+            self.joint_limits = np.empty((arm.size, 2))
+            self.joint_limits[:, 0] = -np.inf
+            self.joint_limits[:, 1] = np.inf
 
         self.xyz_curr = np.empty(3)
         self.rot_curr = np.empty((3, 3))
@@ -154,10 +160,18 @@ class ArmJoystickControl:
             diff = abs(self.joint_target[2] - self.shoulder_flip_angle)
             self.joint_target[2] = self.shoulder_flip_angle + diff
 
-        self.joint_target = self.arm.ik_target_xyz_so3(
+        joint_target = self.arm.ik_target_xyz_so3(
             self.joint_target,
             arm_xyz_target,
             arm_rot_target.as_matrix())
+
+        out_of_bounds = False
+        for idx, joint in enumerate(joint_target):
+            if joint < self.joint_limits[idx, 0] or joint > self.joint_limits[idx, 1]:
+                out_of_bounds = True
+
+        if not out_of_bounds:
+            self.joint_target = joint_target
 
         arm_goal.add_waypoint(position=self.joint_target)
         return arm_goal
