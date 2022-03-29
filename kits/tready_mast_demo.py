@@ -101,12 +101,28 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_axis_label(6, 'rear', blocking=False)
     m.set_snap(6, 0)
 
+    m.set_axis_label(1, '')
+    m.set_axis_label(7, '')
+    if m.get_button_state(5):
+        m.set_axis_label(2, 'rotate')
+        m.set_axis_label(8, 'translate')
+    else:
+        m.set_axis_label(2, 'pan/tilt')
+        m.set_axis_label(8, 'drive')
+
 
 def parse_mobile_feedback(m: 'MobileIO'):
     if not m.update(0.0):
         return None, None, None
 
     home = m.get_button_state(1)
+
+    if m.get_button_diff(5) == 1:
+        m.set_axis_label(2, 'rotate')
+        m.set_axis_label(8, 'translate')
+    elif m.get_button_diff(5) == -1:
+        m.set_axis_label(2, 'pan/tilt')
+        m.set_axis_label(8, 'drive')
 
     if m.get_button_state(5):
         base_x = 0.0
@@ -131,7 +147,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
         mast_tilt = m.get_axis_state(2)
 
         base_x = m.get_axis_state(8)
-        base_rz = m.get_axis_state(7)
+        base_rz = m.get_axis_state(7) * 2.0
 
         arm_dx = 0.0
         arm_dy = 0.0
@@ -188,7 +204,7 @@ if __name__ == "__main__":
     family = "Mast"
     module_names = ['J1_pan', 'J2_tilt']
 
-    arm = setup_arm_6dof(lookup, 'Arm')
+    arm = setup_arm_6dof(lookup, 'Tready')
     joint_limits = np.empty((6, 2))
     joint_limits[:, 0] = -np.inf
     joint_limits[:, 1] = np.inf
