@@ -92,8 +92,6 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_button_mode(7, 1)
     m.set_button_label(8, '\u21E9', blocking=False)
 
-    m.set_axis_label(3, 'wrist', blocking=False)
-    m.set_snap(3, 0)
     m.set_axis_label(4, '\U0001F50E', blocking=False)
     m.set_axis_value(4, -0.9)
     m.set_axis_label(5, 'front', blocking=False)
@@ -113,17 +111,21 @@ def setup_mobile_io(m: 'MobileIO'):
     else:
         m.set_axis_label(2, 'pan/tilt')
         m.set_axis_label(8, 'drive')
-        m.set_axis_label(3, '', blocking=False)
+        m.set_axis_label(3, '\U0001F4A1', blocking=False)
         m.set_snap(3, np.nan)
+        m.set_axis_value(3, -0.9)
 
+light_level = 0.0
 
 def parse_mobile_feedback(m: 'MobileIO'):
+    global light_level
     if not m.update(0.0):
         return None, None, None
 
     home = m.get_button_state(1)
 
     if m.get_button_diff(5) == 1:
+        light_level = (m.get_axis_state(3) + 1.0) / 2.0
         m.set_axis_label(2, 'rotate')
         m.set_axis_label(8, 'translate')
         m.set_axis_label(3, 'wrist', blocking=False)
@@ -131,8 +133,9 @@ def parse_mobile_feedback(m: 'MobileIO'):
     elif m.get_button_diff(5) == -1:
         m.set_axis_label(2, 'pan/tilt')
         m.set_axis_label(8, 'drive')
-        m.set_axis_label(3, '', blocking=False)
+        m.set_axis_label(3, '\U0001F4A1', blocking=False)
         m.set_snap(3, np.nan)
+        m.set_axis_value(3, light_level * 2.0 - 1.0)
 
     if m.get_button_state(5):
         base_x = 0.0
@@ -159,6 +162,8 @@ def parse_mobile_feedback(m: 'MobileIO'):
         base_x = m.get_axis_state(8)
         base_rz = m.get_axis_state(7) * 2.0
 
+        light_level = (m.get_axis_state(3) + 1.0) / 2.0
+
         arm_dx = 0.0
         arm_dy = 0.0
         arm_dz = 0.0
@@ -169,9 +174,6 @@ def parse_mobile_feedback(m: 'MobileIO'):
 
     gripper_closed = m.get_button_state(7)
 
-    # rescale slider to range [0, 1]
-    #light_level = (m.get_axis_state(4) + 1.0) / 2.0
-    light_level = 1.0
     flood_light = 0.0
     if m.get_button_state(3):
         flood_light = light_level
@@ -307,8 +309,7 @@ if __name__ == "__main__":
 
         # Update wide-angle camera flood light
         if m.get_button_state(2):
-            #camera.flood_light = (m.get_axis_state(4) + 1.0) / 2.0
-            camera.flood_light = 1.0
+            camera.flood_light = light_level
         else:
             camera.flood_light = 0.0
 
