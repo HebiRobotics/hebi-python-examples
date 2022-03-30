@@ -130,8 +130,8 @@ def parse_mobile_feedback(m: 'MobileIO'):
         mast_pan = 0.0
         mast_tilt = 0.0
 
-        arm_dx =  0.3 * m.get_axis_state(8)
-        arm_dy = -0.3 * m.get_axis_state(7)
+        arm_dx =  0.25 * m.get_axis_state(8)
+        arm_dy = -0.25 * m.get_axis_state(7)
 
         arm_dz = 0.0
         if m.get_button_state(6):
