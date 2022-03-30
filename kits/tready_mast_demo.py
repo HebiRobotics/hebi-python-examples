@@ -100,15 +100,21 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_snap(5, 0)
     m.set_axis_label(6, 'rear', blocking=False)
     m.set_snap(6, 0)
+    #m.set_axis_label(6, '\U0001F4A1', blocking=False)
+    #m.set_axis_value(6, -0.9)
 
     m.set_axis_label(1, '')
     m.set_axis_label(7, '')
     if m.get_button_state(5):
         m.set_axis_label(2, 'rotate')
         m.set_axis_label(8, 'translate')
+        m.set_axis_label(3, 'wrist', blocking=False)
+        m.set_snap(3, 0)
     else:
         m.set_axis_label(2, 'pan/tilt')
         m.set_axis_label(8, 'drive')
+        m.set_axis_label(3, '', blocking=False)
+        m.set_snap(3, np.nan)
 
 
 def parse_mobile_feedback(m: 'MobileIO'):
@@ -120,9 +126,13 @@ def parse_mobile_feedback(m: 'MobileIO'):
     if m.get_button_diff(5) == 1:
         m.set_axis_label(2, 'rotate')
         m.set_axis_label(8, 'translate')
+        m.set_axis_label(3, 'wrist', blocking=False)
+        m.set_snap(3, 0)
     elif m.get_button_diff(5) == -1:
         m.set_axis_label(2, 'pan/tilt')
         m.set_axis_label(8, 'drive')
+        m.set_axis_label(3, '', blocking=False)
+        m.set_snap(3, np.nan)
 
     if m.get_button_state(5):
         base_x = 0.0
@@ -143,8 +153,8 @@ def parse_mobile_feedback(m: 'MobileIO'):
         arm_dry = -0.5 * m.get_axis_state(2)
         arm_drz = 0.75 * m.get_axis_state(3)
     else:
-        mast_pan = -1.0 * m.get_axis_state(1)
-        mast_tilt = m.get_axis_state(2)
+        mast_pan = -1.0 * np.sign(m.get_axis_state(1)) * m.get_axis_state(1)**2
+        mast_tilt = np.sign(m.get_axis_state(2)) * m.get_axis_state(2)**2
 
         base_x = m.get_axis_state(8)
         base_rz = m.get_axis_state(7) * 2.0
