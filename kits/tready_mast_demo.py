@@ -141,7 +141,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
 
         arm_drx =  0.5 * m.get_axis_state(1)
         arm_dry = -0.5 * m.get_axis_state(2)
-        arm_drz = 0.5 * m.get_axis_state(3)
+        arm_drz = 0.75 * m.get_axis_state(3)
     else:
         mast_pan = -1.0 * m.get_axis_state(1)
         mast_tilt = m.get_axis_state(2)

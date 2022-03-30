@@ -151,7 +151,8 @@ class ArmJoystickControl:
         r_x = R.from_euler('x', arm_inputs.delta_rot_xyz[0])
         r_y = R.from_euler('y', arm_inputs.delta_rot_xyz[1])
         r_z = R.from_euler('z', arm_inputs.delta_rot_xyz[2])
-        arm_rot_target = R.from_matrix(self.rot_curr) * r_x * r_y * r_z
+        wrist_rot = R.from_euler('z', -pos_curr[5])
+        arm_rot_target = R.from_matrix(self.rot_curr) * wrist_rot * r_x * r_y * r_z * wrist_rot.inv()
 
         #curr_seed_ik = pos_curr
         #curr_seed_ik[2] = abs(curr_seed_ik[2])
