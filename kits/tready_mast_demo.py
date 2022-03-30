@@ -92,9 +92,9 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_button_mode(7, 1)
     m.set_button_label(8, '\u21E9', blocking=False)
 
-    m.set_axis_label(3, '\U0001F50E', blocking=False)
-    m.set_axis_value(3, -0.9)
-    m.set_axis_label(4, '\U0001F4A1', blocking=False)
+    m.set_axis_label(3, 'wrist', blocking=False)
+    m.set_snap(3, 0)
+    m.set_axis_label(4, '\U0001F50E', blocking=False)
     m.set_axis_value(4, -0.9)
     m.set_axis_label(5, 'front', blocking=False)
     m.set_snap(5, 0)
@@ -141,7 +141,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
 
         arm_drx =  0.5 * m.get_axis_state(1)
         arm_dry = -0.5 * m.get_axis_state(2)
-        arm_drz = 0.0
+        arm_drz = 0.5 * m.get_axis_state(3)
     else:
         mast_pan = -1.0 * m.get_axis_state(1)
         mast_tilt = m.get_axis_state(2)
@@ -160,7 +160,8 @@ def parse_mobile_feedback(m: 'MobileIO'):
     gripper_closed = m.get_button_state(7)
 
     # rescale slider to range [0, 1]
-    light_level = (m.get_axis_state(4) + 1.0) / 2.0
+    #light_level = (m.get_axis_state(4) + 1.0) / 2.0
+    light_level = 1.0
     flood_light = 0.0
     if m.get_button_state(3):
         flood_light = light_level
@@ -169,7 +170,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
     if m.get_button_state(4):
         spot_light = light_level
 
-    camera_zoom = m.get_axis_state(3)
+    camera_zoom = (m.get_axis_state(4) + 1.0) / 2.0
     
     flipper1 = m.get_axis_state(5)
     flipper4 = m.get_axis_state(6)
@@ -296,7 +297,8 @@ if __name__ == "__main__":
 
         # Update wide-angle camera flood light
         if m.get_button_state(2):
-            camera.flood_light = (m.get_axis_state(4) + 1.0) / 2.0
+            #camera.flood_light = (m.get_axis_state(4) + 1.0) / 2.0
+            camera.flood_light = 1.0
         else:
             camera.flood_light = 0.0
 
