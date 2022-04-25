@@ -118,7 +118,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
         mast_pan = 0.0
         mast_tilt = 0.0
 
-        arm_dx =  0.3 * m.get_axis_state(8)
+        arm_dx = 0.3 * m.get_axis_state(8)
         arm_dy = -0.3 * m.get_axis_state(7)
 
         arm_dz = 0.0
@@ -127,7 +127,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
         elif m.get_button_state(8):
             arm_dz = -0.1
 
-        arm_drx =  0.5 * m.get_axis_state(1)
+        arm_drx = 0.5 * m.get_axis_state(1)
         arm_dry = -0.5 * m.get_axis_state(2)
         arm_drz = 0.0
     else:
@@ -186,7 +186,17 @@ if __name__ == "__main__":
     module_names = ['J1_pan', 'J2_tilt']
 
     arm = setup_arm_6dof(lookup, 'Jackal')
-    arm_control = ArmJoystickControl(arm, [0, -2, 1, 0, 0.5, 0], homing_time=7.0)
+
+    joint_limits = np.empty((6, 2))
+    joint_limits[:, 0] = -np.inf
+    joint_limits[:, 1] = np.inf
+
+    # base limits [-2, 2] (radians)
+    joint_limits[0, :] = [-2.0, 2.0]
+    # shoulder limits [-2, inf]
+    joint_limits[1, 0] = -2.0
+
+    arm_control = ArmJoystickControl(arm, [0, -2, 1, 0, 0.5, 0], homing_time=7.0, joint_limits=joint_limits)
 
     group = lookup.get_group_from_names(family, module_names)
     while group is None:
