@@ -54,13 +54,13 @@ if __name__ == "__main__":
         exit(1)
 
     # need these b/c MAPS joint zeros are in different locations
-    angle_offsets = np.array([0.0, np.pi/2, -np.pi, -np.pi/2, -np.pi/2, -np.pi/2, 0.0])
+    angle_offsets = np.array([0.0, np.pi / 2, -np.pi, -np.pi / 2, -np.pi / 2, -np.pi / 2, 0.0])
     input_arm = ContinuousAngleMaps(maps_group, angle_offsets)
     output_arm = hebi.arm.create(
-            ['Arm'],
-            ['J1_base', 'J2A_shoulder1', 'J3_shoulder2', 'J4_elbow1', 'J5_elbow2', 'J6_wrist1', 'J7_wrist2'],
-            hrdf_file='hrdf/A-2303-01.hrdf',
-            lookup=lookup)
+        ['Arm'],
+        ['J1_base', 'J2A_shoulder1', 'J3_shoulder2', 'J4_elbow1', 'J5_elbow2', 'J6_wrist1', 'J7_wrist2'],
+        hrdf_file='hrdf/A-2303-01.hrdf',
+        lookup=lookup)
 
     mirror_group = lookup.get_group_from_names(['Arm'], ['J2B_shoulder1'])
     while mirror_group is None:
@@ -102,7 +102,7 @@ if __name__ == "__main__":
     input_arm.update()
     output_arm.update()
 
-    output_joints_home = [0.0, -1.0, 0.0, -0.6, -np.pi/2, 1.0, 0.0]
+    output_joints_home = [0.0, -1.0, 0.0, -0.6, -np.pi / 2, 1.0, 0.0]
     # allowed angular difference (°) per joint before starting align
     allowed_diff = np.array([30.0, 20.0, 30.0, 20.0, 45.0, 45.0, 360.0])
 
