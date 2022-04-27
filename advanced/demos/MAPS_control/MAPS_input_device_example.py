@@ -211,7 +211,11 @@ class LeaderFollowerControl:
 
         elif state is self.state.ALIGNED:
             print("TRANSITIONING TO ALIGNED")
-            self.output_arm_home = self.output_arm.last_feedback.position_command
+            curr_pos = self.output_arm.last_feedback.position_command
+            if np.any(np.isnan(curr_pos)):
+                curr_pos = self.output_arm.last_feedback.position
+
+            self.output_arm_home = curr_pos
             self.output_arm.FK(self.output_arm_home,
                                xyz_out=self.output_xyz_home,
                                orientation_out=self.output_rot_home)
