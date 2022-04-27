@@ -64,6 +64,7 @@ class LeaderFollowerControlState(Enum):
     ALIGNING = auto()
     ALIGNED = auto()
     DISCONNECTED = auto()
+    MSTOPPED = auto()
     EXIT = auto()
 
 
@@ -107,6 +108,9 @@ class LeaderFollowerControl:
         if self.state is self.state.EXIT:
             return
 
+        if not np.all(self.output_arm.last_feedback.mstop_state):
+            self.transition_to(self.state.MSTOPPED)
+
         if not command_input:
             if t_now - self.last_input_time > 1.0 and self.state is not self.state.DISCONNECTED:
                 print("mobileIO timeout, disabling motion")
@@ -117,6 +121,10 @@ class LeaderFollowerControl:
             if self.state is self.state.DISCONNECTED:
                 self.last_input_time = t_now
                 self.transition_to(self.state.HOMING)
+
+        if self.state is self.state.MSTOPPED:
+            if np.all(self.output_arm.last_feedback.mstop_state):
+                self.transition_to(self.state.UNALIGNED)
 
         if self.state is self.state.STARTUP:
             self.transition_to(self.state.HOMING)
