@@ -28,10 +28,10 @@ def setup_base(lookup: 'Lookup', base_family: str):
 
 def set_mobile_io_instructions(mobile_io: 'MobileIO', message, color=None):
     # Print Instructions
-    mobile_io.clear_text()
-    mobile_io.add_text(message)
     if color is not None:
         mobile_io.set_led_color(color)
+    mobile_io.clear_text()
+    mobile_io.add_text(message)
 
 
 def load_gains(group: 'Group', gains_file: str):
