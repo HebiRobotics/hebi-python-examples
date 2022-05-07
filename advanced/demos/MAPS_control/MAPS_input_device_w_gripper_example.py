@@ -31,17 +31,27 @@ def parse_mobile_feedback(m: 'MobileIO'):
         # rescale to range [0, 1]
         gripper_target = (m.get_axis_state(3) + 1.0) / 2.0
 
+    reset_arm = False
+    if m.get_button_diff(8) == 1:
+        reset_arm = True
+
     # Build an input object using the Mobile IO state
-    return LeaderFollowerInputs(), GripperInputs(gripper_target)
+    return LeaderFollowerInputs(reset_arm), GripperInputs(gripper_target)
 
 
 def setup_mobile_io(m: 'MobileIO'):
+    m.resetUI()
+    for i in range(8):
+        m.set_button_label(i+1, '')
+        m.set_axis_label(i+1, '')
+
     m.set_button_label(2, 'close')
     m.set_button_mode(2, 0)
     m.set_button_label(4, 'open')
     m.set_button_mode(4, 0)
     m.set_axis_label(3, 'grip')
     m.set_axis_value(3, -1.0)
+    m.set_button_label(8, 'Reset')
 
 
 if __name__ == "__main__":
@@ -119,3 +129,5 @@ if __name__ == "__main__":
             gripper_control.send()
         except KeyboardInterrupt:
             leader_follower_control.transition_to(LeaderFollowerControlState.EXIT)
+
+
