@@ -11,7 +11,7 @@ if typing.TYPE_CHECKING:
 
 
 def setup_base(lookup: 'Lookup', base_family: str):
-    from tready import TreadedBase
+    from .tready import TreadedBase
     flipper_names = [f'T{n+1}_J1_flipper' for n in range(4)]
     wheel_names = [f'T{n+1}_J2_track' for n in range(4)]
 
@@ -68,6 +68,39 @@ def setup_arm(lookup: 'Lookup', family: str):
     arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
 
     arm.load_gains(os.path.join(root_dir, 'gains/tready-arm-gains.xml'))
+    return arm
+
+
+def setup_arm_7dof(lookup: 'Lookup', family: str):
+    root_dir, _ = os.path.split(__file__)
+    # arm setup
+    arm = hebi.arm.create(
+        [family],
+        ['J1_base', 'J2A_shoulder1', 'J3_shoulder2', 'J4_elbow1', 'J5_elbow2', 'J6_wrist1', 'J7_wrist2'],
+        hrdf_file=os.path.join(root_dir, 'hrdf/tready-7dof-arm.hrdf'),
+        lookup=lookup)
+
+    mirror_group = lookup.get_group_from_names([family], ['J2B_shoulder1'])
+    while mirror_group is None:
+        print(f'Looking for double shoulder module "{family}/J2B_shoulder1"...')
+        sleep(1)
+        mirror_group = lookup.get_group_from_names([family], ['J2B_shoulder1'])
+
+    arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
+
+    arm.load_gains(os.path.join(root_dir, 'gains/tready-7dof-arm-gains.xml'))
+
+    # Add the gripper
+    gripper_group = lookup.get_group_from_names([family], ['gripperSpool'])
+    while gripper_group is None:
+        print(f'Looking for gripper module "{family}/gripperSpool"...')
+        sleep(1)
+        gripper_group = lookup.get_group_from_names([family], ['gripperSpool'])
+
+    gripper = hebi.arm.Gripper(gripper_group, -5, 1)
+    gripper.load_gains(os.path.join(root_dir, 'gains/gripper_spool_gains.xml'))
+    arm.set_end_effector(gripper)
+
     return arm
 
 

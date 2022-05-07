@@ -10,8 +10,8 @@ from scipy.spatial.transform import Rotation as R
 import hebi
 from hebi.util import create_mobile_io
 
-from tready import TreadedBase, TreadyControl, ChassisVelocity, TreadyInputs
-from tready_utils import set_mobile_io_instructions, setup_base, setup_arm_6dof
+from .tready import TreadedBase, TreadyControl, ChassisVelocity, TreadyInputs
+from .tready_utils import set_mobile_io_instructions, setup_base, setup_arm_6dof
 
 import typing
 if typing.TYPE_CHECKING:
