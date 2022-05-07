@@ -426,7 +426,7 @@ def config_mobile_io(m: 'MobileIO'):
 
 
 if __name__ == "__main__":
-    from tready_utils import set_mobile_io_instructions, setup_base
+    from .tready_utils import set_mobile_io_instructions, setup_base
 
     lookup = hebi.Lookup()
     sleep(2)

@@ -1,16 +1,16 @@
 #! /usr/bin/env python3
 
 from time import sleep
-from os import path
+import os
 import subprocess
 
 import hebi
 from hebi.util import create_mobile_io
 
 DEMOS = {
-    'Tready No Arm': 'tready.py',
-    'Tready Joystick Arm': 'tready_arm_joystick_control.py',
-    'Tready MobileIO Arm': 'tready_arm_io_control.py',
+    'Tready No Arm': 'tready',
+    'Tready Joystick Arm': 'tready_arm_joystick_control',
+    'Tready MobileIO Arm': 'tready_arm_io_control',
 }
 
 def launch_demo(demo):
@@ -18,11 +18,11 @@ def launch_demo(demo):
         print(f"ERROR: No demo #{demo} set, cannot launch!")
         return
 
-    root = path.split(path.abspath(__file__))[0]
-    demo_file = path.join(root, DEMOS[demo])
     print(f'Launching {DEMOS[demo]}')
-    
-    subprocess.check_output(['python3', demo_file])
+    root = os.path.split(os.path.abspath(__file__))[0]
+    kits_dir = root.split('kits')[0]
+    os.chdir(kits_dir)
+    subprocess.check_output(['python3', '-m', f'kits.tready.{DEMOS[demo]}'])
 
 def select_demo(mobile_io):
     for i, k in enumerate(DEMOS.keys()):
@@ -49,14 +49,10 @@ if __name__ == "__main__":
             sleep(0.5)
 
         print("mobileIO device found.")
-        m.clear_text()
+        # clear buttons before demo selection
+        m.resetUI()
         demos_text = [f'B{i+1}: {k}\n' for i, k in enumerate(DEMOS.keys())]
         m.add_text(''.join(demos_text))
-        # clear buttons before demo selection
-        m.set_led_color('white')
-        for i in range(8):
-            m.set_button_mode(i+1, 0)
-            m.set_button_output(i+1, 0)
 
         #######################
         ## Demo Select Loop ##
