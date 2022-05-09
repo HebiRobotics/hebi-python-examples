@@ -69,7 +69,9 @@ class LeaderFollowerControlState(Enum):
 
 
 class LeaderFollowerInputs:
-    pass
+
+    def __init__(self, reset=False):
+        self.reset = reset
 
 
 class LeaderFollowerControl:
@@ -120,6 +122,9 @@ class LeaderFollowerControl:
 
             if self.state is self.state.DISCONNECTED:
                 self.last_input_time = t_now
+                self.transition_to(self.state.HOMING)
+
+            if command_input.reset:
                 self.transition_to(self.state.HOMING)
 
         if self.state is self.state.MSTOPPED:
@@ -173,7 +178,12 @@ class LeaderFollowerControl:
                 # Mean Squared Error between arm joint angles and MAPS input arm angles
                 # result written into target_joints
 
-                self.output_arm.robot_model.solve_inverse_kinematics(self.output_arm.last_feedback.position_command,
+                ik_angles = self.output_arm.last_feedback.position_command
+                if np.any(np.isnan(ik_angles)):
+                    ik_angles = self.output_arm.last_feedback.position
+
+
+                self.output_arm.robot_model.solve_inverse_kinematics(ik_angles,
                                                                      endeffector_position_objective(xyz_target),
                                                                      endeffector_so3_objective(rot_target),
                                                                      custom_objective(1, self.arm_MAPS_mse, weight=0.1),
@@ -215,8 +225,9 @@ class LeaderFollowerControl:
             if np.any(np.isnan(curr_pos)):
                 curr_pos = self.output_arm.last_feedback.position
 
-            self.output_arm_home = curr_pos
-            self.output_arm.FK(self.output_arm_home,
+            # Why did I do this?
+            #self.output_arm_home = curr_pos
+            self.output_arm.FK(curr_pos,
                                xyz_out=self.output_xyz_home,
                                orientation_out=self.output_rot_home)
 
