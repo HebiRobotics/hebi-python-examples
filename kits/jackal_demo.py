@@ -89,7 +89,7 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_button_label(6, '\u21E7', blocking=False)
     m.set_button_label(7, 'grip', blocking=False)
     m.set_button_mode(7, 1)
-    m.set_button_label(8, '\u21E9')
+    m.set_button_label(8, '\u21E9', blocking=False)
 
     m.set_axis_label(3, '\U0001F50E', blocking=False)
     m.set_axis_value(3, -0.9)
@@ -112,10 +112,12 @@ def parse_mobile_feedback(m: 'MobileIO'):
 
     home = m.get_button_state(1)
 
-    base_x = m.get_axis_state(8)
-    base_rz = m.get_axis_state(7)
-
     if m.get_button_state(5):
+        base_x = 0.0
+        base_rz = 0.0
+        mast_pan = 0.0
+        mast_tilt = 0.0
+
         arm_dx = 0.3 * m.get_axis_state(8)
         arm_dy = -0.3 * m.get_axis_state(7)
 
@@ -125,16 +127,22 @@ def parse_mobile_feedback(m: 'MobileIO'):
         elif m.get_button_state(8):
             arm_dz = -0.1
 
-        arm_drx = 0.0
-        arm_dry = 0.0
+        arm_drx = 0.5 * m.get_axis_state(1)
+        arm_dry = -0.5 * m.get_axis_state(2)
         arm_drz = 0.0
     else:
+        mast_pan = -1.0 * m.get_axis_state(1)
+        mast_tilt = m.get_axis_state(2)
+
+        base_x = m.get_axis_state(8)
+        base_rz = -m.get_axis_state(7)
+
         arm_dx = 0.0
         arm_dy = 0.0
         arm_dz = 0.0
 
-        arm_drx = 0.5 * m.get_axis_state(7)
-        arm_dry = -0.5 * m.get_axis_state(8)
+        arm_drx = 0.0
+        arm_dry = 0.0
         arm_drz = 0.0
 
     gripper_closed = m.get_button_state(7)
@@ -149,8 +157,6 @@ def parse_mobile_feedback(m: 'MobileIO'):
     if m.get_button_state(4):
         spot_light = light_level
 
-    mast_pan = -1.0 * m.get_axis_state(1)
-    mast_tilt = m.get_axis_state(2)
     camera_zoom = m.get_axis_state(3)
 
     base_inputs = JackalInputs(base_x, base_rz)
