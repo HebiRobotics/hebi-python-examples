@@ -12,7 +12,7 @@ from hebi.robot_model import custom_objective
 
 import typing
 if typing.TYPE_CHECKING:
-    from typing import Optional
+    from typing import Optional, Callable
     import numpy.typing as npt
     from hebi.arm import Arm
     from hebi._internal.group import Group
@@ -91,6 +91,7 @@ class LeaderFollowerControl:
         self.target_joints: 'npt.NDArray[np.float64]' = np.empty(7, dtype=np.float64)
 
         self.allowed_diffs: 'npt.NDArray[np.float64]' = np.array(alignment_diffs, dtype=np.float64)
+        self._transition_handlers: 'list[Callable[[LeaderFollowerControl, LeaderFollowerControlState], None]]' = []
 
     @property
     def running(self):
@@ -102,6 +103,12 @@ class LeaderFollowerControl:
 
     def send(self):
         self.output_arm.send()
+
+    @property
+    def angle_diff(self):
+        output_pos = self.output_arm.last_feedback.position
+        self.input_arm.rebalance(output_pos)
+        return output_pos - self.input_arm.position
 
     def update(self, t_now: float, command_input: 'Optional[LeaderFollowerInputs]'):
         self.input_arm.update()
@@ -144,9 +151,7 @@ class LeaderFollowerControl:
 
             # Because the arm is commanded to its home position,
             # MAPS angles need to be kept within [-π, π]
-            output_pos = self.output_arm.last_feedback.position
-            self.input_arm.rebalance(output_pos)
-            diff = output_pos - self.input_arm.position
+            diff = self.angle_diff
 
             print(f'Diffs: {np.around(np.rad2deg(diff), decimals=0)}')
             if np.all(np.rad2deg(np.abs(diff)) <= self.allowed_diffs):
@@ -182,7 +187,6 @@ class LeaderFollowerControl:
                 if np.any(np.isnan(ik_angles)):
                     ik_angles = self.output_arm.last_feedback.position
 
-
                 self.output_arm.robot_model.solve_inverse_kinematics(ik_angles,
                                                                      endeffector_position_objective(xyz_target),
                                                                      endeffector_so3_objective(rot_target),
@@ -203,7 +207,8 @@ class LeaderFollowerControl:
             print("TRANSITIONING TO HOMING")
             # Go to arm home pose
             self.output_goal.clear()
-            self.output_goal.add_waypoint(t=10.0, position=self.output_arm_home)
+            self.output_goal.add_waypoint(t=0.5, position=np.full(self.output_arm.size, np.nan), velocity=[0] * self.output_arm.size)
+            self.output_goal.add_waypoint(t=9.5, position=self.output_arm_home)
             self.output_arm.set_goal(self.output_goal)
 
         elif state is self.state.ALIGNING:
@@ -234,6 +239,8 @@ class LeaderFollowerControl:
         elif state is self.state.EXIT:
             print("TRANSITIONING TO EXIT")
 
+        for handler in self._transition_handlers:
+            handler(self, state)
         self.state = state
 
 
