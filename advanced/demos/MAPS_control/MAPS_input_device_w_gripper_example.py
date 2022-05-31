@@ -45,16 +45,19 @@ def setup_mobile_io(m: 'MobileIO'):
         m.set_button_label(i + 1, '')
         m.set_axis_label(i + 1, '')
 
-    m.set_button_label(2, 'close')
+    m.set_button_label(2, 'close', blocking=False)
     m.set_button_mode(2, 0)
-    m.set_button_label(4, 'open')
+    m.set_button_label(4, 'open', blocking=False)
     m.set_button_mode(4, 0)
-    m.set_axis_label(3, 'grip')
+    m.set_axis_label(3, 'grip', blocking=False)
     m.set_axis_value(3, -1.0)
-    m.set_button_label(8, 'Reset')
+    m.set_button_label(8, 'Reset', blocking=False)
 
 
 if __name__ == "__main__":
+
+    base_dir, _ = os.path.split(__file__)
+
     lookup = hebi.Lookup()
     sleep(2)
 
@@ -71,8 +74,8 @@ if __name__ == "__main__":
     maps_modules = ['J1-A', 'J2-B', 'J2-A', 'J3-B', 'J3-A', 'J4-B', 'J4-A']
     maps_group = lookup.get_group_from_names(['MAPS'], maps_modules)
     while maps_group is None:
-        m.clear_text()
-        m.add_text('MAPS arm not found: Check connection and make sure all modules are blinking green')
+        m.clear_text(blocking=False)
+        m.add_text('MAPS arm not found: Check connection and make sure all modules are blinking green', blocking=False)
         sleep(1)
         maps_group = lookup.get_group_from_names(['MAPS'], maps_modules)
 
@@ -82,13 +85,13 @@ if __name__ == "__main__":
     output_arm = hebi.arm.create(
         ['Arm'],
         ['J1_base', 'J2A_shoulder1', 'J3_shoulder2', 'J4_elbow1', 'J5_elbow2', 'J6_wrist1', 'J7_wrist2'],
-        hrdf_file='hrdf/A-2303-01.hrdf',
+        hrdf_file=os.path.join(base_dir, 'hrdf/A-2303-01.hrdf'),
         lookup=lookup)
 
     mirror_group = lookup.get_group_from_names(['Arm'], ['J2B_shoulder1'])
     while mirror_group is None:
-        m.clear_text()
-        m.add_text('Still looking for mirror group...')
+        m.clear_text(blocking=False)
+        m.add_text('Still looking for mirror group...', blocking=False)
         sleep(1)
         mirror_group = lookup.get_group_from_names(['Arm'], ['J2B_shoulder1'])
     # mirror the position/velocity/effort of module 1 ('J2A_shoulder1') to the module
@@ -96,18 +99,18 @@ if __name__ == "__main__":
     # Keeps the two modules in the double shoulder bracket in sync
     output_arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
 
-    output_arm.load_gains('gains/A-2303-01.xml')
+    output_arm.load_gains(os.path.join(base_dir, 'gains/A-2303-01.xml'))
     # need to update the gains for the mirror group also
     gains_cmd = hebi.GroupCommand(1)
-    gains_cmd.read_gains('gains/mirror_shoulder.xml')
+    gains_cmd.read_gains(os.path.join(base_dir, 'gains/mirror_shoulder.xml'))
     mirror_group.send_command_with_acknowledgement(gains_cmd)
 
     output_arm.cancel_goal()
 
     gripper_group = lookup.get_group_from_names(['Arm'], ['gripperSpool'])
     while gripper_group is None:
-        m.clear_text()
-        m.add_text("Looking for gripper module 'Arm/gripperSpool' ...")
+        m.clear_text(blocking=False)
+        m.add_text("Looking for gripper module 'Arm/gripperSpool' ...", blocking=False)
         sleep(1)
         gripper_group = lookup.get_group_from_names(['Arm'], ['gripperSpool'])
 
@@ -132,14 +135,14 @@ if __name__ == "__main__":
 
         if new_state == LeaderFollowerControlState.HOMING:
             m.set_led_color('blue', blocking=False)
-            m.clear_text()
-            m.add_text("Homing...")
+            m.clear_text(blocking=False)
+            m.add_text("Homing...", blocking=False)
         elif new_state == LeaderFollowerControlState.UNALIGNED:
             m.set_led_color('blue', blocking=False)
         elif new_state == LeaderFollowerControlState.ALIGNED:
             m.set_led_color('green', blocking=False)
-            m.clear_text()
-            m.add_text("Aligned!")
+            m.clear_text(blocking=False)
+            m.add_text("Aligned!", blocking=False)
 
     leader_follower_control._transition_handlers.append(update_ui)
 
@@ -148,6 +151,8 @@ if __name__ == "__main__":
         t = time()
         try:
             arm_inputs, gripper_inputs = parse_mobile_feedback(m)
+            if arm_inputs is None:
+                arm_inputs = LeaderFollowerInputs(False)
             leader_follower_control.update(t, arm_inputs)
             gripper_control.update(t, gripper_inputs)
             leader_follower_control.send()
@@ -155,7 +160,7 @@ if __name__ == "__main__":
             if leader_follower_control.state == LeaderFollowerControlState.UNALIGNED:
                 if t - last_text_update > 0.1:
                     last_text_update = t
-                    m.clear_text()
-                    m.add_text(f'Unaligned: {np.around(np.rad2deg(leader_follower_control.angle_diff), decimals=0)}')
+                    m.clear_text(blocking=False)
+                    m.add_text(f'Unaligned: {np.around(np.rad2deg(leader_follower_control.angle_diff), decimals=0)}', blocking=False)
         except KeyboardInterrupt:
             leader_follower_control.transition_to(LeaderFollowerControlState.EXIT)
