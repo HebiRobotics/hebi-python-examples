@@ -93,6 +93,7 @@ while not abort_flag:
 
     # Check for quit
     if char is not None and ord(char) == 27:  # Esc
+        print('ESC pressed, exiting...')
         abort_flag = True
         break
 
