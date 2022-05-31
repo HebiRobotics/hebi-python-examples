@@ -193,6 +193,7 @@ class LeaderFollowerControl:
                 if np.any(np.isnan(ik_angles)):
                     ik_angles = self.output_arm.last_feedback.position
 
+
                 self.output_arm.robot_model.solve_inverse_kinematics(ik_angles,
                                                                      endeffector_position_objective(xyz_target),
                                                                      endeffector_so3_objective(rot_target),

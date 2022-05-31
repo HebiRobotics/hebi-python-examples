@@ -78,14 +78,23 @@ if __name__ == "__main__":
 
     print('--- Press Spacebar to Toggle Gripper ---')
     kb = KBHit()
+    last_press_time = time()
+    pressed = False
     while leader_follower_control.running and gripper_control.running:
         t = time()
         try:
             if kb.kbhit():
                 c = kb.getch()
                 if ord(c) == 32:  # Spacebar
-                    gripper_strength = 1.0 - gripper_strength
-                    gripper_inputs = GripperInputs(gripper_strength)
+                    last_press_time = t
+                    if not pressed:
+                        pressed = True
+                        gripper_strength = 1.0 - gripper_strength
+                        gripper_inputs = GripperInputs(gripper_strength)
+            
+            if pressed and t - last_press_time > 0.5:
+                pressed = False
+
 
             leader_follower_control.update(t, arm_inputs)
             gripper_control.update(t, gripper_inputs)
