@@ -138,7 +138,7 @@ if __name__ == "__main__":
             continue
 
         # B8 - Quit
-        if m.get_button_diff(8) == 3:  # "ToOn"
+        if m.get_button_diff(8) == 1:  # "ToOn"
             # Reset text & color, and quit
             m.clear_text()
             m.set_led_color("transparent")
