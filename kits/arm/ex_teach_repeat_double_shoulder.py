@@ -2,7 +2,6 @@
 
 import hebi
 from time import time, sleep
-from hebi import arm as arm_api
 from hebi.util import create_mobile_io
 
 # Set up to find actuators on the network
@@ -17,13 +16,13 @@ gains_file = "gains/A-2099-07.xml"
 
 
 # Create Arm object
-arm = arm_api.create([arm_family],
-                     names=module_names,
-                     hrdf_file=hrdf_file,
-                     lookup=lookup)
+arm = hebi.arm.create([arm_family],
+                      names=module_names,
+                      hrdf_file=hrdf_file,
+                      lookup=lookup)
 
 alt_shoulder_group = lookup.get_group_from_names(arm_family, ['J2B_shoulder1'])
-double_shoulder = arm_api.DoubleJointedMirror(2, alt_shoulder_group)
+double_shoulder = hebi.arm.DoubledJointMirror(2, alt_shoulder_group)
 arm.add_plugin(double_shoulder)
 
 arm.load_gains(gains_file)
@@ -44,7 +43,7 @@ m.update()
 # Demo Variables
 abort_flag = False
 run_mode = "training"
-goal = arm_api.Goal(arm.size)
+goal = hebi.arm.Goal(arm.size)
 
 # Print Instructions
 instructions = """B1 - Add waypoint (stop)
