@@ -9,7 +9,7 @@ from hebi.util import create_mobile_io
 
 from ..camera.camera import HebiCamera
 from ..camera.pan_tilt_mast import HebiCameraMast, MastControl, MastControlState, MastInputs
-from ..arm.arm_ar_state_machine import ArmJoystickControl, ArmControlState, ArmJoystickInputs
+from ..arm.joystick_control_sm import ArmJoystickControl, ArmControlState, ArmJoystickInputs
 from .tready import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
 
 import typing

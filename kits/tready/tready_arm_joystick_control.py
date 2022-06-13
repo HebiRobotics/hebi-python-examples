@@ -1,19 +1,16 @@
 #! /usr/bin/env python3
 
-import os
 import hebi
 import numpy as np
 from time import time, sleep
-from scipy.spatial.transform import Rotation as R
 from hebi.util import create_mobile_io
 
-from ..arm.arm_ar_state_machine import ArmJoystickControl, ArmControlState, ArmJoystickInputs
+from kits.arm.joystick_control_sm import ArmJoystickControl, ArmControlState, ArmJoystickInputs
 from .tready import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
 from .tready_utils import setup_arm_6dof, setup_arm_7dof
 
 import typing
 if typing.TYPE_CHECKING:
-    from hebi import Lookup
     from hebi._internal.mobile_io import MobileIO
 
 
@@ -67,8 +64,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
         m.set_axis_label(3, '', blocking=False)
         m.set_snap(3, np.nan)
 
-
-    arm_dx =  0.25 * m.get_axis_state(8)
+    arm_dx = 0.25 * m.get_axis_state(8)
     arm_dy = -0.25 * m.get_axis_state(7)
 
     arm_dz = 0.0
@@ -81,7 +77,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
         base_x = 0.0
         base_rz = 0.0
 
-        arm_drx =  0.5 * m.get_axis_state(1)
+        arm_drx = 0.5 * m.get_axis_state(1)
         arm_dry = -0.5 * m.get_axis_state(2)
         arm_drz = 0.75 * m.get_axis_state(3)
 
@@ -155,7 +151,6 @@ if __name__ == "__main__":
 
     m.update()
     setup_mobile_io(m)
-
 
     def update_mobile_ui(controller: TreadyControl, new_state: TreadyControlState):
         if controller.state == TreadyControlState.DISCONNECTED and new_state == TreadyControlState.TELEOP:

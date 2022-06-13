@@ -1,8 +1,5 @@
 import sys
-import os
-from collections import namedtuple
 from time import time, sleep
-from enum import Enum, auto
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R
@@ -10,199 +7,16 @@ from scipy.spatial.transform import Rotation as R
 import hebi
 from hebi.util import create_mobile_io
 
-from .tready import TreadedBase, TreadyControl, ChassisVelocity, TreadyInputs
+from kits.arm.ar_control_sm import ArmMobileIOControl, ArmControlState, ArmMobileIOInputs
+from .tready import TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
 from .tready_utils import set_mobile_io_instructions, setup_base, setup_arm_6dof
 
 import typing
 if typing.TYPE_CHECKING:
-    from typing import Optional
-    from hebi._internal.group import Group
     from hebi._internal.mobile_io import MobileIO
 
-class DemoState(Enum):
-    STARTUP = auto()
-    HOMING = auto()
-    TELEOP = auto()
-    STOPPED = auto()
-    EXIT = auto()
 
-
-ArmInputs = namedtuple('ArmInputs', ['phone_pos', 'phone_rot', 'locked', 'active', 'gripper_closed'])
-DemoInputs = namedtuple('DemoInputs', ['should_exit', 'should_reset', 'chassis', 'arm'])
-
-
-class TreadyArmIOControl(TreadyControl):
-
-    FLIPPER_VEL_SCALE = 1  # rad/sec
-
-    def __init__(self, mobile_io, base: TreadedBase, arm: hebi.arm.Arm):
-        super(TreadyArmIOControl, self).__init__(mobile_io, base)
-
-        self.arm = arm
-
-        # 5 DoF home
-        #self.arm_xyz_home = [0.34, 0.0, 0.23]
-        # 6 DoF home
-        self.arm_xyz_home = [0.4, 0.0, 0.0]
-        self.arm_rot_home = R.from_euler('z', np.pi / 2) * R.from_euler('x', np.pi)
-        self.arm_rot_home = self.arm_rot_home.as_matrix()
-
-        # 5 DoF seed
-        #self.arm_seed_ik = np.array([0.25, -1.0, 0, -0.75, 0])
-        # 6 DoF seed
-        self.arm_seed_ik = np.array([0, 0.5, 2, 3, -1.5, 0])
-        self.arm_home = self.arm.ik_target_xyz_so3(
-            self.arm_seed_ik,
-            self.arm_xyz_home,
-            self.arm_rot_home)
-
-    def compute_arm_goal(self, arm_inputs: ArmInputs):
-        xyz_scale = np.array([1.0, 1.0, 1.0])
-
-        phone_xyz = arm_inputs.phone_pos
-        phone_rot = arm_inputs.phone_rot
-
-        if arm_inputs.locked or not arm_inputs.active:
-            # update phone "zero"
-            self.phone_xyz_home = phone_xyz
-
-        arm_goal = hebi.arm.Goal(self.arm.size)
-        if arm_inputs.locked:
-            arm_goal.add_waypoint(position=self.arm_home)
-            return arm_goal
-        elif arm_inputs.active:
-            phone_offset = phone_xyz - self.phone_xyz_home
-            rot_mat = self.phone_rot_home
-            arm_xyz_target = self.arm_xyz_home + xyz_scale * (rot_mat.T @ phone_offset)
-            arm_rot_target = rot_mat.T @ phone_rot @ self.arm_rot_home
-
-            joint_target = self.arm.ik_target_xyz_so3(
-                self.arm_seed_ik,
-                arm_xyz_target,
-                arm_rot_target)
-
-            arm_goal.add_waypoint(position=joint_target)
-            return arm_goal
-
-        return None
-
-    def update(self, t_now: float, demo_input: 'Optional[DemoInputs]'=None):
-        self.base.update(t_now)
-        self.arm.update()
-
-        self.base.send()
-        self.arm.send()
-
-        if self.state is DemoState.EXIT:
-            return False
-
-        if demo_input is None:
-            if t_now - self.mobile_last_fbk_t > 1.0:
-                print("mobileIO timeout, disabling motion")
-                self.transition_to(t_now, DemoState.STOPPED)
-            return True
-        else:
-            self.mobile_last_fbk_t = t_now
-
-            if demo_input.should_exit:
-                self.transition_to(t_now, DemoState.EXIT)
-            elif demo_input.should_reset:
-                self.transition_to(t_now, DemoState.HOMING)
-
-            if self.state is DemoState.STOPPED:
-                self.mobile_last_fbk_t = t_now
-                self.transition_to(t_now, DemoState.TELEOP)
-                return True
-
-            elif self.state is DemoState.HOMING:
-                base_complete = not self.base.has_active_trajectory
-                if base_complete and self.arm.at_goal:
-                    self.phone_xyz_home = demo_input.arm.phone_pos
-                    self.phone_rot_home = demo_input.arm.phone_rot
-                    self.transition_to(t_now, DemoState.TELEOP)
-                return True
-
-            elif self.state is DemoState.TELEOP:
-                desired_flipper_mode = demo_input.chassis.align_flippers
-                if self.base.aligned_flipper_mode != desired_flipper_mode:
-                    self.base.aligned_flipper_mode = desired_flipper_mode
-                elif self.base.is_aligning:
-                    # ignore new base commands while flippers are aligning
-                    pass
-                else:
-                    chassis_vels, flipper_vels = self.compute_velocities(demo_input.chassis)
-                    self.base.set_chassis_vel_trajectory(t_now, self.base.chassis_ramp_time, chassis_vels)
-                    self.base.set_flipper_trajectory(t_now, self.base.flipper_ramp_time, v=flipper_vels)
-
-                arm_goal = self.compute_arm_goal(demo_input.arm)
-                if arm_goal is not None:
-                    self.arm.set_goal(arm_goal)
-                gripper_closed = self.arm.end_effector.state == 1.0
-                if demo_input.arm.gripper_closed and not gripper_closed:
-                    self.arm.end_effector.close()
-                elif not demo_input.arm.gripper_closed and gripper_closed:
-                    self.arm.end_effector.open()
-
-                return True
-
-            elif self.state is DemoState.STARTUP:
-                self.transition_to(t_now, DemoState.HOMING)
-                return True
-
-    def transition_to(self, t_now: float, state: DemoState):
-        # self transitions are noop
-        if state == self.state:
-            return
-
-        if state is DemoState.HOMING:
-            print("TRANSITIONING TO HOMING")
-            self.base.set_color('magenta')
-            msg = ('Robot Homing Sequence\n'
-                   'Please wait...')
-            set_mobile_io_instructions(self.mobile_io, msg)
-
-            # build trajectory
-            flipper_home = np.array([-1, 1, 1, -1]) * np.deg2rad(15 + 45)
-            self.base.chassis_traj = None
-            self.base.set_flipper_trajectory(t_now, 5.0, p=flipper_home)
-
-            g = hebi.arm.Goal(self.arm.size)
-            g.add_waypoint(position=self.arm_home)
-            self.arm.set_goal(g)
-
-        elif state is DemoState.TELEOP:
-            print("TRANSITIONING TO TELEOP")
-            base.clear_color()
-            # Print Instructions
-            instructions = ('Robot Ready to Control\n'
-                            'B1: Reset\n'
-                            'B2: Arm Motion Enable\n'
-                            'B4: Arm Lock\n'
-                            'B5: Close Gripper\n'
-                            'B6: Joined Flipper\n'
-                            'B8 - Quit')
-            set_mobile_io_instructions(self.mobile_io, instructions, color='green')
-
-        elif state is DemoState.STOPPED:
-            print("TRANSITIONING TO STOPPED")
-            self.base.chassis_traj = None
-            self.base.flipper_traj = None
-            self.base.set_color('blue')
-
-        elif state is DemoState.EXIT:
-            print("TRANSITIONING TO EXIT")
-            self.base.set_color("red")
-
-            # unset mobileIO control config
-            self.mobile_io.set_button_mode(6, 0)
-            self.mobile_io.set_button_output(1, 0)
-            self.mobile_io.set_button_output(8, 0)
-            set_mobile_io_instructions(self.mobile_io, 'Demo Stopped.', color='red')
-
-        self.state = state
-
-
-def config_mobile_io(m: 'MobileIO'):
+def setup_mobile_io(m: 'MobileIO'):
     """Sets up mobileIO interface.
 
     Return a function that parses mobileIO feedback into the format
@@ -259,6 +73,7 @@ def config_mobile_io(m: 'MobileIO'):
         flip4 = m.get_axis_state(slider_flip4)
 
         tready_inputs = TreadyInputs(
+            should_reset,
             ChassisVelocity(joy_vel_fwd, joy_vel_rot),
             [flip1, flip2, flip3, flip4],
             aligned_flipper_mode)
@@ -272,14 +87,15 @@ def config_mobile_io(m: 'MobileIO'):
             print(f'Error getting orientation as matrix: {e}\n{m.orientation}')
             rotation = np.eye(3)
 
-        arm_inputs = ArmInputs(
+        arm_inputs = ArmMobileIOInputs(
             np.copy(m.position),
             rotation,
             m.get_button_state(arm_lock),
             m.get_button_state(arm_enable),
             m.get_button_state(gripper_close))
 
-        return DemoInputs(should_exit, should_reset, tready_inputs, arm_inputs)
+        #return DemoInputs(should_exit, should_reset, tready_inputs, arm_inputs)
+        return tready_inputs, arm_inputs
 
     return parse_mobile_io_feedback
 
@@ -291,8 +107,12 @@ if __name__ == "__main__":
 
     family = "Tready"
 
+    arm = setup_arm_6dof(lookup, family)
+    arm_control = ArmMobileIOControl(arm)
+
     # Base setup
     base = setup_base(lookup, family)
+    base_control = TreadyControl(base)
 
     # mobileIO setup
     phone_name = "mobileIO"
@@ -305,23 +125,67 @@ if __name__ == "__main__":
         sleep(0.5)
 
     print("mobileIO device found.")
-    input_parser = config_mobile_io(m)
+    parse_mobile_feedback = setup_mobile_io(m)
 
-    arm = setup_arm_6dof(lookup, family)
+    def update_mobile_io(controller: TreadyControl, new_state: TreadyControlState):
+        if controller.state == new_state:
+            return
 
-    demo_controller = TreadyArmIOControl(m, base, arm)
+        if new_state is TreadyControlState.HOMING:
+            controller.base.set_color('magenta')
+            msg = ('Robot Homing Sequence\n'
+                   'Please wait...')
+            set_mobile_io_instructions(m, msg)
+
+        elif new_state is TreadyControlState.TELEOP:
+            controller.base.clear_color()
+            # Print Instructions
+            instructions = ('Robot Ready to Control\n'
+                            'B1: Reset\n'
+                            'B2: Arm Motion Enable\n'
+                            'B4: Arm Lock\n'
+                            'B5: Close Gripper\n'
+                            'B6: Joined Flipper\n'
+                            'B8 - Quit')
+            set_mobile_io_instructions(m, instructions, color='green')
+
+        elif new_state is TreadyControlState.DISCONNECTED:
+            controller.base.set_color('blue')
+
+        elif new_state is TreadyControlState.EXIT:
+            print("TRANSITIONING TO EXIT")
+            controller.base.set_color("red")
+
+            # unset mobileIO control config
+            m.set_button_mode(6, 0)
+            m.set_button_output(1, 0)
+            m.set_button_output(8, 0)
+            set_mobile_io_instructions(m, 'Demo Stopped.', color='red')
+
+    base_control._transition_handlers.append(update_mobile_io)
 
     #######################
     ## Main Control Loop ##
     #######################
 
-    should_continue = True
-    while should_continue:
+    m.set_led_color('blue')
+    while base_control.running and arm_control.running:
         t = time()
-        demo_inputs = None
-        if m.update(0.0):
-            demo_inputs = input_parser(m)
+        try:
+            base_inputs, arm_inputs = parse_mobile_feedback(m)
+            base_control.update(t, base_inputs)
+            arm_control.update(t, arm_inputs)
+        except KeyboardInterrupt:
+            base_control.transition_to(t, TreadyControlState.EXIT)
+            arm_control.transition_to(t, ArmControlState.EXIT)
+            m.set_led_color('red')
 
-        should_continue = demo_controller.update(t, demo_inputs)
+        if m.get_button_state(4):
+            base_control.transition_to(t, TreadyControlState.EXIT)
+            arm_control.transition_to(t, ArmControlState.EXIT)
+            m.set_led_color('red')
+
+        base_control.send()
+        arm_control.send()
 
     sys.exit(0)
