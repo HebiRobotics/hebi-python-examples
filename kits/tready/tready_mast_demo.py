@@ -7,11 +7,10 @@ from time import time, sleep
 from scipy.spatial.transform import Rotation as R
 from hebi.util import create_mobile_io
 
-from camera.camera import HebiCamera
-from camera.pan_tilt_mast import HebiCameraMast, MastControl, MastControlState, MastInputs
-from arm.arm_ar_state_machine import ArmJoystickControl, ArmControlState, ArmJoystickInputs
-#from jackal.jackal_control import JackalControl, JackalControlState, JackalInputs
-from tready.tready import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
+from ..camera.camera import HebiCamera
+from ..camera.pan_tilt_mast import HebiCameraMast, MastControl, MastControlState, MastInputs
+from ..arm.arm_ar_state_machine import ArmJoystickControl, ArmControlState, ArmJoystickInputs
+from .tready import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
 
 import typing
 if typing.TYPE_CHECKING:
@@ -24,7 +23,7 @@ if typing.TYPE_CHECKING:
 
 
 def setup_arm_6dof(lookup: 'Lookup', family: str):
-    root_dir = os.path.abspath(os.path.dirname(__file__))
+    root_dir = os.path.join(os.path.abspath(__file__.split('kits')[0]), 'kits')
     print(root_dir)
     # arm setup
     arm = hebi.arm.create(
@@ -115,7 +114,9 @@ def setup_mobile_io(m: 'MobileIO'):
         m.set_snap(3, np.nan)
         m.set_axis_value(3, -0.9)
 
+
 light_level = 0.0
+
 
 def parse_mobile_feedback(m: 'MobileIO'):
     global light_level
@@ -143,7 +144,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
         mast_pan = 0.0
         mast_tilt = 0.0
 
-        arm_dx =  0.25 * m.get_axis_state(8)
+        arm_dx = 0.25 * m.get_axis_state(8)
         arm_dy = -0.25 * m.get_axis_state(7)
 
         arm_dz = 0.0
@@ -152,7 +153,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
         elif m.get_button_state(8):
             arm_dz = -0.1
 
-        arm_drx =  0.5 * m.get_axis_state(1)
+        arm_drx = 0.5 * m.get_axis_state(1)
         arm_dry = -0.5 * m.get_axis_state(2)
         arm_drz = 0.75 * m.get_axis_state(3)
     else:
@@ -183,7 +184,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
         spot_light = light_level
 
     camera_zoom = (m.get_axis_state(4) + 1.0) / 2.0
-    
+
     flipper1 = m.get_axis_state(5)
     flipper4 = m.get_axis_state(6)
 
@@ -274,7 +275,6 @@ if __name__ == "__main__":
 
     m.update()
     setup_mobile_io(m)
-
 
     def update_mobile_ui(controller: TreadyControl, new_state: TreadyControlState):
         if controller.state == TreadyControlState.DISCONNECTED and new_state == TreadyControlState.TELEOP:
