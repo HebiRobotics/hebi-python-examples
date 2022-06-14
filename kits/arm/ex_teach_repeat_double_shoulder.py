@@ -22,7 +22,7 @@ arm = hebi.arm.create([arm_family],
                       lookup=lookup)
 
 alt_shoulder_group = lookup.get_group_from_names(arm_family, ['J2B_shoulder1'])
-double_shoulder = hebi.arm.DoubledJointMirror(2, alt_shoulder_group)
+double_shoulder = hebi.arm.DoubledJointMirror(1, alt_shoulder_group)
 arm.add_plugin(double_shoulder)
 
 arm.load_gains(gains_file)
