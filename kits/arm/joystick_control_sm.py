@@ -1,3 +1,4 @@
+import os
 from enum import Enum, auto
 import numpy as np
 from scipy.spatial.transform import Rotation as R
@@ -11,7 +12,6 @@ if typing.TYPE_CHECKING:
     from typing import Sequence, Optional
     import numpy.typing as npt
     from hebi._internal.mobile_io import MobileIO
-    from hebi.arm import Arm
 
 
 class ArmControlState(Enum):
@@ -171,8 +171,10 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_button_label(2, '', blocking=False)
     m.set_button_label(3, '', blocking=False)
     m.set_button_label(4, 'Quit', blocking=False)
+    m.set_button_label(6, '\u21E7', blocking=False)
     m.set_button_label(7, 'grip', blocking=False)
     m.set_button_mode(7, 1)
+    m.set_button_label(8, '\u21E9', blocking=False)
 
     m.set_axis_label(3, '', blocking=False)
     m.set_axis_label(4, '', blocking=False)
@@ -227,12 +229,31 @@ if __name__ == "__main__":
     hrdf_file = "hrdf/A-2085-06.hrdf"
     gains_file = "gains/A-2085-06.xml"
 
+    root_dir = os.path.abspath(os.path.dirname(__file__))
+    hrdf_file = os.path.join(root_dir, hrdf_file)
+    gains_file = os.path.join(root_dir, gains_file)
+
     # Create Arm object
     arm = hebi.arm.create([arm_family],
                           names=module_names,
                           hrdf_file=hrdf_file,
                           lookup=lookup)
     arm.load_gains(gains_file)
+
+    # Add the gripper
+    gripper_family = arm_family
+    gripper_name = 'gripperSpool'
+
+    gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
+    while gripper_group is None:
+        print(f"Looking for gripper module {gripper_family} / {gripper_name} ...")
+        sleep(1)
+        gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
+
+    gripper = hebi.arm.Gripper(gripper_group, -5, 1)
+    gripper_gains = os.path.join(root_dir, "gains/gripper_spool_gains.xml")
+    gripper.load_gains(gripper_gains)
+    arm.set_end_effector(gripper)
 
     joint_limits = np.empty((7, 2))
     joint_limits[:, 0] = -np.inf
@@ -265,7 +286,15 @@ if __name__ == "__main__":
 
     while arm_control.running:
         t = time()
-        arm_inputs = parse_mobile_feedback(m)
-        arm_control.update(t, arm_inputs)
+        try:
+            arm_inputs = parse_mobile_feedback(m)
+            arm_control.update(t, arm_inputs)
 
-        arm_control.send()
+            arm_control.send()
+        except KeyboardInterrupt:
+            arm_control.transition_to(t, ArmControlState.EXIT)
+            m.set_led_color('red')
+
+        if m.get_button_state(4):
+            arm_control.transition_to(t, ArmControlState.EXIT)
+            m.set_led_color('red')
