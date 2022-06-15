@@ -24,8 +24,8 @@ def load_gains(group, gains_file):
 
 
 class DiffDrive:
-    WHEEL_RADIUS = 0.10 # m
-    BASE_RADIUS = 0.43 # m (half of distance between diff drive wheel centers)
+    WHEEL_RADIUS = 0.10  # m
+    BASE_RADIUS = 0.43  # m (half of distance between diff drive wheel centers)
 
     def __init__(self, group):
         self.group = group
@@ -38,7 +38,7 @@ class DiffDrive:
 
     def update(self, t_now):
         if not self.group.get_next_feedback(reuse_fbk=self.base_feedback):
-            return false
+            return False
 
         if self.trajectory:
             t = min(t_now - self.trajectory_start_time, self.trajectory.duration)
@@ -83,9 +83,9 @@ class DiffDrive:
         p = np.empty((2, 4))
         p.fill(np.nan)
         p[:, 0] = 0
-    
+
         a = np.zeros((2, 4))
-    
+
         self.trajectory = hebi.trajectory.create_trajectory(times, p, velocities, a)
         self.trajectory_start_time = t_now
 
@@ -96,7 +96,7 @@ if __name__ == "__main__":
     sleep(2)
 
     # Base setup
-    base_family   = "Chris"
+    base_family = "HEBI"
     module_names = ['W1_left', 'W2_right']
 
     # Create group
@@ -106,7 +106,6 @@ if __name__ == "__main__":
     load_gains(group, "gains/diff_drive.xml")
 
     base = DiffDrive(group)
-
 
     # mobileIO setup
     phone_name = "mobileIO"
@@ -124,28 +123,29 @@ if __name__ == "__main__":
     # Print Instructions
     instructions = "B8 - Quit"
 
-    m.set_text(instructions)
-    
+    m.clear_text()
+    m.add_text(instructions)
+
     #######################
     ## Main Control Loop ##
     #######################
-                       
+
     while not abort_flag:
         base.update(time())
-    
+
         if not m.update():
             print("Failed to get feedback from MobileIO")
             continue
-      
+
         # B8 - Quit
-        if m.get_button_diff(8) == 3: # "ToOn"
+        if m.get_button_diff(8) == 1:  # "ToOn"
             # Reset text & color, and quit
             m.clear_text()
             m.set_led_color("transparent")
             abort_flag = True
             break
 
-        dtheta =  pow(m.get_axis_state(1), 3) * 2.0
+        dtheta = pow(m.get_axis_state(1), 3) * 2.0
         dx = pow(m.get_axis_state(8), 3)
 
         base.build_smooth_velocity_trajectory(dx, dtheta, time())
