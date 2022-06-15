@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import hebi
 from time import time, sleep
 from hebi import arm as arm_api
@@ -11,16 +12,28 @@ sleep(2)
 
 # Arm setup
 arm_family = "Arm"
-module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
-hrdf_file = "hrdf/A-2085-06.hrdf"
-gains_file = "gains/A-2085-06.xml"
+module_names = ['J1_base', 'J2A_shoulder1', 'J3_shoulder2', 'J4_elbow1', 'J5_elbow2', 'J6_wrist1', 'J7_wrist2']
+hrdf_file = "hrdf/A-2303-01.hrdf"
+gains_file = "gains/A-2303-01.xml"
 
+root_dir = os.path.abspath(os.path.dirname(__file__))
+hrdf_file = os.path.join(root_dir, hrdf_file)
+gains_file = os.path.join(root_dir, gains_file)
 
 # Create Arm object
 arm = arm_api.create([arm_family],
                      names=module_names,
                      hrdf_file=hrdf_file,
                      lookup=lookup)
+
+alt_shoulder_group = lookup.get_group_from_names(arm_family, ['J2B_shoulder1'])
+while not alt_shoulder_group:
+    print(f"Looking for shoulder module {arm_family} / J2B_shoulder1 ...")
+    sleep(1)
+    alt_shoulder_group = lookup.get_group_from_names(arm_family, ['J2B_shoulder1'])
+
+double_shoulder = hebi.arm.DoubledJointMirror(1, alt_shoulder_group)
+arm.add_plugin(double_shoulder)
 
 arm.load_gains(gains_file)
 
