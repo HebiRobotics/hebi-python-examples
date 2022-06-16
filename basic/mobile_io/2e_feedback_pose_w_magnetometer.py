@@ -98,5 +98,4 @@ print('All done!')
 log_file = group.stop_log()
 
 if log_file is not None:
-    log_file.load()
     hebi.util.plot_logs(log_file, 'position', figure_spec=101)

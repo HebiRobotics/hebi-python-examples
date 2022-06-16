@@ -121,14 +121,13 @@ time_vector[1] = 3.0  # seconds for the move - do this a little bit more quickly
 for col in range(xyz_cols - 1):
     waypoints[:, 0] = joint_targets[:, col]
     waypoints[:, 1] = joint_targets[:, col + 1]
-    trajectory = hebi.trajectory.create_trajectory(time, waypoints)
+    trajectory = hebi.trajectory.create_trajectory(time_vector, waypoints)
     execute_trajectory(group, model, trajectory, feedback)
 
 # Stop logging
 log_file = group.stop_log()
 
 if log_file is not None:
-    log_file.load()
     hebi.util.plot_logs(log_file, 'position', figure_spec=101)
     hebi.util.plot_logs(log_file, 'velocity', figure_spec=102)
     hebi.util.plot_logs(log_file, 'effort', figure_spec=103)
