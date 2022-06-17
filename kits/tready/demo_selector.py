@@ -8,10 +8,11 @@ import hebi
 from hebi.util import create_mobile_io
 
 DEMOS = {
-    'Tready No Arm': 'tready',
-    'Tready Joystick Arm': 'tready_arm_joystick_control',
-    'Tready MobileIO Arm': 'tready_arm_io_control',
+    'Leader-Follower Ctrl': 'advanced.demos.MAPS_control.MAPS_input_device_w_gripper_example',
+    'Tready MAPS Control': 'kits.tready.tready_leader_follower_control',
+    'Tready Joystick Arm': 'kits.tready.tready_arm_joystick_control',
 }
+
 
 def launch_demo(demo):
     if demo not in DEMOS.keys():
@@ -22,14 +23,16 @@ def launch_demo(demo):
     root = os.path.split(os.path.abspath(__file__))[0]
     kits_dir = root.split('kits')[0]
     os.chdir(kits_dir)
-    subprocess.check_output(['python3', '-m', f'kits.tready.{DEMOS[demo]}'])
+    subprocess.check_output(['python3', '-m', f'{DEMOS[demo]}'])
+
 
 def select_demo(mobile_io):
     for i, k in enumerate(DEMOS.keys()):
-        if m.get_button_state(i+1):
+        if m.get_button_state(i + 1):
             return k
     else:
         return None
+
 
 if __name__ == "__main__":
     lookup = hebi.Lookup()
@@ -62,9 +65,9 @@ if __name__ == "__main__":
                 next_demo = select_demo(m)
                 if next_demo is not None:
                     # delete the mobileIO group so it doesn't interfere w/ demo
-                    del m # does this actually delete the group?
-                    launch_demo(next_demo) # blocking
-                    break # break to outer loop when demo done
+                    del m  # does this actually delete the group?
+                    launch_demo(next_demo)  # blocking
+                    break  # break to outer loop when demo done
         print('here?')
-                
+
     sys.exit(0)
