@@ -10,7 +10,7 @@ class Arm(PeripheralBody):
     damper_gains = np.array([1.0, 1.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float64).T
     spring_gains = np.array([100.0, 10.0, 100.0, 0.0, 0.0, 0.0], dtype=np.float64).T
 
-    Jacobian_Determinant_Threshold = 0.010
+    Jacobian_Determinant_Threshold = 0.020
     """
     The lower threshold allowed for the determinant calculation of the jacobians.
     Anything below this will be considered at or near a singularity.

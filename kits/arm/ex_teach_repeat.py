@@ -61,9 +61,9 @@ m.add_text(instructions)
 last_mio_recv = time()
 
 while not abort_flag:
-    arm.update() # update the arm
+    arm.update()  # update the arm
     arm.send()
-  
+
     t = time()
     if m.update(0.0):
         last_mio_recv = t
@@ -71,29 +71,29 @@ while not abort_flag:
         if t - last_mio_recv > 1.0:
             print("Failed to get feedback from MobileIO")
         continue
-  
+
     slider3 = m.get_axis_state(3)
-  
+
     # B8 - Quit
-    if m.get_button_diff(8) == 1: # "ToOn"
+    if m.get_button_diff(8) == 1:  # "ToOn"
         m.set_led_color("transparent")
         m.clear_text()
         abort_flag = True
         break
-  
+
     if run_mode == "training":
         # B1 - add waypoint (stop)
-        if m.get_button_diff(1) == 1: # "ToOn"
+        if m.get_button_diff(1) == 1:  # "ToOn"
             print("Stop waypoint added")
-            goal.add_waypoint(t=slider3 + 3.0, position=arm.last_feedback.position, velocity=[0]*arm.size)
-  
+            goal.add_waypoint(t=slider3 + 3.0, position=arm.last_feedback.position, velocity=[0] * arm.size)
+
         # B2 - add waypoint (flow)
-        if m.get_button_diff(2) == 1: # "ToOn"
+        if m.get_button_diff(2) == 1:  # "ToOn"
             print("Flow waypoint added")
             goal.add_waypoint(t=slider3 + 3.0, position=arm.last_feedback.position)
-  
+
         # B3 - toggle training/playback
-        if m.get_button_diff(3) == 1: # "ToOn"
+        if m.get_button_diff(3) == 1:  # "ToOn"
             # Check for more than 2 waypoints
             if goal.waypoint_count > 1:
                 print("Switching to playback mode")
@@ -102,21 +102,20 @@ while not abort_flag:
                 arm.set_goal(goal)
             else:
                 print("At least two waypoints are needed")
-  
+
         # B4 - clear waypoints
-        if m.get_button_diff(4) == 1: # "ToOn"
+        if m.get_button_diff(4) == 1:  # "ToOn"
             print("Waypoints cleared")
             goal.clear()
-  
+
     elif run_mode == "playback":
         # B3 toggle training/playback
-        if m.get_button_diff(3) == 1: # "ToOn"
+        if m.get_button_diff(3) == 1:  # "ToOn"
             print("Switching to training mode")
             arm.cancel_goal()
             run_mode = "training"
             m.set_led_color("blue")
-  
+
         # replay through the path again once the goal has been reached
         if arm.at_goal:
             arm.set_goal(goal)
-  

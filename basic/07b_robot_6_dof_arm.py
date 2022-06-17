@@ -87,7 +87,7 @@ except Exception as e:
 
 # Go to the XYZ positions at four corners of the box, and create a rotation matrix
 # that has the end effector point straight forward.
-xyz_targets = np.array([[0.20, 0.40, 0.40, 0.20, ], [0.30, 0.30, -0.30, -0.30, ], [0.10, 0.10, 0.10, 0.10]])
+xyz_targets = np.array([[0.20, 0.40, 0.40, 0.20], [0.30, 0.30, -0.30, -0.30], [0.10, 0.10, 0.10, 0.10]])
 xyz_cols = xyz_targets.shape[1]
 rotation_target = math_utils.rotate_y(pi / 2)
 

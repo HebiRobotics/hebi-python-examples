@@ -34,13 +34,13 @@ m.update()
 
 # Add the gripper
 gripper_family = arm_family
-gripper_name   = 'gripperSpool'
+gripper_name = 'gripperSpool'
 
 gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
 while gripper_group is None:
-  print(f"Looking for gripper module {gripper_family} / {gripper_name} ...")
-  sleep(1)
-  gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
+    print(f"Looking for gripper module {gripper_family} / {gripper_name} ...")
+    sleep(1)
+    gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
 
 gripper = arm_api.Gripper(gripper_group, -5, 1)
 gripper.load_gains("gains/gripper_spool_gains.xml")
@@ -73,12 +73,12 @@ rot_phone_init = np.zeros((3, 3))
 # target_joints = np.zeros(arm.size)
 
 instructions = (
-        "Mode: {}\n"
-        "A3: Gripper Control\n"
-        "B1: Home\n"
-        "B3: AR Control\n"
-        "B6: Grav Comp\n"
-        "B8: Quit")
+    "Mode: {}\n"
+    "A3: Gripper Control\n"
+    "B1: Home\n"
+    "B3: AR Control\n"
+    "B6: Grav Comp\n"
+    "B8: Quit")
 m.clear_text()
 m.add_text(instructions.format(run_mode))
 
@@ -98,18 +98,22 @@ while not abort_flag:
         if arm.at_goal:
             m.set_led_color("yellow")
             run_mode = "waiting"
+            m.clear_text()
+            m.add_text(instructions.format(run_mode))
             continue
         arm.send()
         continue
 
     # B1 - Return to home position
-    if m.get_button_diff(1) == 3:  # "ToOn"
+    if m.get_button_diff(1) == 1:  # Edge Down
         m.set_led_color("yellow")
         run_mode = "waiting"
+        m.clear_text()
+        m.add_text(instructions.format(run_mode))
         arm.set_goal(softstart)
 
     # B3 - Start AR Control
-    if m.get_button_diff(3) == 3 and run_mode != "ar_mode":  # "ToOn"
+    if m.get_button_diff(3) == 1 and run_mode != "ar_mode":
         m.set_led_color("green")
         run_mode = "ar_mode"
         m.clear_text()
@@ -120,13 +124,15 @@ while not abort_flag:
         rot_phone_init = R.from_quat(xyzw).as_matrix()
 
     # B6 - Grav Comp Mode
-    if m.get_button_diff(6) == 3:  # "ToOn"
+    if m.get_button_diff(6) == 1:
         m.set_led_color("blue")
         run_mode = "grav_comp"
+        m.clear_text()
+        m.add_text(instructions.format(run_mode))
         arm.cancel_goal()
 
     # B8 - Quit
-    if m.get_button_diff(8) == 3:  # "ToOn"
+    if m.get_button_diff(8) == 1:
         m.set_led_color("transparent")
         abort_flag = True
         break
@@ -154,7 +160,7 @@ while not abort_flag:
         # Set the gripper separataly to follow slider A3
         slider3 = m.get_axis_state(3)
         # Map slider range -1 to 1 onto close and open effort for gripper
-        grip_effort = (slider3+1)/2
+        grip_effort = (slider3 + 1) / 2
         if arm.end_effector is not None:
             arm.end_effector.update(grip_effort)
 
