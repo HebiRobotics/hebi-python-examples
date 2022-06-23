@@ -16,8 +16,8 @@ module_name = "mobileIO"
 group = lookup.get_group_from_names([family_name], [module_name])
 
 if group is None:
-  print('Group not found: Did you forget to set the module family and name above?')
-  exit(1)
+    print('Group not found: Did you forget to set the module family and name above?')
+    exit(1)
 
 # Live Visualization
 # Starts logging in the background. Note that logging can be enabled at any time, and that it does not negatively
@@ -43,20 +43,20 @@ current_time = start_time
 fbk = hebi.GroupFeedback(group.size)
 
 while current_time < end_time:
-  current_time = time()
-  fbk = group.get_next_feedback(reuse_fbk=fbk)
-  buttons = np.zeros(8)
-  sliders = np.zeros(8)
-  for i in range(8):
-    buttons[i] = fbk.io.b.get_int(i+1)
-  for i in range(8):
-    if fbk.io.a.has_int(i+1):
-      sliders[i] = fbk.io.a.get_int(i+1)
-    elif fbk.io.a.has_float(i+1):
-      sliders[i] = fbk.io.a.get_float(i+1)
-  
-  plt.bar(x_ticks, buttons)
-  plt.bar(x_ticks, sliders)   
-  plt.pause(0.00001)
+    current_time = time()
+    fbk = group.get_next_feedback(reuse_fbk=fbk)
+    buttons = np.zeros(8)
+    sliders = np.zeros(8)
+    for i in range(8):
+        buttons[i] = fbk.io.b.get_int(i + 1)
+    for i in range(8):
+        if fbk.io.a.has_int(i + 1):
+            sliders[i] = fbk.io.a.get_int(i + 1)
+        elif fbk.io.a.has_float(i + 1):
+            sliders[i] = fbk.io.a.get_float(i + 1)
+
+    plt.bar(x_ticks, buttons)
+    plt.bar(x_ticks, sliders)
+    plt.pause(0.00001)
 
 print('All done!')

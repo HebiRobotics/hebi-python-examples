@@ -36,10 +36,10 @@ daisy_parameters = Parameters()
 
 from math import isfinite
 if args.mobile_io_freq < 1.0 or not isfinite(args.mobile_io_freq):
-  print('ignoring specified Mobile IO feedback frequency {0}. Defaulting to 200Hz.'.format(args.mobile_io_freq))
-  fbk_freq = 200.0
+    print('ignoring specified Mobile IO feedback frequency {0}. Defaulting to 200Hz.'.format(args.mobile_io_freq))
+    fbk_freq = 200.0
 else:
-  fbk_freq = args.mobile_io_freq
+    fbk_freq = args.mobile_io_freq
 
 daisy_config.select_controller_by_mobile_io(io_fam, io_name, fbk_freq)
 
@@ -53,9 +53,10 @@ from components.hexapod import Hexapod
 daisy = Hexapod(config=daisy_config, params=daisy_parameters)
 keep_running = True
 
+
 def stop_running_callback(*args):
-  global keep_running
-  keep_running = False
+    global keep_running
+    keep_running = False
 
 
 daisy.add_on_stop_callback(stop_running_callback)
@@ -64,9 +65,9 @@ daisy.start()
 # The joystick has been initialized once `daisy.start()` returns
 joy = daisy.joystick
 if joy is None:
-  daisy.request_stop()
-  raise RuntimeError('Could not initialize controller for Daisy.')
+    daisy.request_stop()
+    raise RuntimeError('Could not initialize controller for Daisy.')
 
 from time import sleep
 while keep_running:
-  sleep(1.0)
+    sleep(1.0)

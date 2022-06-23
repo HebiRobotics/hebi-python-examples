@@ -7,8 +7,8 @@ from time import sleep, time
 
 
 def is_obstructed(group_fbk, thresh, scale):
-  effort = group_fbk.effort[0]
-  return scale*effort > thresh
+    effort = group_fbk.effort[0]
+    return scale * effort > thresh
 
 
 lookup = hebi.Lookup()
@@ -28,17 +28,18 @@ OBSTRUCTION_DEAD_ZONE = 0.075
 
 
 def sweeping_handler(group_fbk):
-  if is_obstructed(group_fbk, 0.8, cmd.velocity):
-    now_time = time()
+    if is_obstructed(group_fbk, 0.8, cmd.velocity):
+        now_time = time()
 
-    global last_obstruction_time
-    # To limit thrashing, only change directions outside of the deadzone period
-    if (now_time - last_obstruction_time) > OBSTRUCTION_DEAD_ZONE:
-      last_obstruction_time = time()
-      cmd.velocity = -cmd.velocity
+        global last_obstruction_time
+        # To limit thrashing, only change directions outside of the deadzone period
+        if (now_time - last_obstruction_time) > OBSTRUCTION_DEAD_ZONE:
+            last_obstruction_time = time()
+            cmd.velocity = -cmd.velocity
 
-  # TODO: check if obstruction is detected
-  group.send_command(cmd)
+    # TODO: check if obstruction is detected
+    group.send_command(cmd)
+
 
 group.add_feedback_handler(sweeping_handler)
 

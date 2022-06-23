@@ -10,21 +10,21 @@ master = lookup.get_group_from_names(['HEBI'], ['master'])
 slave = lookup.get_group_from_names(['HEBI'], ['slave'])
 
 if master is None:
-  print('Master group not found: Did you forget to set the module family and names above?')
-  exit(1)
+    print('Master group not found: Did you forget to set the module family and names above?')
+    exit(1)
 elif slave is None:
-  print('Slave group not found: Did you forget to set the module family and names above?')
-  exit(1)
+    print('Slave group not found: Did you forget to set the module family and names above?')
+    exit(1)
 elif master.size != slave.size:
-  print('Groups must be same size for master/slave control')
-  exit(1)
+    print('Groups must be same size for master/slave control')
+    exit(1)
 
 command = hebi.GroupCommand(slave.size)
 
 
 def feedback_handler(group_fbk):
-  command.position = group_fbk.position
-  slave.send_command(command)
+    command.position = group_fbk.position
+    slave.send_command(command)
 
 
 # Start feedback callbacks

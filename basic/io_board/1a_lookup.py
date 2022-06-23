@@ -9,7 +9,7 @@ lookup = hebi.Lookup()
 sleep(2.0)
 
 for entry in lookup.entrylist:
-  print(entry)
+    print(entry)
 
 print('NOTE:')
 print('  The listing above should show the information for all the modules')

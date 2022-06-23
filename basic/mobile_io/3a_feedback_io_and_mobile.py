@@ -16,8 +16,8 @@ module_name = "mobileIO"
 group = lookup.get_group_from_names([family_name], [module_name])
 
 if group is None:
-  print('Group not found: Did you forget to set the module family and name above?')
-  exit(1)
+    print('Group not found: Did you forget to set the module family and name above?')
+    exit(1)
 
 # Live Visualization
 # Starts logging in the background. Note that logging can be enabled at any time, and that it does not negatively
@@ -42,40 +42,40 @@ buttons = np.zeros(8)
 sliders = np.zeros(8)
 
 while current_time < end_time:
-  current_time = time()
-  fbk = group.get_next_feedback(reuse_fbk=fbk)
-  if fbk is None:
-    print("Could not get feedback")
-    continue
+    current_time = time()
+    fbk = group.get_next_feedback(reuse_fbk=fbk)
+    if fbk is None:
+        print("Could not get feedback")
+        continue
 
-  gyro = fbk.gyro[0]
-  for i in range(8):
-    buttons[i] = fbk.io.b.get_int(i+1)
-  for i in range(8):
-    if fbk.io.a.has_int(i+1):
-        sliders[i] = fbk.io.a.get_int(i+1)
-    elif fbk.io.a.has_float(i+1):
-        sliders[i] = fbk.io.a.get_float(i+1)
+    gyro = fbk.gyro[0]
+    for i in range(8):
+        buttons[i] = fbk.io.b.get_int(i + 1)
+    for i in range(8):
+        if fbk.io.a.has_int(i + 1):
+            sliders[i] = fbk.io.a.get_int(i + 1)
+        elif fbk.io.a.has_float(i + 1):
+            sliders[i] = fbk.io.a.get_float(i + 1)
 
-  plt.clf()
-  plt.figure(101)
-  plt.ylim([-1, 1])
-  plt.xticks(x_ticks, x_labels)
-  plt.xlabel('Digital Inputs and Analog Inputs')
-  plt.ylabel('[-1 to 1]')
-  plt.grid(True)
-  plt.bar(x_ticks, buttons)
-  plt.bar(x_ticks, sliders)   
+    plt.clf()
+    plt.figure(101)
+    plt.ylim([-1, 1])
+    plt.xticks(x_ticks, x_labels)
+    plt.xlabel('Digital Inputs and Analog Inputs')
+    plt.ylabel('[-1 to 1]')
+    plt.grid(True)
+    plt.bar(x_ticks, buttons)
+    plt.bar(x_ticks, sliders)
 
-  # Plot the logged velocity feedback
-  plt.figure(102)
-  plt.ylim([-3.14, 3.14])
-  plt.xticks(x2_ticks, x2_labels)
-  plt.title('Gyro')
-  plt.ylabel('velocity (rad/sec)')
-  plt.bar(x2_ticks, gyro)
-  plt.grid(True)
+    # Plot the logged velocity feedback
+    plt.figure(102)
+    plt.ylim([-3.14, 3.14])
+    plt.xticks(x2_ticks, x2_labels)
+    plt.title('Gyro')
+    plt.ylabel('velocity (rad/sec)')
+    plt.bar(x2_ticks, gyro)
+    plt.grid(True)
 
-  plt.pause(0.01)
+    plt.pause(0.01)
 
 print('All done!')

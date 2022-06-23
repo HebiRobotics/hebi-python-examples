@@ -5,10 +5,10 @@ from math import pi
 
 # Method 1: Load the kinematics from an HRDF file
 try:
-  model_from_hrdf = hebi.robot_model.import_from_hrdf("hrdf/A-2085-03.hrdf")
+    model_from_hrdf = hebi.robot_model.import_from_hrdf("hrdf/A-2085-03.hrdf")
 except:
-  print("Could not load HRDF.")
-  exit(1)
+    print("Could not load HRDF.")
+    exit(1)
 
 print('Robot model loaded from HRDF has {0} degrees of freedom.'.format(model_from_hrdf.dof_count))
 

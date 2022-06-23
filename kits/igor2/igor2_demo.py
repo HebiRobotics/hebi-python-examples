@@ -34,25 +34,25 @@ has_io_name = io_name is not None
 has_io = not args.joystick
 
 if has_io:
-  if not has_io_fam:
-    # Mobile IO default family
-    io_fam = 'Igor'
-  if not has_io_name:
-    # Mobile IO default name
-    io_name = 'mobileIO'
+    if not has_io_fam:
+        # Mobile IO default family
+        io_fam = 'Igor'
+    if not has_io_name:
+        # Mobile IO default name
+        io_name = 'mobileIO'
 
 from components.configuration import Igor2Config
 igor_config = Igor2Config(args.imitation)
 
 if has_io:
-  from math import isfinite
-  if args.mobile_io_freq < 1.0 or not isfinite(args.mobile_io_freq):
-    print('ignoring specified Mobile IO feedback frequency {0}. Defaulting to 200Hz.'.format(args.mobile_io_freq))
-    fbk_freq = 200.0
-  else:
-    fbk_freq = args.mobile_io_freq
+    from math import isfinite
+    if args.mobile_io_freq < 1.0 or not isfinite(args.mobile_io_freq):
+        print('ignoring specified Mobile IO feedback frequency {0}. Defaulting to 200Hz.'.format(args.mobile_io_freq))
+        fbk_freq = 200.0
+    else:
+        fbk_freq = args.mobile_io_freq
 
-  igor_config.select_controller_by_mobile_io(io_fam, io_name, fbk_freq)
+    igor_config.select_controller_by_mobile_io(io_fam, io_name, fbk_freq)
 
 
 # ------------------------------------------------------------------------------
@@ -64,9 +64,10 @@ from components.igor import Igor
 igor = Igor(config=igor_config)
 keep_running = True
 
+
 def stop_running_callback(*args):
-  global keep_running
-  keep_running = False
+    global keep_running
+    keep_running = False
 
 
 igor.add_on_stop_callback(stop_running_callback)
@@ -75,9 +76,9 @@ igor.start()
 # The joystick has been initialized once `igor.start()` returns
 joy = igor.joystick
 if joy is None:
-  igor.request_stop()
-  raise RuntimeError('Could not initialize controller for Igor.')
+    igor.request_stop()
+    raise RuntimeError('Could not initialize controller for Igor.')
 
 from time import sleep
 while keep_running:
-  sleep(1.0)
+    sleep(1.0)
