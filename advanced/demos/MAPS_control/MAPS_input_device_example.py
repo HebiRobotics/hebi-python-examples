@@ -6,8 +6,9 @@ from time import time, sleep
 import numpy as np
 
 import hebi
-from hebi.robot_model import endeffector_position_objective
-from hebi.robot_model import endeffector_so3_objective
+from hebi.robot_model import endeffector_position_objective, PositionObjective
+from hebi.robot_model import endeffector_so3_objective, SO3Objective
+from hebi.robot_model import TipAxisObjective
 from hebi.robot_model import custom_objective
 
 import typing
@@ -16,6 +17,12 @@ if typing.TYPE_CHECKING:
     import numpy.typing as npt
     from hebi.arm import Arm
     from hebi._internal.group import Group
+
+
+def angle_between(v1: 'npt.NDArray[np.float64]', v2: 'npt.NDArray[np.float64]') -> float:
+    mag_v1 = np.sqrt(v1.dot(v1))
+    mag_v2 = np.sqrt(v2.dot(v2))
+    return np.arccos(v1.dot(v2) / (mag_v1 * mag_v2))
 
 
 class ContinuousAngleMaps:
@@ -28,7 +35,7 @@ class ContinuousAngleMaps:
 
         self.group.feedback_frequency = 200.0
         base_dir, _ = os.path.split(__file__)
-        hrdf_file = os.path.join(base_dir, 'hrdf/mapsArm_7DoF_standard.hrdf')
+        hrdf_file = os.path.join(base_dir, 'hrdf/mapsArm_7DoF_snakeControl.hrdf')
         self.input_model = hebi.robot_model.import_from_hrdf(hrdf_file)
 
     def update(self):
@@ -53,6 +60,16 @@ class ContinuousAngleMaps:
 
     def get_fk(self) -> 'npt.NDArray[np.float64]':
         return np.copy(self.input_model.get_end_effector(self.group_fbk.position))
+
+    def get_upper_arm_tip_axis(self) -> 'npt.NDArray[np.float64]':
+        frames = self.input_model.get_forward_kinematics('output', self.group_fbk.position)
+        upper_arm_frame = frames[9]  # TODO: Can this be figured out without hardcoding?
+        return upper_arm_frame[:3, 2]
+
+    def get_lower_arm_tip_axis(self) -> 'npt.NDArray[np.float64]':
+        frames = self.input_model.get_forward_kinematics('output', self.group_fbk.position)
+        lower_arm_frame = frames[15]  # TODO: Can this be figured out without hardcoding?
+        return lower_arm_frame[:3, 2]
 
     @property
     def position(self):
@@ -152,12 +169,22 @@ class LeaderFollowerControl:
             # Wait until all the joints of the arm and MAPS are
             # within allowed_diff of each other, then align
 
-            # Because the arm is commanded to its home position,
-            # MAPS angles need to be kept within [-π, π]
-            diff = self.angle_diff
+            input_fk = self.input_arm.get_fk()
+            out_tip_axis = np.zeros(3)
+            angles = self.output_arm.last_feedback.position
+            output_xyz = self.output_arm.FK(angles, tip_axis_out=out_tip_axis)
 
-            print(f'Diffs: {np.around(np.rad2deg(diff), decimals=0)}')
-            if np.all(np.rad2deg(np.abs(diff)) <= self.allowed_diffs):
+            diff_xyz = output_xyz - input_fk[:3, 3]
+            diff_axis = np.rad2deg(angle_between(input_fk[:3, 2], out_tip_axis))
+
+            upper_arm_tip_axis = self.input_arm.get_upper_arm_tip_axis()
+            frames = self.output_arm.robot_model.get_forward_kinematics('output', angles)
+            upper_arm_frame = frames[5]  # TODO: Can this be figured out without hardcoding?
+            out_elbow_tip_axis = upper_arm_frame[:3, 2]
+            diff_axis = np.rad2deg(angle_between(upper_arm_tip_axis, out_elbow_tip_axis))
+
+            print(f'Diff xyz: {np.around(diff_xyz, decimals=3)} | Tip: {np.around(diff_axis, decimals=1)}')
+            if np.all(np.abs(diff_xyz) <= self.allowed_diffs) and abs(diff_axis) < 15.0:
                 self.transition_to(self.state.ALIGNING)
 
         elif self.state is self.state.ALIGNING:
@@ -193,10 +220,35 @@ class LeaderFollowerControl:
                 if np.any(np.isnan(ik_angles)):
                     ik_angles = self.output_arm.last_feedback.position
 
+                upper_arm_tip_axis = self.input_arm.get_upper_arm_tip_axis()
+                # frames = self.output_arm.robot_model.get_forward_kinematics('output', ik_angles)
+                # upper_arm_frame = frames[5]  # TODO: Can this be figured out without hardcoding?
+                # out_elbow_tip_axis = upper_arm_frame[:3, 2]
+                lower_arm_tip_axis = self.input_arm.get_lower_arm_tip_axis()
+                # pull out current shoulder tip-axis for debug
+                # frames = self.output_arm.robot_model.get_forward_kinematics('output', ik_angles)
+                # upper_arm_frame = frames[5]  # TODO: Can this be figured out without hardcoding?
+                # out_elbow_tip_axis = upper_arm_frame[:3, 2]
+
+                # print(f' In: {np.around(in_elbow_tip_axis, decimals=2)}\n'
+                #       f'Out: {np.around(out_elbow_tip_axis, decimals=2)}')
+
+                upper_arm_tip_axis_objective = TipAxisObjective('output',
+                                                                idx=5,
+                                                                axis=upper_arm_tip_axis,
+                                                                weight=0.0)
+
+                lower_arm_tip_axis_objective = TipAxisObjective('output',
+                                                                idx=9,
+                                                                axis=lower_arm_tip_axis,
+                                                                weight=0.0)
+
                 self.output_arm.robot_model.solve_inverse_kinematics(ik_angles,
                                                                      endeffector_position_objective(xyz_target),
                                                                      endeffector_so3_objective(rot_target),
-                                                                     custom_objective(1, self.arm_MAPS_mse, weight=0.1),
+                                                                     upper_arm_tip_axis_objective,
+                                                                     lower_arm_tip_axis_objective,
+                                                                     #custom_objective(1, self.arm_MAPS_mse, weight=0.1),
                                                                      output=self.target_joints)
 
                 self.output_goal.clear()
@@ -227,13 +279,14 @@ class LeaderFollowerControl:
             print(f'MAPS xyz home: {self.input_xyz_home}')
             print(f'MAPS rot home:\n{self.input_rot_home}')
 
-            self.output_goal.clear()
-            self.output_goal.add_waypoint(t=2.0, position=self.input_arm.position)
-            self.last_input_position = self.input_arm.position
-            self.output_arm.set_goal(self.output_goal)
+            # self.output_goal.clear()
+            # self.output_goal.add_waypoint(t=2.0, position=self.input_arm.position)
+            # self.last_input_position = self.input_arm.position
+            # self.output_arm.set_goal(self.output_goal)
 
         elif state is self.state.ALIGNED:
             print("TRANSITIONING TO ALIGNED")
+            self.last_input_position = self.input_arm.group_fbk.position
             curr_pos = self.output_arm.last_feedback.position_command
             if np.any(np.isnan(curr_pos)):
                 curr_pos = self.output_arm.last_feedback.position
@@ -265,36 +318,41 @@ if __name__ == "__main__":
     angle_offsets = np.array([0.0, np.pi / 2, -np.pi, -np.pi / 2, -np.pi / 2, -np.pi / 2, 0.0])
     input_arm = ContinuousAngleMaps(maps_group, angle_offsets)
 
+    hrdf_file = 'hrdf/7-DoF-Maggie.hrdf'
+    root_dir = os.path.dirname(__file__)
+    hrdf_file = os.path.join(root_dir, hrdf_file)
+
     output_arm = hebi.arm.create(
-        ['Arm'],
-        ['J1_base', 'J2A_shoulder1', 'J3_shoulder2', 'J4_elbow1', 'J5_elbow2', 'J6_wrist1', 'J7_wrist2'],
-        hrdf_file='hrdf/A-2303-01.hrdf',
+        ['Maggie-Arm'],
+        ['J1_base', 'J2_shoulder1', 'J3_shoulder2', 'J4_elbow1', 'J5_elbow2', 'J6_wrist1', 'J7_wrist2'],
+        hrdf_file=hrdf_file,
         lookup=lookup)
 
-    mirror_group = lookup.get_group_from_names(['Arm'], ['J2B_shoulder1'])
-    while mirror_group is None:
-        print('Still looking for mirror group...')
-        sleep(1)
-        mirror_group = lookup.get_group_from_names(['Arm'], ['J2B_shoulder1'])
+    # mirror_group = lookup.get_group_from_names(['Arm'], ['J2B_shoulder1'])
+    # while mirror_group is None:
+    #     print('Still looking for mirror group...')
+    #     sleep(1)
+    #     mirror_group = lookup.get_group_from_names(['Arm'], ['J2B_shoulder1'])
     # mirror the position/velocity/effort of module 1 ('J2A_shoulder1') to the module
     # in the mirror group ('J2B_shoulder1')
     # Keeps the two modules in the double shoulder bracket in sync
-    output_arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
+    # output_arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
 
-    output_arm.load_gains('gains/A-2303-01.xml')
+    # output_arm.load_gains('gains/7-DoF-Maggie.xml')
     # need to update the gains for the mirror group also
-    gains_cmd = hebi.GroupCommand(1)
-    gains_cmd.read_gains('gains/mirror_shoulder.xml')
-    mirror_group.send_command_with_acknowledgement(gains_cmd)
+    # gains_cmd = hebi.GroupCommand(1)
+    # gains_cmd.read_gains('gains/mirror_shoulder.xml')
+    # mirror_group.send_command_with_acknowledgement(gains_cmd)
 
     output_arm.cancel_goal()
 
     input_arm.update()
     output_arm.update()
 
-    output_joints_home = [0.0, -1.0, 0.0, -0.6, -np.pi / 2, 1.0, 0.0]
-    # allowed angular difference (°) per joint before starting align
-    allowed_diff = np.array([30.0, 20.0, 30.0, 20.0, 45.0, 45.0, 360.0])
+    #output_joints_home = [0.8, 3.3, -3.6, -0.7, -1.7, -5.5, -6.4]
+    output_joints_home = [0.3, 4.5, -3.0, -1.0, 1.7, -0.6, 0.0]
+    # allowed cartesian difference (m) at the end effector before aligning
+    allowed_diff = np.array([0.05, 0.05, 0.05])
 
     leader_follower_control = LeaderFollowerControl(input_arm, output_arm, output_joints_home, allowed_diff)
 
