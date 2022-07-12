@@ -61,10 +61,20 @@ class ContinuousAngleMaps:
     def get_fk(self) -> 'npt.NDArray[np.float64]':
         return np.copy(self.input_model.get_end_effector(self.group_fbk.position))
 
+    def get_upper_arm_orientation(self) -> 'npt.NDArray[np.float64]':
+        frames = self.input_model.get_forward_kinematics('output', self.group_fbk.position)
+        upper_arm_frame = frames[9]  # TODO: Can this be figured out without hardcoding?
+        return upper_arm_frame[:3, :3]
+
     def get_upper_arm_tip_axis(self) -> 'npt.NDArray[np.float64]':
         frames = self.input_model.get_forward_kinematics('output', self.group_fbk.position)
         upper_arm_frame = frames[9]  # TODO: Can this be figured out without hardcoding?
         return upper_arm_frame[:3, 2]
+
+    def get_lower_arm_orientation(self) -> 'npt.NDArray[np.float64]':
+        frames = self.input_model.get_forward_kinematics('output', self.group_fbk.position)
+        lower_arm_frame = frames[15]  # TODO: Can this be figured out without hardcoding?
+        return lower_arm_frame[:3, :3]
 
     def get_lower_arm_tip_axis(self) -> 'npt.NDArray[np.float64]':
         frames = self.input_model.get_forward_kinematics('output', self.group_fbk.position)
@@ -175,7 +185,7 @@ class LeaderFollowerControl:
             output_xyz = self.output_arm.FK(angles, tip_axis_out=out_tip_axis)
 
             diff_xyz = output_xyz - input_fk[:3, 3]
-            diff_axis = np.rad2deg(angle_between(input_fk[:3, 2], out_tip_axis))
+            diff_tip = np.rad2deg(angle_between(input_fk[:3, 2], out_tip_axis))
 
             upper_arm_tip_axis = self.input_arm.get_upper_arm_tip_axis()
             frames = self.output_arm.robot_model.get_forward_kinematics('output', angles)
@@ -183,8 +193,12 @@ class LeaderFollowerControl:
             out_elbow_tip_axis = upper_arm_frame[:3, 2]
             diff_axis = np.rad2deg(angle_between(upper_arm_tip_axis, out_elbow_tip_axis))
 
-            print(f'Diff xyz: {np.around(diff_xyz, decimals=3)} | Tip: {np.around(diff_axis, decimals=1)}')
-            if np.all(np.abs(diff_xyz) <= self.allowed_diffs) and abs(diff_axis) < 15.0:
+            print((f'Diff xyz: {np.around(diff_xyz, decimals=3)} |'
+                   f' Arm: {np.around(diff_axis, decimals=1)} |'
+                   f' Tip: {np.around(diff_tip, decimals=1)}'))
+            if np.all(np.abs(diff_xyz) <= self.allowed_diffs) \
+               and abs(diff_axis) < 15.0 \
+               and abs(diff_tip) < 15.0:
                 self.transition_to(self.state.ALIGNING)
 
         elif self.state is self.state.ALIGNING:
@@ -224,11 +238,12 @@ class LeaderFollowerControl:
                 # frames = self.output_arm.robot_model.get_forward_kinematics('output', ik_angles)
                 # upper_arm_frame = frames[5]  # TODO: Can this be figured out without hardcoding?
                 # out_elbow_tip_axis = upper_arm_frame[:3, 2]
-                lower_arm_tip_axis = self.input_arm.get_lower_arm_tip_axis()
+                lower_arm_orientation = self.input_arm.get_lower_arm_orientation()
+                lower_arm_tip_axis = lower_arm_orientation[:, 2]
                 # pull out current shoulder tip-axis for debug
-                # frames = self.output_arm.robot_model.get_forward_kinematics('output', ik_angles)
-                # upper_arm_frame = frames[5]  # TODO: Can this be figured out without hardcoding?
-                # out_elbow_tip_axis = upper_arm_frame[:3, 2]
+                frames = self.output_arm.robot_model.get_forward_kinematics('output', ik_angles)
+                upper_arm_frame = frames[9]  # TODO: Can this be figured out without hardcoding?
+                out_lower_arm_orientation = upper_arm_frame[:3, :3]
 
                 # print(f' In: {np.around(in_elbow_tip_axis, decimals=2)}\n'
                 #       f'Out: {np.around(out_elbow_tip_axis, decimals=2)}')
