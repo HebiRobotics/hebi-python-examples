@@ -1,7 +1,7 @@
 import sys
 import os
 from time import time, sleep
-from .tready import TreadyControl, TreadyControlState, config_mobile_io
+from .oldtready import TreadyControl, TreadyControlState, config_mobile_io
 
 from advanced.demos.MAPS_control.gripper_control import GripperControl
 from advanced.demos.MAPS_control.MAPS_input_device_example import ContinuousAngleMaps, LeaderFollowerControl, LeaderFollowerControlState

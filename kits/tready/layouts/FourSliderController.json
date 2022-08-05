@@ -1,0 +1,92 @@
+[
+  {
+    "id": "a2,a1",
+    "type": "joystick",
+    "x": -0.9921875,
+    "y": 0.9635416666666666,
+    "width": 0.25390625,
+    "height": 0.3385416666666667,
+    "paramaters": { "text": "a1,a2" }
+  },
+  {
+    "id": "led",
+    "type": "led",
+    "x": 0.947265625,
+    "y": -0.9635416666666666,
+    "width": 0.13671875,
+    "height": 0.18229166666666666,
+    "paramaters": { "text": "led" }
+  },
+  {
+    "id": "a3",
+    "type": "slider",
+    "x": 0.58984375,
+    "y": 0.9322916666666666,
+    "width": 0.01953125,
+    "height": 0.3125,
+    "paramaters": { "text": "FL", "steps": 10, "min": -1, "max": 1, "rest": 0 }
+  },
+  {
+    "id": "a4",
+    "type": "slider",
+    "x": 0.68359375,
+    "y": 0.9322916666666666,
+    "width": 0.01953125,
+    "height": 0.3125,
+    "paramaters": { "text": "FR", "steps": 10, "min": -1, "max": 1, "rest": 0 }
+  },
+  {
+    "id": "a5",
+    "type": "slider",
+    "x": 0.80078125,
+    "y": 0.9296875,
+    "width": 0.01953125,
+    "height": 0.3125,
+    "paramaters": { "text": "BL", "steps": 10, "min": -1, "max": 1, "rest": 0 }
+  },
+  {
+    "id": "a6",
+    "type": "slider",
+    "x": 0.900390625,
+    "y": 0.9296875,
+    "width": 0.01953125,
+    "height": 0.3125,
+    "paramaters": { "text": "BR", "steps": 10, "min": -1, "max": 1, "rest": 0 }
+  },
+  {
+    "id": "b1",
+    "type": "button",
+    "x": 0,
+    "y": 0.2,
+    "width": 0.4296875,
+    "height": 0.13020833333333334,
+    "paramaters": { "text": "Home" }
+  },
+  {
+    "id": "b2",
+    "type": "button",
+    "x": 0,
+    "y": 0.6,
+    "width": 0.4296875,
+    "height": 0.13020833333333334,
+    "paramaters": { "text": "Link Flippers" }
+  },
+  {
+    "id": "d1",
+    "type": "text display",
+    "x": -0.951171875,
+    "y": -0.9427083333333334,
+    "width": 0.95703125,
+    "height": 0.4791666666666667,
+    "paramaters": { "text": "d1" }
+  },
+  {
+    "id": "b3",
+    "type": "button",
+    "x": 0,
+    "y": 1,
+    "width": 0.4296875,
+    "height": 0.13020833333333334,
+    "paramaters": { "text": "Exit" }
+  }
+]

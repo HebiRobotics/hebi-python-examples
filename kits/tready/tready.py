@@ -1,3 +1,4 @@
+import re
 import sys
 import os
 from collections import namedtuple
@@ -5,6 +6,8 @@ from time import time, sleep
 from enum import Enum, auto
 
 import numpy as np
+
+import requests
 
 import hebi
 from hebi.util import create_mobile_io
@@ -15,7 +18,12 @@ if typing.TYPE_CHECKING:
     import numpy.typing as npt
     from hebi._internal.group import Group
     from hebi._internal.mobile_io import MobileIO
+layoutsPath = './kits/tready/layouts/'
 
+with open(layoutsPath + 'FourSliderController.json', 'r') as f:
+    mainPage = f.read()
+with open(layoutsPath + 'TwoSliderController.json', 'r') as f:
+    twoPage = f.read()
 
 class TreadedBase:
     # FRAME CONVENTION:
@@ -374,15 +382,14 @@ class TreadyControl:
 
 def config_mobile_io(m: 'MobileIO'):
     """Sets up mobileIO interface.
-
     Return a function that parses mobileIO feedback into the format
     expected by the Demo
     """
 
     # MobileIO Button Config
     reset_pose_btn = 1
-    joined_flipper_btn = 6
-    quit_btn = 8
+    joined_flipper_btn = 2
+    quit_btn = 3
 
     slider_flip1 = 3
     slider_flip2 = 4
@@ -427,6 +434,7 @@ def config_mobile_io(m: 'MobileIO'):
 
 if __name__ == "__main__":
     from .tready_utils import set_mobile_io_instructions, setup_base
+    from util.mio_layout import MioLayoutController
 
     lookup = hebi.Lookup()
     sleep(2)
@@ -445,7 +453,23 @@ if __name__ == "__main__":
         m = create_mobile_io(lookup, family, phone_name)
         print("Could not find mobileIO device, waiting...")
         sleep(0.5)
-
+    mac = ""
+    for module in lookup.entrylist:
+        print(module)
+        if module.family == family and module.name == phone_name:
+            mac = module.mac_address
+            break;
+    mlc = MioLayoutController(m)
+    mlc.set_mobile_io_instructions(mainPage)
+    m.set_button_label(2, "Join Flippers")
+    m.set_button_label(3, "Exit Demo")
+    m.set_axis_value(1, "Forward")
+    m.set_axis_label(2, "Trun")
+    m.set_axis_label(3, "FL")
+    m.set_axis_label(4, "FR")
+    m.set_axis_label(5, "BL")
+    m.set_axis_label(6, "BR")
+    
     print("mobileIO device found.")
     input_parser = config_mobile_io(m)
 
@@ -454,19 +478,23 @@ if __name__ == "__main__":
     def update_mobile_io(controller: TreadyControl, new_state: TreadyControlState):
         if controller.state == new_state:
             return
-
         if new_state is controller.state.HOMING:
             controller.base.set_color('magenta')
+            print("AAAAAA")
             msg = ('Robot Homing Sequence\n'
                    'Please wait...')
             set_mobile_io_instructions(m, msg, color="blue")
-
         elif new_state is controller.state.TELEOP:
             controller.base.clear_color()
             msg = ('Robot Ready to Control\n'
                    'B1: Reset\n'
                    'B6: Joined Flipper\n'
                    'B8 - Quit')
+            m.set_button_label(1, "Home")
+            m.set_button_label(6, "Join Flippers")
+            m.set_button_label(8, "Quit")
+            m.clear_text()
+            m.add_text(msg)
             set_mobile_io_instructions(m, msg, color="green")
 
         elif new_state is controller.state.DISCONNECTED:

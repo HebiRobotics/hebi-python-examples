@@ -1,14 +1,21 @@
+from audioop import add
 from time import sleep
 import os
+from urllib import response
 
 import hebi
 
 import typing
+
+from requests import request
+import requests
 if typing.TYPE_CHECKING:
     from hebi._internal.group import Group
     from hebi._internal.mobile_io import MobileIO
     from hebi import Lookup
 
+
+    
 
 def setup_base(lookup: 'Lookup', base_family: str):
     from .tready import TreadedBase
@@ -27,12 +34,12 @@ def setup_base(lookup: 'Lookup', base_family: str):
 
 
 def set_mobile_io_instructions(mobile_io: 'MobileIO', message, color=None):
+    print(message)
     # Print Instructions
     if color is not None:
         mobile_io.set_led_color(color)
     mobile_io.clear_text()
     mobile_io.add_text(message)
-
 
 def load_gains(group: 'Group', gains_file: str):
     gains_command = hebi.GroupCommand(group.size)
