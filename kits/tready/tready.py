@@ -366,6 +366,8 @@ class TreadyControl:
 
         elif state is self.state.TELEOP:
             print("TRANSITIONING TO TELEOP")
+            if self.flipper_aligned_back or self.flipper_aligned_front:
+                pass
 
         elif state is self.state.DISCONNECTED:
             print("TRANSITIONING TO STOPPED")
@@ -463,7 +465,7 @@ if __name__ == "__main__":
     mlc.set_mobile_io_instructions(mainPage)
     m.set_button_label(2, "Join Flippers")
     m.set_button_label(3, "Exit Demo")
-    m.set_axis_value(1, "Forward")
+    m.set_axis_label(1, "Forward")
     m.set_axis_label(2, "Trun")
     m.set_axis_label(3, "FL")
     m.set_axis_label(4, "FR")
