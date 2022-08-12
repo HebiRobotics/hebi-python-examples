@@ -1,24 +1,24 @@
 [
     {
-        "id": "d2",
+        "id": "d3",
         "type": "real time",
         "x": 0,
         "y": 2,
         "width": 1,
         "height": 1,
         "paramaters": {
-            "text": "Front"
+            "text": "Back"
         }
     },
     {
-        "id": "b1",
+        "id": "b2",
         "type": "button",
         "x": -0.98,
         "y": -0.98,
         "width": 0.15,
         "height": 0.1,
         "paramaters": {
-            "text": "Front Light"
+            "text": "Back Light"
         }
     },
     {
@@ -33,14 +33,14 @@
         }
     },
     {
-        "id": "b5",
+        "id": "b4",
         "type": "button",
         "x": 0.98,
         "y": -0.98,
         "width": 0.15,
         "height": 0.1,
         "paramaters": {
-            "text": "Back\nCamera"
+            "text": "Front\nCamera"
         }
     },
     {
