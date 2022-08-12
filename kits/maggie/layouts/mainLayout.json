@@ -1,0 +1,164 @@
+[
+    {
+        "id": "b1",
+        "type": "button",
+        "x": -0.98,
+        "y": -0.98,
+        "width": 0.15,
+        "height": 0.1,
+        "paramaters": {
+            "text": "Front Light"
+        }
+    },
+    {
+        "id": "b2",
+        "type": "button",
+        "x": -0.98,
+        "y": -0.7,
+        "width": 0.15,
+        "height": 0.1,
+        "paramaters": {
+            "text": "Back Light"
+        }
+    },
+    {
+        "id": "b3",
+        "type": "button",
+        "x": 0.98,
+        "y": -0.98,
+        "width": 0.15,
+        "height": 0.1,
+        "paramaters": {
+            "text": "Pan/Tilt\nCamera"
+        }
+    },
+    {
+        "id": "b4",
+        "type": "button",
+        "x": 0.98,
+        "y": -0.42,
+        "width": 0.15,
+        "height": 0.1,
+        "paramaters": {
+            "text": "Front\nCamera"
+        }
+    },
+    {
+        "id": "b5",
+        "type": "button",
+        "x": 0.98,
+        "y": -0.7,
+        "width": 0.15,
+        "height": 0.1,
+        "paramaters": {
+            "text": "Back\nCamera"
+        }
+    },
+    {
+        "id": "a1,a2",
+        "type": "joystick",
+        "x": -0.984375,
+        "y": 0.9790625000000001,
+        "width": 0.18,
+        "height": 0.22,
+        "paramaters": {
+            "text": "move,"
+        }
+    },
+    {
+        "id": "a3",
+        "type": "rotslider",
+        "x": -0.560546875,
+        "y": 0.9682291666666666,
+        "width": 0.06,
+        "height": 0.3499999999999999,
+        "paramaters": {
+            "text": "Lift",
+            "steps": 10,
+            "min": -1,
+            "max": 1,
+            "rest": 0
+        }
+    },
+    {
+        "id": "a4",
+        "type": "rotslider",
+        "x": 0.584765625,
+        "y": 0.9994791666666666,
+        "width": 0.06,
+        "height": 0.3499999999999999,
+        "paramaters": {
+            "text": "Zoom",
+            "steps": 10,
+            "min": -1,
+            "max": 1,
+            "rest": 0
+        }
+    },
+    {
+        "id": "a5,a6",
+        "type": "joystick",
+        "x": 0.9830468749999999,
+        "y": 0.9582291666666668,
+        "width": 0.18,
+        "height": 0.22,
+        "paramaters": {
+            "text": "a5,a6"
+        }
+    },
+    {
+        "id": "o1",
+        "type": "text display",
+        "x": -0.96,
+        "y": 0.4791666666666667,
+        "width": 0.13046875,
+        "height": 0.4973958333333333,
+        "paramaters": {
+            "text": "o1"
+        }
+    },
+    {
+        "id": "led",
+        "type": "led",
+        "x": 0.96,
+        "y": 0.3885416666666668,
+        "width": 0.15,
+        "height": 0.15,
+        "paramaters": {
+            "text": "led"
+        }
+    },
+    {
+        "id": "d1",
+        "type": "real time",
+        "x": 0,
+        "y": -1,
+        "width": 0.68,
+        "height": 0.54,
+        "paramaters": {
+            "text": "Pan/Tilt"
+        }
+    },
+    {
+        "id": "d2",
+        "type": "real time",
+        "x": 0,
+        "y": 1,
+        "width": 0.25,
+        "height": 0.2,
+        "paramaters": {
+            "text": "Front"
+        }
+    },
+    {
+        "id": "d3",
+        "type": "real time",
+        "x": 0,
+        "y": 0.48,
+        "width": 0.25,
+        "height": 0.2,
+        "paramaters": {
+            "text": "Back"
+        }
+    }
+]
