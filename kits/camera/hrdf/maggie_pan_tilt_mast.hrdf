@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <robot version="1.2.0">
-  <actuator type="R8-3"/>
-  <bracket type="R8LightRight"/>
+  <rigid-body mass="0" output_rot="Rz(pi/4)"/>
+  <actuator type="R8-9"/>
+  <link type="R8" input="Inline" extension="0.14" twist="pi/2"/>
   <actuator type="R8-3"/>
 
   <!-- For custom end-effector parameters and formatting please visit: -->
@@ -10,7 +11,7 @@
   <end-effector type="Custom"
                 mass="0.5"
                 com_trans="0.000 0.000 0.050"
-                output_trans="0.100 0.000 0.050"
-                output_rot="Ry(pi/2)*Rz(pi/2)"/>
+                output_trans="-0.100 0.000 0.050"
+                output_rot="Ry(-pi/2)*Rz(pi/2)"/>
 
 </robot>

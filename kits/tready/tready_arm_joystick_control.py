@@ -6,7 +6,7 @@ from time import time, sleep
 from hebi.util import create_mobile_io
 
 from kits.arm.joystick_control_sm import ArmJoystickControl, ArmControlState, ArmJoystickInputs
-from .oldtready import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
+from .tready import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
 from .tready_utils import setup_arm_6dof, setup_arm_7dof
 
 import typing

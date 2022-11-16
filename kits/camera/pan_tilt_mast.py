@@ -21,7 +21,9 @@ if typing.TYPE_CHECKING:
 
 
 class HebiCameraMast:
-    def __init__(self, pan_tilt_group: 'Group', hrdf: 'RobotModel | str'=os.path.join(os.path.dirname(__file__), 'hrdf', 'pan_tilt_mast.hrdf')):
+    default_hrdf_file = os.path.join(os.path.dirname(__file__), 'hrdf', 'pan_tilt_mast.hrdf')
+
+    def __init__(self, pan_tilt_group: 'Group', hrdf: 'RobotModel | str' = default_hrdf_file):
         self.group = pan_tilt_group
         self.fbk = self.group.get_next_feedback()
         while self.fbk is None:
@@ -34,7 +36,7 @@ class HebiCameraMast:
         else:
             self.robot_model = hrdf
 
-        self.output_frame = np.empty((4,4), dtype=np.float64)
+        self.output_frame = np.empty((4, 4), dtype=np.float64)
 
     def update(self, t_now: float):
         self.group.get_next_feedback(reuse_fbk=self.fbk)
@@ -53,15 +55,14 @@ class HebiCameraMast:
             self.cmd.position = p
             self.cmd.velocity = v
 
-
     def send(self):
         self.group.send_command(self.cmd)
 
     def set_velocity(self, t_now: float, duration: float, velocity: 'Sequence[float]'):
 
-        positions = np.empty((2,2))
-        velocities = np.empty((2,2))
-        accelerations = np.empty((2,2))
+        positions = np.empty((2, 2))
+        velocities = np.empty((2, 2))
+        accelerations = np.empty((2, 2))
 
         if self.trajectory is None:
             positions[:, 0] = self.fbk.position
@@ -80,13 +81,13 @@ class HebiCameraMast:
 
         accelerations[:, 1] = 0.0
 
-        self.trajectory = hebi.trajectory.create_trajectory([t_now, t_now+duration], positions, velocities, accelerations)
+        self.trajectory = hebi.trajectory.create_trajectory([t_now, t_now + duration], positions, velocities, accelerations)
 
     def set_position(self, t_now: float, duration: float, position: 'Sequence[float]'):
-        p = np.empty((2,2))
+        p = np.empty((2, 2))
         p[:, 0] = self.fbk.position
         p[:, 1] = position
-        self.trajectory = hebi.trajectory.create_trajectory([t_now, t_now+duration], p)
+        self.trajectory = hebi.trajectory.create_trajectory([t_now, t_now + duration], p)
 
 
 class MastControlState(Enum):
@@ -95,6 +96,7 @@ class MastControlState(Enum):
     TELEOP = auto()
     DISCONNECTED = auto()
     EXIT = auto()
+
 
 class MastInputs:
     v_pan: float
@@ -117,14 +119,14 @@ class MastControl:
     PAN_SCALING = 0.5
     TILT_SCALING = 0.5
 
-    def __init__(self, camera_mast: HebiCameraMast, zoom_camera: HebiCamera):
+    def __init__(self, camera_mast: HebiCameraMast, zoom_camera: HebiCamera, home_pose=[0, 0]):
         self.state = MastControlState.STARTUP
         self.mast = camera_mast
         self.camera = zoom_camera
 
         self.last_input_time = time()
 
-        self.home_pose = [0, 0]
+        self.home_pose = home_pose
 
     @property
     def running(self):
@@ -162,9 +164,9 @@ class MastControl:
             if inputs.home:
                 self.transition_to(t_now, self.state.HOMING)
             else:
-                Δpan  = inputs.pan * self.PAN_SCALING
+                Δpan = inputs.pan * self.PAN_SCALING
                 Δtilt = inputs.tilt * self.TILT_SCALING
-                Δt = 0.25 # sec
+                Δt = 0.25  # sec
 
                 self.mast.set_velocity(t_now, Δt, [Δpan, Δtilt])
 
@@ -209,7 +211,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
         return None
 
     # Update Camera zoom/lights
-    zoom  = (m.get_axis_state(3) + 1.0) / 2.0
+    zoom = (m.get_axis_state(3) + 1.0) / 2.0
     light = (m.get_axis_state(4) + 1.0) / 2.0
 
     flood_light = 0.0
@@ -220,7 +222,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
     if m.get_button_state(4):
         spot_light = light
 
-    pan  = -1.0 * m.get_axis_state(1)
+    pan = -1.0 * m.get_axis_state(1)
     tilt = m.get_axis_state(2)
 
     return MastInputs([pan, tilt], m.get_button_state(1), zoom, flood_light, spot_light)
@@ -251,7 +253,7 @@ if __name__ == "__main__":
         print('Looking for camera...')
         sleep(1)
         cam_group = lookup.get_group_from_names('CW1', ['CW1-0004'])
-    
+
     mast = HebiCameraMast(group)
     zoom_camera = HebiCamera(zoom_group)
     camera = HebiCamera(cam_group)
@@ -266,13 +268,13 @@ if __name__ == "__main__":
 
     m.update()
     setup_mobile_io(m)
-    
+
     mast_control = MastControl(mast, zoom_camera)
 
     #######################
     ## Main Control Loop ##
     #######################
-    
+
     while mast_control.running:
         t = time()
         inputs = parse_mobile_feedback(m)
