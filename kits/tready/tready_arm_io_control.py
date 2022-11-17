@@ -108,7 +108,9 @@ if __name__ == "__main__":
     family = "Tready"
 
     arm = setup_arm_7dof(lookup, 'Arm')
-    arm_control = ArmMobileIOControl(arm, [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0])
+    arm_control = ArmMobileIOControl(arm,
+                                     [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0],
+                                     homing_time=5.0)
 
     # Base setup
     base = setup_base(lookup, family)

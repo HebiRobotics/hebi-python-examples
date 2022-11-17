@@ -37,6 +37,7 @@ class ArmMobileIOControl:
     def __init__(self, arm: 'Arm', home_pose: 'Sequence[float] | npt.NDArray[np.float64]', homing_time: float = 5.0):
         self.state = ArmControlState.STARTUP
         self.arm = arm
+        self.homing_time = homing_time
 
         self.arm_seed_ik = home_pose
         self.arm_home = home_pose
@@ -110,7 +111,7 @@ class ArmMobileIOControl:
         if state is self.state.HOMING:
             print("TRANSITIONING TO HOMING")
             g = hebi.arm.Goal(self.arm.size)
-            g.add_waypoint(position=self.arm_home)
+            g.add_waypoint(t=self.homing_time, position=self.arm_home)
             self.arm.set_goal(g)
 
         elif state is self.state.TELEOP:
