@@ -105,9 +105,9 @@ if __name__ == "__main__":
     lookup = hebi.Lookup()
     sleep(2)
 
-    family = "Arm"
+    family = "Tready"
 
-    arm = setup_arm_7dof(lookup, family)
+    arm = setup_arm_7dof(lookup, 'Arm')
     arm_control = ArmMobileIOControl(arm, [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0])
 
     # Base setup
