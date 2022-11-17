@@ -9,7 +9,7 @@ from hebi.util import create_mobile_io
 
 from kits.arm.ar_control_sm import ArmMobileIOControl, ArmControlState, ArmMobileIOInputs
 from .tready import TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
-from .tready_utils import set_mobile_io_instructions, setup_base, setup_arm_6dof
+from .tready_utils import set_mobile_io_instructions, setup_base, setup_arm_7dof
 
 import typing
 if typing.TYPE_CHECKING:
@@ -105,9 +105,9 @@ if __name__ == "__main__":
     lookup = hebi.Lookup()
     sleep(2)
 
-    family = "Tready"
+    family = "Arm"
 
-    arm = setup_arm_6dof(lookup, family)
+    arm = setup_arm_7dof(lookup, family)
     arm_control = ArmMobileIOControl(arm)
 
     # Base setup

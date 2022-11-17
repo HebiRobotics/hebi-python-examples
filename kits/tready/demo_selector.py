@@ -8,9 +8,12 @@ import hebi
 from hebi.util import create_mobile_io
 
 DEMOS = {
-    'Leader-Follower Ctrl': 'advanced.demos.MAPS_control.MAPS_input_device_w_gripper_example',
-    'Tready MAPS Control': 'kits.tready.tready_leader_follower_control',
-    'Tready Joystick Arm': 'kits.tready.tready_arm_joystick_control',
+    'Tready Base Only': 'kits.tready.tready',
+    'Tready + Joystick Arm': 'kits.tready.tready_arm_joystick_control',
+    'Tready + AR Arm': 'kits.tready.tready_arm_io_control',
+    'Tready + Joy Arm + Camera': 'kits.tready.tready_mast_demo',
+    #'Leader-Follower Ctrl': 'advanced.demos.MAPS_control.MAPS_input_device_w_gripper_example',
+    #'Tready MAPS Control': 'kits.tready.tready_leader_follower_control',
 }
 
 
