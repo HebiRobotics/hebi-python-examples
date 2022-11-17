@@ -4,6 +4,9 @@ venv/
 # PyCharm/JetBrains folders
 .idea/
 
+# VSCode folders
+.vscode
+
 # Byte compiled / optimized files
 __pycache__/
 *.py[cod]

@@ -200,7 +200,7 @@ class TreadedBase:
 
         self.chassis_traj = hebi.trajectory.create_trajectory(times, positions, velocities, efforts)
 
-    def align_flippers(self, t_now: 'Optional[float]'=None):
+    def align_flippers(self, t_now: 'Optional[float]' = None):
         t_now = t_now or self.t_prev
         print("FLIPPER ALIGNMENT ON")
         self._aligned_flipper_mode = True
@@ -301,7 +301,7 @@ class TreadyControl:
     def send(self):
         self.base.send()
 
-    def update(self, t_now: float, tready_input: 'Optional[TreadyInputs]'=None):
+    def update(self, t_now: float, tready_input: 'Optional[TreadyInputs]' = None):
         self.base.update(t_now)
 
         if self.state is self.state.EXIT:
@@ -463,10 +463,26 @@ if __name__ == "__main__":
 
         elif new_state is controller.state.TELEOP:
             controller.base.clear_color()
+            m.set_button_label(1, '\u8634')
+            m.set_button_label(2, '')
+            m.set_button_label(3, '')
+            m.set_button_label(4, '')
+            m.set_button_label(5, '')
+            m.set_button_label(6, 'Join')
+            m.set_button_label(7, '')
+            m.set_button_label(8, 'Quit')
+
+            m.set_axis_label(1, '')
+            m.set_axis_label(2, 'drive')
+            m.set_axis_label(3, 'fr')
+            m.set_axis_label(4, 'fl')
+            m.set_axis_label(5, 'br')
+            m.set_axis_label(6, 'bl')
+            m.set_axis_label(7, '')
+            m.set_axis_label(8, '')
+
             msg = ('Robot Ready to Control\n'
-                   'B1: Reset\n'
-                   'B6: Joined Flipper\n'
-                   'B8 - Quit')
+                   '"Join": Move flipper pairs\n')
             set_mobile_io_instructions(m, msg, color="green")
 
         elif new_state is controller.state.DISCONNECTED:
@@ -507,6 +523,5 @@ if __name__ == "__main__":
         #if t - last_log_start_time > 3600:
         #    demo_controller.cycle_log()
         #    last_log_start_time = t
-
 
     sys.exit(0)
