@@ -40,6 +40,8 @@ def setup_mobile_io(m: 'MobileIO'):
     arm_lock = 4
     gripper_close = 5
 
+    m.resetUI()
+
     # set mobileIO control config
     m.set_led_color("blue")
     m.set_snap(slider_flip1, 0)
@@ -57,6 +59,24 @@ def setup_mobile_io(m: 'MobileIO'):
 
     m.set_button_output(arm_enable, 1)
     m.set_button_output(arm_lock, 1)
+
+    m.set_button_label(1, '⟲')
+    m.set_button_label(2, 'En')
+    m.set_button_label(3, '')
+    m.set_button_label(4, 'Lock')
+    m.set_button_label(5, 'Grip')
+    m.set_button_label(6, 'Join')
+    m.set_button_label(7, '')
+    m.set_button_label(8, 'Quit')
+
+    m.set_axis_label(1, '')
+    m.set_axis_label(2, 'drive')
+    m.set_axis_label(3, 'fl')
+    m.set_axis_label(4, 'fr')
+    m.set_axis_label(5, 'bl')
+    m.set_axis_label(6, 'br')
+    m.set_axis_label(7, '')
+    m.set_axis_label(8, '')
 
     def parse_mobile_io_feedback(m: 'MobileIO'):
         should_exit = m.get_button_state(quit_btn)
