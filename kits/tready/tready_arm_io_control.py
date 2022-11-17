@@ -108,7 +108,7 @@ if __name__ == "__main__":
     family = "Arm"
 
     arm = setup_arm_7dof(lookup, family)
-    arm_control = ArmMobileIOControl(arm)
+    arm_control = ArmMobileIOControl(arm, [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0])
 
     # Base setup
     base = setup_base(lookup, family)

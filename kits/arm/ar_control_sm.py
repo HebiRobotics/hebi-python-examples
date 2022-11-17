@@ -8,7 +8,7 @@ from hebi.util import create_mobile_io
 
 import typing
 if typing.TYPE_CHECKING:
-    from typing import Optional
+    from typing import Sequence, Optional
     import numpy.typing as npt
     from hebi._internal.mobile_io import MobileIO
     from hebi.arm import Arm
@@ -34,24 +34,17 @@ class ArmMobileIOInputs:
 
 
 class ArmMobileIOControl:
-    def __init__(self, arm: 'Arm'):
+    def __init__(self, arm: 'Arm', home_pose: 'Sequence[float] | npt.NDArray[np.float64]', homing_time: float = 5.0):
         self.state = ArmControlState.STARTUP
         self.arm = arm
 
-        # 5 DoF home
-        #self.arm_xyz_home = [0.34, 0.0, 0.23]
-        # 6 DoF home
-        self.arm_xyz_home = [0.4, 0.0, 0.0]
-        self.arm_rot_home: 'npt.NDArray[np.float64]' = (R.from_euler('z', np.pi / 2) * R.from_euler('x', np.pi)).as_matrix()
+        self.arm_seed_ik = home_pose
+        self.arm_home = home_pose
 
-        # 5 DoF seed
-        #self.arm_seed_ik = np.array([0.25, -1.0, 0, -0.75, 0])
-        # 6 DoF seed
-        self.arm_seed_ik = np.array([0, 0.5, 2, 3, -1.5, 0])
-        self.arm_home = self.arm.ik_target_xyz_so3(
-            self.arm_seed_ik,
-            self.arm_xyz_home,
-            self.arm_rot_home)
+        self.arm_xyz_home: 'npt.NDArray[np.float64]' = np.empty((3,), dtype=np.float64)
+        self.arm_rot_home: 'npt.NDArray[np.float64]' = np.empty((3, 3), dtype=np.float64)
+
+        self.arm.FK(self.arm_home, xyz_out=self.arm_xyz_home, orientation_out=self.arm_rot_home)
 
     @property
     def running(self):
@@ -208,7 +201,7 @@ if __name__ == "__main__":
                           lookup=lookup)
     arm.load_gains(gains_file)
 
-    arm_control = ArmMobileIOControl(arm)
+    arm_control = ArmMobileIOControl(arm, home_pose=[0, 0.5, 2, 3, -1.5, 0])
 
     # Setup MobileIO
     print('Looking for Mobile IO...')
