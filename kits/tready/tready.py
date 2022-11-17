@@ -463,7 +463,7 @@ if __name__ == "__main__":
 
         elif new_state is controller.state.TELEOP:
             controller.base.clear_color()
-            m.set_button_label(1, '\u2B6F')
+            m.set_button_label(1, '\u21ba')
             m.set_button_label(2, '')
             m.set_button_label(3, '')
             m.set_button_label(4, '')
