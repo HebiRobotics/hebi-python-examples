@@ -79,6 +79,9 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_axis_label(8, '')
 
     def parse_mobile_io_feedback(m: 'MobileIO'):
+        if not m.update(0.0):
+            return None, None
+
         should_exit = m.get_button_state(quit_btn)
         should_reset = m.get_button_state(reset_pose_btn)
         # Chassis Control
@@ -163,12 +166,9 @@ if __name__ == "__main__":
             controller.base.clear_color()
             # Print Instructions
             instructions = ('Robot Ready to Control\n'
-                            'B1: Reset\n'
-                            'B2: Arm Motion Enable\n'
-                            'B4: Arm Lock\n'
-                            'B5: Close Gripper\n'
-                            'B6: Joined Flipper\n'
-                            'B8 - Quit')
+                            'En: Arm Motion Enable\n'
+                            '"Lock": Arm Lock\n'
+                            '"Join": Move flipper pairs\n')
             set_mobile_io_instructions(m, instructions, color='green')
 
         elif new_state is TreadyControlState.DISCONNECTED:
@@ -179,9 +179,7 @@ if __name__ == "__main__":
             controller.base.set_color("red")
 
             # unset mobileIO control config
-            m.set_button_mode(6, 0)
-            m.set_button_output(1, 0)
-            m.set_button_output(8, 0)
+            m.resetUI()
             set_mobile_io_instructions(m, 'Demo Stopped.', color='red')
 
     base_control._transition_handlers.append(update_mobile_io)
@@ -202,7 +200,7 @@ if __name__ == "__main__":
             arm_control.transition_to(t, ArmControlState.EXIT)
             m.set_led_color('red')
 
-        if m.get_button_state(4):
+        if m.get_button_state(8):
             base_control.transition_to(t, TreadyControlState.EXIT)
             arm_control.transition_to(t, ArmControlState.EXIT)
             m.set_led_color('red')
