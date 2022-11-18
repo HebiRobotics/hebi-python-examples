@@ -66,42 +66,42 @@ class ArmMobileIOControl:
                 print("mobileIO timeout, disabling motion")
                 self.transition_to(t_now, self.state.DISCONNECTED)
             return True
-        else:
+
+        self.last_input_time = t_now
+
+        if self.state is self.state.DISCONNECTED:
             self.last_input_time = t_now
+            self.transition_to(t_now, self.state.TELEOP)
+            return True
 
-            if self.state is self.state.DISCONNECTED:
-                self.last_input_time = t_now
+        elif self.state is self.state.HOMING:
+            if self.arm.at_goal:
+                self.phone_xyz_home = arm_input.phone_pos
+                self.phone_rot_home = arm_input.phone_rot
                 self.transition_to(t_now, self.state.TELEOP)
-                return True
+            return True
 
-            elif self.state is self.state.HOMING:
-                if self.arm.at_goal:
-                    self.phone_xyz_home = arm_input.phone_pos
-                    self.phone_rot_home = arm_input.phone_rot
-                    self.transition_to(t_now, self.state.TELEOP)
-                return True
-
-            elif self.state is self.state.TELEOP:
-                if arm_input.locked:
-                    self.transition_to(t_now, self.state.HOMING)
-                else:
-                    arm_goal = self.compute_arm_goal(arm_input)
-                    if arm_goal is not None:
-                        self.arm.set_goal(arm_goal)
-
-                gripper = self.arm.end_effector
-                if gripper is not None:
-                    gripper_closed = gripper.state == 1.0
-                    if arm_input.gripper_closed and not gripper_closed:
-                        gripper.close()
-                    elif not arm_input.gripper_closed and gripper_closed:
-                        gripper.open()
-
-                return True
-
-            elif self.state is self.state.STARTUP:
+        elif self.state is self.state.TELEOP:
+            if arm_input.locked:
                 self.transition_to(t_now, self.state.HOMING)
-                return True
+            else:
+                arm_goal = self.compute_arm_goal(arm_input)
+                if arm_goal is not None:
+                    self.arm.set_goal(arm_goal)
+
+            gripper = self.arm.end_effector
+            if gripper is not None:
+                gripper_closed = gripper.state == 1.0
+                if arm_input.gripper_closed and not gripper_closed:
+                    gripper.close()
+                elif not arm_input.gripper_closed and gripper_closed:
+                    gripper.open()
+
+            return True
+
+        elif self.state is self.state.STARTUP:
+            self.transition_to(t_now, self.state.HOMING)
+            return True
 
     def transition_to(self, t_now: float, state: ArmControlState):
         # self transitions are noop

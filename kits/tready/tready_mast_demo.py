@@ -215,8 +215,8 @@ if __name__ == "__main__":
     sleep(2)
 
     # Setup Camera Pan/Tilt
-    family = "Mast"
-    module_names = ['J1_pan', 'J2_tilt']
+    family = "Camera"
+    module_names = ['J1_tilt', 'J2_pan']
 
     arm = setup_arm_6dof(lookup, 'Tready')
     joint_limits = np.empty((6, 2))

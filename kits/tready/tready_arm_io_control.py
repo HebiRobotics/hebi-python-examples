@@ -82,7 +82,6 @@ def setup_mobile_io(m: 'MobileIO'):
         if not m.update(0.0):
             return None, None
 
-        should_exit = m.get_button_state(quit_btn)
         should_reset = m.get_button_state(reset_pose_btn)
         # Chassis Control
         aligned_flipper_mode = m.get_button_state(joined_flipper_btn)
