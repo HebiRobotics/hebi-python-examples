@@ -120,7 +120,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
         arm_drz = 0.75 * m.get_axis_state(3)
     else:
         mast_pan = -1.0 * np.sign(m.get_axis_state(1)) * m.get_axis_state(1)**2
-        mast_tilt = np.sign(m.get_axis_state(2)) * m.get_axis_state(2)**2
+        mast_tilt = -1.0 * np.sign(m.get_axis_state(2)) * m.get_axis_state(2)**2
 
         base_x = m.get_axis_state(8)
         base_rz = m.get_axis_state(7) * 2.0
@@ -192,7 +192,7 @@ if __name__ == "__main__":
     joint_limits[1, :] = [-2.25, -0.1]
 
     arm_control = ArmJoystickControl(arm,
-                                     [0.0, -2.0, 3.14, -2.5, 1.57, 0.2, 0.0],
+                                     [0.0, -2.0, 3.14, -2.5, -1.57, 2.7, 0.0],
                                      homing_time=7.0,
                                      joint_limits=joint_limits)
 
