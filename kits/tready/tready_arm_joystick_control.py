@@ -120,8 +120,8 @@ if __name__ == "__main__":
 
     # base limits [-2, 2] (radians)
     joint_limits[0, :] = [-2.0, 2.0]
-    # shoulder limits [-2, inf]
-    joint_limits[1, 0] = -2.0
+    # shoulder limits [-2, 0]
+    joint_limits[1, :] = [-2.0, 0.0]
 
     arm_control = ArmJoystickControl(arm,
                                      [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0],
