@@ -208,7 +208,7 @@ if __name__ == "__main__":
         sleep(1)
         zoom_group = lookup.get_group_from_names('Camera', ['C10_zoom'])
     zoom_camera = HebiCamera(zoom_group)
-    mast_control = MastControl(mast, zoom_camera)
+    mast_control = MastControl(mast, zoom_camera, home_pose=[2.5, 0.0])
 
     flipper_names = [f'T{n+1}_J1_flipper' for n in range(4)]
     wheel_names = [f'T{n+1}_J2_track' for n in range(4)]
