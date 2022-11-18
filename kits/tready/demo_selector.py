@@ -16,19 +16,16 @@ DEMOS = {
 }
 
 
-def launch_demo(m, demo):
+def launch_demo(demo):
     if demo not in DEMOS.keys():
         print(f"ERROR: No demo #{demo} set, cannot launch!")
         return
 
     print(f'Launching {DEMOS[demo]}')
-    m.resetUI()
     root = os.path.split(os.path.abspath(__file__))[0]
     kits_dir = root.split('kits')[0]
     os.chdir(kits_dir)
     subprocess.check_output(['python3', '-m', f'{DEMOS[demo]}'])
-    demos_text = [f'B{i+1}: {k}\n' for i, k in enumerate(DEMOS.keys())]
-    m.add_text(''.join(demos_text))
 
 
 def select_demo(mobile_io):
@@ -69,9 +66,10 @@ if __name__ == "__main__":
             if m.update():
                 next_demo = select_demo(m)
                 if next_demo is not None:
+                    m.resetUI()
                     # delete the mobileIO group so it doesn't interfere w/ demo
                     del m  # does this actually delete the group?
-                    launch_demo(m, next_demo)  # blocking
+                    launch_demo(next_demo)  # blocking
                     break  # break to outer loop when demo done
         print('here?')
 
