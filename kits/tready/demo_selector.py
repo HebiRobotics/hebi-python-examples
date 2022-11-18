@@ -10,22 +10,25 @@ from hebi.util import create_mobile_io
 DEMOS = {
     'Tready Base Only': 'kits.tready.tready',
     'Tready + Arm': 'kits.tready.tready_arm_joystick_control',
-    'Tready+Arm+Camera': 'kits.tready.tready_swiss_army',
+    'Tready+Arm+Cam': 'kits.tready.tready_swiss_army',
     #'Leader-Follower Ctrl': 'advanced.demos.MAPS_control.MAPS_input_device_w_gripper_example',
     #'Tready MAPS Control': 'kits.tready.tready_leader_follower_control',
 }
 
 
-def launch_demo(demo):
+def launch_demo(m, demo):
     if demo not in DEMOS.keys():
         print(f"ERROR: No demo #{demo} set, cannot launch!")
         return
 
     print(f'Launching {DEMOS[demo]}')
+    m.resetUI()
     root = os.path.split(os.path.abspath(__file__))[0]
     kits_dir = root.split('kits')[0]
     os.chdir(kits_dir)
     subprocess.check_output(['python3', '-m', f'{DEMOS[demo]}'])
+    demos_text = [f'B{i+1}: {k}\n' for i, k in enumerate(DEMOS.keys())]
+    m.add_text(''.join(demos_text))
 
 
 def select_demo(mobile_io):
@@ -68,7 +71,7 @@ if __name__ == "__main__":
                 if next_demo is not None:
                     # delete the mobileIO group so it doesn't interfere w/ demo
                     del m  # does this actually delete the group?
-                    launch_demo(next_demo)  # blocking
+                    launch_demo(m, next_demo)  # blocking
                     break  # break to outer loop when demo done
         print('here?')
 
