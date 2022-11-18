@@ -202,20 +202,13 @@ if __name__ == "__main__":
         group = lookup.get_group_from_names(family, module_names)
     mast = HebiCameraMast(group)
 
-    zoom_group = lookup.get_group_from_names('Mast', ['C10-0001'])
+    zoom_group = lookup.get_group_from_names('Camera', ['C10_zoom'])
     while zoom_group is None:
         print('Looking for zoom camera...')
         sleep(1)
-        zoom_group = lookup.get_group_from_names('Mast', ['C10-0001'])
+        zoom_group = lookup.get_group_from_names('Camera', ['C10_zoom'])
     zoom_camera = HebiCamera(zoom_group)
     mast_control = MastControl(mast, zoom_camera)
-
-    cam_group = lookup.get_group_from_names('Tready', ['CW1-0004'])
-    while cam_group is None:
-        print('Looking for camera...')
-        sleep(1)
-        cam_group = lookup.get_group_from_names('Tready', ['CW1-0004'])
-    camera = HebiCamera(cam_group)
 
     flipper_names = [f'T{n+1}_J1_flipper' for n in range(4)]
     wheel_names = [f'T{n+1}_J2_track' for n in range(4)]
@@ -260,7 +253,6 @@ if __name__ == "__main__":
             base_control.update(t, base_inputs)
             arm_control.update(t, arm_inputs)
             mast_control.update(t, mast_inputs)
-            camera.update()
             # Update mobileIO stream angle
             if mast_inputs:
                 camera_angle_cmd.io.c.set_float(1, mast_control.camera.roll)
@@ -272,13 +264,6 @@ if __name__ == "__main__":
             mast_control.transition_to(t, MastControlState.EXIT)
             m.set_led_color('red')
 
-        # Update wide-angle camera flood light
-        if m.get_button_state(2):
-            camera.flood_light = light_level
-        else:
-            camera.flood_light = 0.0
-
         base_control.send()
         arm_control.send()
         mast_control.send()
-        camera.send()
