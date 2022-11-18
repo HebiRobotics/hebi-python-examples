@@ -56,7 +56,7 @@ class HebiCameraMast:
     def send(self):
         self.group.send_command(self.cmd)
 
-    def set_velocity(self, t_now: float, duration: float, velocity: 'Sequence[float]'):
+    def set_velocity(self, t_now: float, duration: float, v_pan: float, v_tilt: float):
 
         positions = np.empty((2, 2))
         velocities = np.empty((2, 2))
@@ -74,8 +74,8 @@ class HebiCameraMast:
 
         positions[:, 1] = np.nan
 
-        velocities[0, 1] = velocity[0]
-        velocities[1, 1] = velocity[1]
+        velocities[0, 1] = v_pan
+        velocities[1, 1] = v_tilt
 
         accelerations[:, 1] = 0.0
 
@@ -104,9 +104,9 @@ class MastInputs:
     flood_light: float
     spot_light: float
 
-    def __init__(self, sliders: 'list[float]', home: bool, zoom: float, flood: float, spot: float):
-        self.pan = sliders[0]
-        self.tilt = sliders[1]
+    def __init__(self, pan: float, tilt: float, home: bool, zoom: float, flood: float, spot: float):
+        self.pan = pan
+        self.tilt = tilt
         self.home = home
         self.zoom = zoom
         self.flood_light = flood
@@ -166,7 +166,7 @@ class MastControl:
                 Δtilt = inputs.tilt * self.TILT_SCALING
                 Δt = 0.25  # sec
 
-                self.mast.set_velocity(t_now, Δt, [Δpan, Δtilt])
+                self.mast.set_velocity(t_now, Δt, Δpan, Δtilt)
 
     def transition_to(self, t_now: float, new_state: MastControlState):
         if new_state is self.state:
@@ -223,7 +223,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
     pan = -1.0 * m.get_axis_state(1)
     tilt = m.get_axis_state(2)
 
-    return MastInputs([pan, tilt], m.get_button_state(1), zoom, flood_light, spot_light)
+    return MastInputs(pan, tilt, m.get_button_state(1), zoom, flood_light, spot_light)
 
 
 if __name__ == "__main__":

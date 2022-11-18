@@ -40,16 +40,16 @@ def setup_mobile_io(m: 'MobileIO'):
     # 8: Jackal Left/Right
 
     m.set_button_label(1, '⟲', blocking=False)
-    m.set_button_label(2, 'wide', blocking=False)
+    m.set_button_label(2, 'Quit', blocking=False)
     m.set_button_mode(2, 1)
-    m.set_button_label(3, 'flood', blocking=False)
+    m.set_button_label(3, 'Flood', blocking=False)
     m.set_button_mode(3, 1)
-    m.set_button_label(4, 'spot', blocking=False)
+    m.set_button_label(4, 'Spot', blocking=False)
     m.set_button_mode(4, 1)
-    m.set_button_label(5, 'arm', blocking=False)
+    m.set_button_label(5, 'Arm', blocking=False)
     m.set_button_mode(5, 1)
     m.set_button_label(6, '\u21E7', blocking=False)
-    m.set_button_label(7, 'grip', blocking=False)
+    m.set_button_label(7, 'Grip', blocking=False)
     m.set_button_mode(7, 1)
     m.set_button_label(8, '\u21E9', blocking=False)
 
@@ -65,13 +65,13 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_axis_label(1, '')
     m.set_axis_label(7, '')
     if m.get_button_state(5):
-        m.set_axis_label(2, 'rotate')
-        m.set_axis_label(8, 'translate')
-        m.set_axis_label(3, 'wrist', blocking=False)
+        m.set_axis_label(2, 'Rotate')
+        m.set_axis_label(8, 'Translate')
+        m.set_axis_label(3, 'Wrist', blocking=False)
         m.set_snap(3, 0)
     else:
-        m.set_axis_label(2, 'pan/tilt')
-        m.set_axis_label(8, 'drive')
+        m.set_axis_label(2, 'Pan/Tilt')
+        m.set_axis_label(8, 'Drive')
         m.set_axis_label(3, '\U0001F4A1', blocking=False)
         m.set_snap(3, np.nan)
         m.set_axis_value(3, -0.9)
@@ -89,13 +89,13 @@ def parse_mobile_feedback(m: 'MobileIO'):
 
     if m.get_button_diff(5) == 1:
         light_level = (m.get_axis_state(3) + 1.0) / 2.0
-        m.set_axis_label(2, 'rotate')
-        m.set_axis_label(8, 'translate')
-        m.set_axis_label(3, 'wrist', blocking=False)
+        m.set_axis_label(2, 'Rotate')
+        m.set_axis_label(8, 'Translate')
+        m.set_axis_label(3, 'Wrist', blocking=False)
         m.set_snap(3, 0)
     elif m.get_button_diff(5) == -1:
-        m.set_axis_label(2, 'pan/tilt')
-        m.set_axis_label(8, 'drive')
+        m.set_axis_label(2, 'Pan/Tilt')
+        m.set_axis_label(8, 'Drive')
         m.set_axis_label(3, '\U0001F4A1', blocking=False)
         m.set_snap(3, np.nan)
         m.set_axis_value(3, light_level * 2.0 - 1.0)
@@ -163,7 +163,8 @@ def parse_mobile_feedback(m: 'MobileIO'):
         gripper_closed=gripper_closed)
 
     mast_inputs = MastInputs(
-        [mast_pan, mast_tilt],
+        mast_pan,
+        mast_tilt,
         home,
         camera_zoom,
         flood_light,
@@ -178,7 +179,7 @@ if __name__ == "__main__":
 
     # Setup Camera Pan/Tilt
     family = "Camera"
-    module_names = ['J1_tilt', 'J2_pan']
+    module_names = ['J2_pan', 'J1_tilt']
 
     arm = setup_arm_7dof(lookup, 'Arm')
     joint_limits = np.empty((arm.size, 2))
@@ -191,7 +192,7 @@ if __name__ == "__main__":
     joint_limits[1, :] = [-2.25, -0.1]
 
     arm_control = ArmJoystickControl(arm,
-                                     [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0],
+                                     [0.0, -2.0, 3.14, -3, 1.57, 0.2, 0.0],
                                      homing_time=7.0,
                                      joint_limits=joint_limits)
 
@@ -254,10 +255,9 @@ if __name__ == "__main__":
             arm_control.update(t, arm_inputs)
             mast_control.update(t, mast_inputs)
             # Update mobileIO stream angle
-            if mast_inputs:
-                camera_angle_cmd.io.c.set_float(1, mast_control.camera.roll)
-                camera_angle_cmd.io.c.set_float(2, 0.0)
-                m._group.send_command(camera_angle_cmd)
+            #if mast_inputs:
+            #    camera_angle_cmd.io.c.set_float(1, mast_control.camera.roll)
+            #    m._group.send_command(camera_angle_cmd)
         except KeyboardInterrupt:
             base_control.transition_to(t, TreadyControlState.EXIT)
             arm_control.transition_to(t, ArmControlState.EXIT)
