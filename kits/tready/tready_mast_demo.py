@@ -11,49 +11,11 @@ from ..camera.camera import HebiCamera
 from ..camera.pan_tilt_mast import HebiCameraMast, MastControl, MastControlState, MastInputs
 from ..arm.joystick_control_sm import ArmJoystickControl, ArmControlState, ArmJoystickInputs
 from .tready import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
+from .tready_utils import setup_arm_7dof
 
 import typing
 if typing.TYPE_CHECKING:
-    from hebi import Lookup
     from hebi._internal.mobile_io import MobileIO
-
-
-# 192.168.131.116 : zoom
-# 192.168.131.117 : wide angle
-
-
-def setup_arm_6dof(lookup: 'Lookup', family: str):
-    root_dir = os.path.join(os.path.abspath(__file__.split('kits')[0]), 'kits')
-    print(root_dir)
-    # arm setup
-    arm = hebi.arm.create(
-        [family],
-        ['J1_base', 'J2A_shoulder', 'J3_elbow1', 'J4_elbow2', 'J5_wrist1', 'J6_wrist2'],
-        hrdf_file=os.path.join(root_dir, 'arm/hrdf/A-2303-06G.hrdf'),
-        lookup=lookup)
-
-    mirror_group = lookup.get_group_from_names([family], ['J2B_shoulder'])
-    while mirror_group is None:
-        print(f'Looking for double shoulder module "{family}/J2B_shoulder"...')
-        sleep(1)
-        mirror_group = lookup.get_group_from_names([family], ['J2B_shoulder'])
-
-    arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
-
-    arm.load_gains(os.path.join(root_dir, 'arm/gains/A-2303-06.xml'))
-
-    # Add the gripper
-    gripper_group = lookup.get_group_from_names([family], ['gripperSpool'])
-    while gripper_group is None:
-        print(f'Looking for gripper module "{family}/gripperSpool"...')
-        sleep(1)
-        gripper_group = lookup.get_group_from_names([family], ['gripperSpool'])
-
-    gripper = hebi.arm.Gripper(gripper_group, -5, 1)
-    gripper.load_gains(os.path.join(root_dir, 'arm/gains/gripper_spool_gains.xml'))
-    arm.set_end_effector(gripper)
-
-    return arm
 
 
 def setup_mobile_io(m: 'MobileIO'):
@@ -218,17 +180,20 @@ if __name__ == "__main__":
     family = "Camera"
     module_names = ['J1_tilt', 'J2_pan']
 
-    arm = setup_arm_6dof(lookup, 'Tready')
-    joint_limits = np.empty((6, 2))
+    arm = setup_arm_7dof(lookup, 'Arm')
+    joint_limits = np.empty((arm.size, 2))
     joint_limits[:, 0] = -np.inf
     joint_limits[:, 1] = np.inf
 
-    # base limits [-2, 2] (radians)
-    joint_limits[0, :] = [-2.0, 2.0]
+    # base limits [-3, 1] (radians)
+    joint_limits[0, :] = [-3.0, 1.0]
     # shoulder limits [-2, inf]
     joint_limits[1, 0] = -2.0
 
-    arm_control = ArmJoystickControl(arm, [-0.5, -2, 1, 0, 0.5, -0.5], homing_time=7.0, joint_limits=joint_limits)
+    arm_control = ArmJoystickControl(arm,
+                                     [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0],
+                                     homing_time=7.0,
+                                     joint_limits=joint_limits)
 
     group = lookup.get_group_from_names(family, module_names)
     while group is None:
