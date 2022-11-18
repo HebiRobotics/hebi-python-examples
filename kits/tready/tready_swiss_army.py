@@ -41,7 +41,7 @@ def setup_mobile_io(m: 'MobileIO'):
 
     m.set_button_label(1, '⟲', blocking=False)
     m.set_button_label(2, 'Quit', blocking=False)
-    m.set_button_mode(2, 1)
+    m.set_button_mode(2, 0)
     m.set_button_label(3, 'Flood', blocking=False)
     m.set_button_mode(3, 1)
     m.set_button_label(4, 'Spot', blocking=False)

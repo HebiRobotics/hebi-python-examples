@@ -33,12 +33,12 @@
   
   <actuator type="R8-3"/>
   
-  <bracket type="R8LightRight"/>
+  <bracket type="R8LightLeft"/>
   
   <actuator type="R8-3"/>
   
   <!-- For custom end-effector parameters and formatting please visit: -->
   <!-- https://github.com/HebiRobotics/hebi-hrdf/blob/master/FORMAT.md#end-effector -->
-  <end-effector />      
+  <end-effector type="R8Parallel"/>
               
 </robot>
