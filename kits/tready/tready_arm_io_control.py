@@ -130,9 +130,18 @@ if __name__ == "__main__":
     family = "Tready"
 
     arm = setup_arm_7dof(lookup, 'Arm')
+    joint_limits = np.empty((arm.size, 2))
+    joint_limits[:, 0] = -np.inf
+    joint_limits[:, 1] = np.inf
+
+    # base limits [-2.6, 1.7] (radians)
+    joint_limits[0, :] = [-2.6, 1.7]
+    # shoulder limits [-2.25, -0.1]
+    joint_limits[1, :] = [-2.25, -0.1]
     arm_control = ArmMobileIOControl(arm,
-                                     [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0],
-                                     homing_time=5.0)
+                                     [0.0, -2.0, 3.14, -2.5, -1.57, -0.25, 0.0],
+                                     homing_time=7.0,
+                                     joint_limits=joint_limits)
 
     # Base setup
     base = setup_base(lookup, family)

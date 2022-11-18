@@ -124,7 +124,7 @@ if __name__ == "__main__":
     joint_limits[1, :] = [-2.25, -0.1]
 
     arm_control = ArmJoystickControl(arm,
-                                     [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0],
+                                     [0.0, -2.0, 3.14, -2.5, -1.57, -0.25, 0.0],
                                      homing_time=7.0,
                                      joint_limits=joint_limits)
 

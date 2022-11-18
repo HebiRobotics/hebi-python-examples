@@ -34,7 +34,7 @@ class ArmMobileIOInputs:
 
 
 class ArmMobileIOControl:
-    def __init__(self, arm: 'Arm', home_pose: 'Sequence[float] | npt.NDArray[np.float64]', homing_time: float = 5.0):
+    def __init__(self, arm: 'Arm', home_pose: 'Sequence[float] | npt.NDArray[np.float64]', homing_time: float = 5.0, joint_limits=None):
         self.state = ArmControlState.STARTUP
         self.arm = arm
         self.homing_time = homing_time
@@ -46,6 +46,15 @@ class ArmMobileIOControl:
         self.arm_rot_home: 'npt.NDArray[np.float64]' = np.empty((3, 3), dtype=np.float64)
 
         self.arm.FK(self.arm_home, xyz_out=self.arm_xyz_home, orientation_out=self.arm_rot_home)
+
+        if joint_limits is not None:
+            self.joint_limits = joint_limits
+        else:
+            self.joint_limits = np.empty((arm.size, 2))
+            self.joint_limits[:, 0] = -np.inf
+            self.joint_limits[:, 1] = np.inf
+
+        self.joint_target = arm.last_feedback.position_command
 
     @property
     def running(self):
@@ -147,8 +156,16 @@ class ArmMobileIOControl:
                 arm_xyz_target,
                 arm_rot_target)
 
+            out_of_bounds = False
+            for idx, joint in enumerate(joint_target):
+                if joint < self.joint_limits[idx, 0] or joint > self.joint_limits[idx, 1]:
+                    out_of_bounds = True
+
+            if not out_of_bounds:
+                self.joint_target = joint_target
+
             arm_goal = hebi.arm.Goal(self.arm.size)
-            arm_goal.add_waypoint(position=joint_target)
+            arm_goal.add_waypoint(position=self.joint_target)
             return arm_goal
 
 
