@@ -185,10 +185,10 @@ if __name__ == "__main__":
     joint_limits[:, 0] = -np.inf
     joint_limits[:, 1] = np.inf
 
-    # base limits [-3, 1] (radians)
-    joint_limits[0, :] = [-3.0, 1.0]
-    # shoulder limits [-2, inf]
-    joint_limits[1, 0] = -2.0
+    # base limits [-2.6, 1.7] (radians)
+    joint_limits[0, :] = [-2.6, 1.7]
+    # shoulder limits [-2.25, -0.1]
+    joint_limits[1, :] = [-2.25, -0.1]
 
     arm_control = ArmJoystickControl(arm,
                                      [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0],
