@@ -264,7 +264,7 @@ if __name__ == "__main__":
             mast_control.transition_to(t, MastControlState.EXIT)
             m.set_led_color('red')
 
-        if m.get_button_state(4):
+        if m.get_button_state(2):
             base_control.transition_to(t, TreadyControlState.EXIT)
             arm_control.transition_to(t, ArmControlState.EXIT)
             mast_control.transition_to(t, MastControlState.EXIT)
