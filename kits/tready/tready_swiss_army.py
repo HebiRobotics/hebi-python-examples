@@ -192,7 +192,7 @@ if __name__ == "__main__":
     joint_limits[1, :] = [-2.25, -0.1]
 
     arm_control = ArmJoystickControl(arm,
-                                     [0.0, -2.0, 3.14, -3, 1.57, 0.2, 0.0],
+                                     [0.0, -2.0, 3.14, -2.5, 1.57, 0.2, 0.0],
                                      homing_time=7.0,
                                      joint_limits=joint_limits)
 
@@ -209,7 +209,7 @@ if __name__ == "__main__":
         sleep(1)
         zoom_group = lookup.get_group_from_names('Camera', ['C10_zoom'])
     zoom_camera = HebiCamera(zoom_group)
-    mast_control = MastControl(mast, zoom_camera, home_pose=[2.5, 0.0])
+    mast_control = MastControl(mast, zoom_camera, home_pose=[0.0, 2.5])
 
     flipper_names = [f'T{n+1}_J1_flipper' for n in range(4)]
     wheel_names = [f'T{n+1}_J2_track' for n in range(4)]
@@ -255,9 +255,9 @@ if __name__ == "__main__":
             arm_control.update(t, arm_inputs)
             mast_control.update(t, mast_inputs)
             # Update mobileIO stream angle
-            #if mast_inputs:
-            #    camera_angle_cmd.io.c.set_float(1, mast_control.camera.roll)
-            #    m._group.send_command(camera_angle_cmd)
+            if mast_inputs:
+                camera_angle_cmd.io.c.set_float(1, mast_control.camera.roll)
+                m._group.send_command(camera_angle_cmd)
         except KeyboardInterrupt:
             base_control.transition_to(t, TreadyControlState.EXIT)
             arm_control.transition_to(t, ArmControlState.EXIT)
