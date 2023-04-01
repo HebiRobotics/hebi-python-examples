@@ -3,23 +3,26 @@
 import os
 from time import time, sleep
 import numpy as np
-
-from .gripper_control import GripperControl, GripperInputs
-from .kbhit import KBHit
+from kits.camera.camera import HebiCamera
 
 import hebi
-from hebi.arm import Gripper
 from hebi.robot_model import endeffector_position_objective
 from hebi.robot_model import endeffector_so3_objective
 from hebi.robot_model import endeffector_tipaxis_objective
 
-from .MAPS_input_device_example import ContinuousAngleMaps, LeaderFollowerControlState, LeaderFollowerInputs
+from .MAPS_input_device_example import ContinuousAngleMaps, LeaderFollowerControlState
 
 import typing
 if typing.TYPE_CHECKING:
     from typing import Optional, Callable
     import numpy.typing as npt
     from hebi.arm import Arm
+
+
+class LeaderFollowerInputs:
+
+    def __init__(self, align=False):
+        self.align = align
 
 
 class LeaderFollowerControl:
@@ -30,6 +33,8 @@ class LeaderFollowerControl:
         self.input_arm = input_arm
 
         self.allowed_diffs = np.array(allowed_diff)
+        self.xyz_offset = np.zeros(3)
+        self.rot_offset = np.zeros((3, 3))
 
         self.output_arm = output_arm
         self.output_goal = hebi.arm.Goal(output_arm.size)
@@ -71,9 +76,6 @@ class LeaderFollowerControl:
                 self.last_input_time = t_now
                 self.transition_to(self.state.HOMING)
 
-            if command_input.reset:
-                self.transition_to(self.state.HOMING)
-
         if self.state is self.state.MSTOPPED:
             if np.all(self.output_arm.last_feedback.mstop_state):
                 self.transition_to(self.state.UNALIGNED)
@@ -92,21 +94,24 @@ class LeaderFollowerControl:
             input_fk = self.input_arm.get_fk()
             orientation_out = np.zeros((3, 3))
             output_xyz = self.output_arm.FK(self.output_arm.last_feedback.position, orientation_out=orientation_out)
+            orientation_in = input_fk[:3, :3]
             input_xyz = input_fk[:3, 3]
             output_tipaxis = orientation_out[:, 2]
             input_tipaxis = input_fk[:3, 2]
             diff_xyz = output_xyz - input_xyz
-            diff_axis = output_tipaxis - input_tipaxis
 
-            Δrot_total = np.arccos(((input_fk[:3, :3] @ orientation_out.T).trace() - 1.0) / 2)
+            Δrot_total = np.arccos(((orientation_in @ orientation_out.T).trace() - 1.0) / 2)
             Δrot_total = np.rad2deg(Δrot_total)
 
             Δrot_axis = np.arccos((input_fk[:3, 2] @ output_tipaxis))
             Δrot_axis = np.rad2deg(Δrot_axis)
 
-            print(f'Diff xyz: {np.around(diff_xyz, decimals=3)*1000} mm | tip angle: {np.around(Δrot_axis, decimals=0)}° | total angle: {np.around(Δrot_total, decimals=0)}°')
+            print(f'Tip angle: {np.around(Δrot_axis, decimals=0)}° | Total angle: {np.around(Δrot_total, decimals=0)}°')
 
-            if np.all(np.abs(diff_xyz) <= self.allowed_diffs) and np.abs(Δrot_total) < 5:
+            #if command_input.align and np.abs(Δrot_total) < 5:
+            if command_input.align:
+                self.xyz_offset = diff_xyz
+                self.rot_offset = orientation_out @ orientation_in.T
                 self.transition_to(self.state.ALIGNING)
 
         elif self.state is self.state.ALIGNING:
@@ -131,19 +136,6 @@ class LeaderFollowerControl:
 
                 print(f'Pos delta: {np.around(input_xyz - self.input_xyz_home, decimals=2)} | Rot delta: {np.around(Δrot, decimals=2)}')
 
-                xyz_target = self.output_xyz_home + (input_xyz - self.input_xyz_home)
-                #rot_target = np.matmul(np.matmul(input_rot, self.input_rot_home.T), self.output_rot_home)
-                rot_target = input_rot @ self.input_rot_home.T @ self.output_rot_home
-                #print(f'Tip-axis: in {input_rot[:, 2]} | out {rot_target[:, 2]}')
-
-                # Calculate new arm joint angles
-                # seed IK with the last commanded arm position
-                # Three objectives:
-                # Cartesian end effector position
-                # End effector orientation
-                # Mean Squared Error between arm joint angles and MAPS input arm angles
-                # result written into target_joints
-
                 ik_angles = self.output_arm.last_feedback.position_command
                 if np.any(np.isnan(ik_angles)):
                     ik_angles = self.output_arm.last_feedback.position
@@ -151,8 +143,8 @@ class LeaderFollowerControl:
                 #ik_angles[2] = abs(ik_angles[2])
 
                 self.output_arm.robot_model.solve_inverse_kinematics(ik_angles,
-                                                                     endeffector_position_objective(input_xyz),
-                                                                     endeffector_so3_objective(input_rot),
+                                                                     endeffector_position_objective(input_xyz + self.xyz_offset),
+                                                                     endeffector_so3_objective(self.rot_offset @ input_rot),
                                                                      #endeffector_tipaxis_objective(input_rot[:, 2]),
                                                                      output=self.target_joints)
 
@@ -208,6 +200,39 @@ if __name__ == "__main__":
     lookup = hebi.Lookup()
     sleep(2)
 
+    # Setup MobileIO
+    print('Looking for Mobile IO...')
+    m = hebi.util.create_mobile_io(lookup, 'Tready')
+    while m is None:
+        print('Waiting for Mobile IO device to come online...')
+        sleep(1)
+        m = hebi.util.create_mobile_io(lookup, 'Tready')
+
+    m.update()
+    m.resetUI()
+    for i in range(8):
+        m.set_button_label(i + 1, '')
+        m.set_axis_label(i + 1, '')
+
+    m.set_button_label(1, 'start')
+    m.set_button_label(8, 'quit')
+
+    m.set_axis_label(3, 'flood')
+    m.set_axis_label(4, 'spot')
+    m.set_axis_label(5, 'zoom')
+
+    m.set_axis_value(3, -1.0)
+    m.set_axis_value(4, -1.0)
+    m.set_axis_value(5, -1.0)
+
+    zoom_group = lookup.get_group_from_names('C10', ['C10-0003'])
+    while zoom_group is None:
+        print('Looking for zoom camera...')
+        sleep(1)
+        zoom_group = lookup.get_group_from_names('C10', ['C10-0003'])
+
+    zoom_camera = HebiCamera(zoom_group)
+
     maps_group = lookup.get_group_from_names(['MAPS'], ['J1-A', 'J2-B', 'J2-A', 'J3-B', 'J3-A', 'J4-B', 'J4-A'])
     if maps_group is None:
         print('MAPS arm not found: Check connection and make sure all modules are blinking green')
@@ -235,15 +260,6 @@ if __name__ == "__main__":
 
     output_arm.cancel_goal()
 
-    #gripper_group = lookup.get_group_from_names(['Rosie'], ['gripperSpool'])
-    #while gripper_group is None:
-    #    print("Looking for gripper module 'Rosie/gripperSpool' ...")
-    #    sleep(1)
-    #    gripper_group = lookup.get_group_from_names(['Rosie'], ['gripperSpool'])
-
-    #gripper = Gripper(gripper_group, -5, 1)
-    #gripper.load_gains(os.path.join(os.path.dirname(__file__), '../../../kits/arm/gains/gripper_spool_gains.xml'))
-
     input_arm.update()
     output_arm.update()
 
@@ -254,23 +270,29 @@ if __name__ == "__main__":
 
     # Because we don't need mobileIO for this demo, just initialize this at the beginning
     arm_inputs = LeaderFollowerInputs()
-    #gripper_strength = 0.0
-    #gripper_inputs = GripperInputs(gripper_strength)
 
-    #print('--- Press Spacebar to Toggle Gripper ---')
-    #kb = KBHit()
-    while leader_follower_control.running:  # and gripper_control.running:
+    roll_cmd = hebi.GroupCommand(1)
+
+    while leader_follower_control.running:
         t = time()
         try:
-            #if kb.kbhit():
-            #    c = kb.getch()
-            #    if ord(c) == 32:  # Spacebar
-            #        gripper_strength = 1.0 - gripper_strength
-            #        gripper_inputs = GripperInputs(gripper_strength)
+            if m.update(0.0):
+                roll_cmd.io.c.set_float(1, zoom_camera.roll)
+                m._group.send_command(roll_cmd)
+                zoom_camera.flood_light = (m.get_axis_state(3) + 1.0) / 2
+                zoom_camera.spot_light = (m.get_axis_state(4) + 1.0) / 2
+                zoom_camera.zoom_level = (m.get_axis_state(5) + 1.0) / 2
+
+                if m.get_button_state(1):
+                    arm_inputs.align = True
+
+                if m.get_button_state(8):
+                    leader_follower_control.transition_to(LeaderFollowerControlState.EXIT)
 
             leader_follower_control.update(t, arm_inputs)
-            #gripper_control.update(t, gripper_inputs)
+            zoom_camera.update()
+
             leader_follower_control.send()
-            #gripper_control.send()
+            zoom_camera.send()
         except KeyboardInterrupt:
             leader_follower_control.transition_to(LeaderFollowerControlState.EXIT)
