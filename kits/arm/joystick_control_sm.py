@@ -31,13 +31,18 @@ class ArmJoystickInputs:
 
 
 class ArmJoystickControl:
-    def __init__(self, arm: hebi.arm.Arm, home_pose: 'Sequence[float] | npt.NDArray[np.float64]', homing_time: float = 5.0, shoulder_flip_angle=-np.pi / 2, joint_limits=None):
+    def __init__(self, arm: hebi.arm.Arm,
+                 home_pose: 'Sequence[float] | npt.NDArray[np.float64]',
+                 homing_time: float = 5.0,
+                 shoulder_flip_angle=np.nan,
+                 joint_limits=None):
+
         self.state = ArmControlState.STARTUP
         self.arm = arm
+        self.at_limit = False
 
         self.arm_home = home_pose
         self.homing_time = homing_time
-        # TODO: GENERALIZE THIS
         self.shoulder_flip_angle = shoulder_flip_angle
         if joint_limits is not None:
             self.joint_limits = joint_limits
@@ -88,11 +93,14 @@ class ArmJoystickControl:
             arm_goal = self.compute_arm_goal(demo_input)
             self.arm.set_goal(arm_goal)
 
-            gripper_closed = self.arm.end_effector.state == 1.0
-            if demo_input.gripper_closed and not gripper_closed:
-                self.arm.end_effector.close()
-            elif not demo_input.gripper_closed and gripper_closed:
-                self.arm.end_effector.open()
+            try:
+                gripper_closed = self.arm.end_effector.state == 1.0
+                if demo_input.gripper_closed and not gripper_closed:
+                    self.arm.end_effector.close()
+                elif not demo_input.gripper_closed and gripper_closed:
+                    self.arm.end_effector.open()
+            except AttributeError:
+                pass
 
         elif self.state is self.state.STARTUP:
             self.transition_to(t_now, self.state.HOMING)
@@ -138,15 +146,17 @@ class ArmJoystickControl:
         r_x = R.from_euler('x', arm_inputs.delta_rot_xyz[0])
         r_y = R.from_euler('y', arm_inputs.delta_rot_xyz[1])
         r_z = R.from_euler('z', arm_inputs.delta_rot_xyz[2])
-        wrist_rot = R.from_euler('z', -pos_curr[5])
-        arm_rot_target = R.from_matrix(self.rot_curr) * wrist_rot * r_x * r_y * r_z * wrist_rot.inv()
+        #wrist_rot = R.from_euler('z', -pos_curr[5])
+        #arm_rot_target = R.from_matrix(self.rot_curr) * wrist_rot * r_x * r_y * r_z * wrist_rot.inv()
+        arm_rot_target = R.from_matrix(self.rot_curr) * r_x * r_y * r_z
 
         #curr_seed_ik = pos_curr
         #curr_seed_ik[2] = abs(curr_seed_ik[2])
 
-        if self.joint_target[2] < self.shoulder_flip_angle:
-            diff = abs(self.joint_target[2] - self.shoulder_flip_angle)
-            self.joint_target[2] = self.shoulder_flip_angle + diff
+        if not np.isnan(self.shoulder_flip_angle):
+            if self.joint_target[2] < self.shoulder_flip_angle:
+                diff = abs(self.joint_target[2] - self.shoulder_flip_angle)
+                self.joint_target[2] = self.shoulder_flip_angle + diff
 
         joint_target = self.arm.ik_target_xyz_so3(
             self.joint_target,
@@ -159,7 +169,10 @@ class ArmJoystickControl:
                 out_of_bounds = True
 
         if not out_of_bounds:
+            self.at_limit = False
             self.joint_target = joint_target
+        else:
+            self.at_limit = True
 
         arm_goal.add_waypoint(position=self.joint_target)
         return arm_goal
@@ -267,6 +280,7 @@ if __name__ == "__main__":
     arm_control = ArmJoystickControl(arm,
                                      [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0],
                                      homing_time=7.0,
+                                     shoulder_flip_angle=-np.pi / 2,
                                      joint_limits=joint_limits)
 
     # Setup MobileIO

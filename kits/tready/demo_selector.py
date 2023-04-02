@@ -7,10 +7,11 @@ import subprocess
 import hebi
 from hebi.util import create_mobile_io
 
+#'Tready MAPS Control': 'kits.tready.tready_leader_follower_control',
+
 DEMOS = {
-    'Leader-Follower Ctrl': 'advanced.demos.MAPS_control.MAPS_input_device_w_gripper_example',
-    'Tready MAPS Control': 'kits.tready.tready_leader_follower_control',
-    'Tready Joystick Arm': 'kits.tready.tready_arm_joystick_control',
+    'Leader-Follower Ctrl': 'advanced.demos.MAPS_control.MAPS_input_device_6DoF_example',
+    'Tready Joystick Cam': 'kits.tready.tready_arm_joystick_control_6DoF_camera',
 }
 
 

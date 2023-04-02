@@ -34,7 +34,7 @@ class LeaderFollowerControl:
 
         self.allowed_diffs = np.array(allowed_diff)
         self.xyz_offset = np.zeros(3)
-        self.rot_offset = np.zeros((3, 3))
+        self.rot_offset = np.eye(3)
 
         self.output_arm = output_arm
         self.output_goal = hebi.arm.Goal(output_arm.size)
@@ -106,12 +106,13 @@ class LeaderFollowerControl:
             Δrot_axis = np.arccos((input_fk[:3, 2] @ output_tipaxis))
             Δrot_axis = np.rad2deg(Δrot_axis)
 
-            print(f'Tip angle: {np.around(Δrot_axis, decimals=0)}° | Total angle: {np.around(Δrot_total, decimals=0)}°')
+            msg = f'Tip: {np.around(Δrot_axis, decimals=0)}°\nTotal: {np.around(Δrot_total, decimals=0)}°'
+            m.clear_text()
+            m.add_text(msg)
 
-            #if command_input.align and np.abs(Δrot_total) < 5:
-            if command_input.align:
+            if command_input.align and np.abs(Δrot_total) < 5:
                 self.xyz_offset = diff_xyz
-                self.rot_offset = orientation_out @ orientation_in.T
+                #self.rot_offset = orientation_out @ orientation_in.T
                 self.transition_to(self.state.ALIGNING)
 
         elif self.state is self.state.ALIGNING:
@@ -139,8 +140,6 @@ class LeaderFollowerControl:
                 ik_angles = self.output_arm.last_feedback.position_command
                 if np.any(np.isnan(ik_angles)):
                     ik_angles = self.output_arm.last_feedback.position
-
-                #ik_angles[2] = abs(ik_angles[2])
 
                 self.output_arm.robot_model.solve_inverse_kinematics(ik_angles,
                                                                      endeffector_position_objective(input_xyz + self.xyz_offset),
