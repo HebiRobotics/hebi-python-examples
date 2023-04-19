@@ -3,6 +3,7 @@
 import os
 from time import time, sleep
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 from kits.camera.camera import HebiCamera
 
 import hebi
@@ -26,15 +27,15 @@ class LeaderFollowerInputs:
 
 
 class LeaderFollowerControl:
-    def __init__(self, input_arm: ContinuousAngleMaps, output_arm: 'Arm', output_arm_home: 'list[float] | npt.NDArray[np.float64]', allowed_diff: 'list[float] | npt.NDArray[np.float64]'):
+    def __init__(self, input_arm: ContinuousAngleMaps, output_arm: 'Arm', output_arm_home: 'list[float] | npt.NDArray[np.float64]', input_scale=1.0):
         self.state = LeaderFollowerControlState.STARTUP
         self.last_input_time = time()
         self.last_update_time = self.last_input_time
         self.input_arm = input_arm
 
-        self.allowed_diffs = np.array(allowed_diff)
         self.xyz_offset = np.zeros(3)
         self.rot_offset = np.eye(3)
+        self.input_scale = input_scale
 
         self.output_arm = output_arm
         self.output_goal = hebi.arm.Goal(output_arm.size)
@@ -100,19 +101,19 @@ class LeaderFollowerControl:
             input_tipaxis = input_fk[:3, 2]
             diff_xyz = output_xyz - input_xyz
 
-            Δrot_total = np.arccos(((orientation_in @ orientation_out.T).trace() - 1.0) / 2)
-            Δrot_total = np.rad2deg(Δrot_total)
+            Δrot_total = orientation_in @ orientation_out.T
+            θrot_total = np.arccos(((Δrot_total).trace() - 1.0) / 2)
 
             Δrot_axis = np.arccos((input_fk[:3, 2] @ output_tipaxis))
-            Δrot_axis = np.rad2deg(Δrot_axis)
 
-            msg = f'Tip: {np.around(Δrot_axis, decimals=0)}°\nTotal: {np.around(Δrot_total, decimals=0)}°'
-            m.clear_text()
-            m.add_text(msg)
+            #print(f'Tip: {np.around(np.rad2deg(Δrot_axis), decimals=0)}°\nTotal: {np.around(np.rad2deg(θrot_total), decimals=0)}°')
+            base_z_rot = R.from_euler('z', self.input_arm.group_fbk.position[0])
+            print(f'xyz diff: {output_xyz - input_xyz @ base_z_rot.as_matrix()}')
+            #m.clear_text()
+            #m.add_text(msg)
 
-            if command_input.align and np.abs(Δrot_total) < 5:
-                self.xyz_offset = diff_xyz
-                #self.rot_offset = orientation_out @ orientation_in.T
+            #if command_input.align and θrot_total < np.deg2rad(5):
+            if command_input.align:
                 self.transition_to(self.state.ALIGNING)
 
         elif self.state is self.state.ALIGNING:
@@ -132,18 +133,19 @@ class LeaderFollowerControl:
                 input_fk = self.input_arm.get_fk()
                 input_xyz = input_fk[:3, 3]
                 input_rot = input_fk[:3, :3]
-                Δrot = np.arccos(((input_rot @ self.input_rot_home.T).trace() - 1.0) / 2)
-                Δrot = np.deg2rad(Δrot)
-
-                print(f'Pos delta: {np.around(input_xyz - self.input_xyz_home, decimals=2)} | Rot delta: {np.around(Δrot, decimals=2)}')
+                Δrot = input_rot @ self.input_rot_home.T
+                θrot = np.arccos((Δrot.trace() - 1.0) / 2)
 
                 ik_angles = self.output_arm.last_feedback.position_command
                 if np.any(np.isnan(ik_angles)):
                     ik_angles = self.output_arm.last_feedback.position
 
+                xyz_target = self.output_xyz_home + self.input_scale * (input_xyz - self.input_xyz_home)
+                rot_target = Δrot @ self.output_rot_home
+
                 self.output_arm.robot_model.solve_inverse_kinematics(ik_angles,
-                                                                     endeffector_position_objective(input_xyz + self.xyz_offset),
-                                                                     endeffector_so3_objective(self.rot_offset @ input_rot),
+                                                                     endeffector_position_objective(xyz_target),
+                                                                     endeffector_so3_objective(rot_target),
                                                                      #endeffector_tipaxis_objective(input_rot[:, 2]),
                                                                      output=self.target_joints)
 
@@ -167,16 +169,9 @@ class LeaderFollowerControl:
             print(self.output_arm_home)
             self.output_arm.set_goal(self.output_goal)
 
-        elif state is self.state.ALIGNING:
-            print("TRANSITIONING TO ALIGNING")
-            input_fk = self.input_arm.get_fk()
-            self.input_xyz_home = input_fk[:3, 3]
-            self.input_rot_home = input_fk[:3, :3]
-            print(f'MAPS xyz home: {self.input_xyz_home}')
-            print(f'MAPS rot home:\n{self.input_rot_home}')
-
         elif state is self.state.ALIGNED:
             print("TRANSITIONING TO ALIGNED")
+            m.set_led_color('green', blocking=False)
             curr_pos = self.output_arm.last_feedback.position_command
             if np.any(np.isnan(curr_pos)):
                 curr_pos = self.output_arm.last_feedback.position
@@ -186,6 +181,12 @@ class LeaderFollowerControl:
             self.output_arm.FK(curr_pos,
                                xyz_out=self.output_xyz_home,
                                orientation_out=self.output_rot_home)
+
+            input_fk = self.input_arm.get_fk()
+            self.input_xyz_home = input_fk[:3, 3]
+            self.input_rot_home = input_fk[:3, :3]
+            print(f'MAPS xyz home: {self.input_xyz_home}')
+            print(f'MAPS rot home:\n{self.input_rot_home}')
 
         elif state is self.state.EXIT:
             print("TRANSITIONING TO EXIT")
@@ -209,12 +210,9 @@ if __name__ == "__main__":
 
     m.update()
     m.resetUI()
-    for i in range(8):
-        m.set_button_label(i + 1, '')
-        m.set_axis_label(i + 1, '')
 
     m.set_button_label(1, 'start')
-    m.set_button_label(8, 'quit')
+    m.set_button_label(4, 'quit')
 
     m.set_axis_label(3, 'flood')
     m.set_axis_label(4, 'spot')
@@ -223,6 +221,9 @@ if __name__ == "__main__":
     m.set_axis_value(3, -1.0)
     m.set_axis_value(4, -1.0)
     m.set_axis_value(5, -1.0)
+
+    for i in range(8):
+        m.set_snap(i + 1, np.nan)
 
     zoom_group = lookup.get_group_from_names('C10', ['C10-0003'])
     while zoom_group is None:
@@ -264,7 +265,7 @@ if __name__ == "__main__":
 
     output_joints_home = [np.pi, 0.55, -2.50, np.pi / 2, np.pi / 2, np.pi / 2]
 
-    leader_follower_control = LeaderFollowerControl(input_arm, output_arm, output_joints_home, allowed_diff=[0.1, 0.1, 0.1])
+    leader_follower_control = LeaderFollowerControl(input_arm, output_arm, output_joints_home)
     #gripper_control = GripperControl(gripper)
 
     # Because we don't need mobileIO for this demo, just initialize this at the beginning
@@ -285,7 +286,7 @@ if __name__ == "__main__":
                 if m.get_button_state(1):
                     arm_inputs.align = True
 
-                if m.get_button_state(8):
+                if m.get_button_state(4):
                     leader_follower_control.transition_to(LeaderFollowerControlState.EXIT)
 
             leader_follower_control.update(t, arm_inputs)

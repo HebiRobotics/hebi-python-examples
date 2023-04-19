@@ -131,7 +131,7 @@ if __name__ == "__main__":
     # base limits [-2, 2] (radians)
     joint_limits[0, :] = [np.pi / 2.0, 3.0 / 2.0 * np.pi]
     # shoulder limits [-2, inf]
-    joint_limits[1, 0] = 0.6
+    joint_limits[1, 0] = 0.5
     joint_limits[1, 1] = 1.3
 
     joints_home = [np.pi, 0.7, -2.40, np.pi / 2, np.pi / 2, np.pi / 2]

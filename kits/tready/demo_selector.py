@@ -10,8 +10,8 @@ from hebi.util import create_mobile_io
 #'Tready MAPS Control': 'kits.tready.tready_leader_follower_control',
 
 DEMOS = {
-    'Leader-Follower Ctrl': 'advanced.demos.MAPS_control.MAPS_input_device_6DoF_example',
-    'Tready Joystick Cam': 'kits.tready.tready_arm_joystick_control_6DoF_camera',
+    'MAPS': 'advanced.demos.MAPS_control.MAPS_input_device_6DoF_example',
+    'Joy': 'kits.tready.tready_arm_joystick_control_6DoF_camera',
 }
 
 
@@ -58,8 +58,8 @@ if __name__ == "__main__":
         last_seen_time = time()
         # clear buttons before demo selection
         m.resetUI()
-        demos_text = [f'B{i+1}: {k}\n' for i, k in enumerate(DEMOS.keys())]
-        m.add_text(''.join(demos_text))
+        for i, k in enumerate(DEMOS.keys()):
+            m.set_button_label(i + 1, k)
 
         #######################
         ## Demo Select Loop ##

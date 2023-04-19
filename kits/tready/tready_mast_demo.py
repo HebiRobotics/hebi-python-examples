@@ -228,7 +228,10 @@ if __name__ == "__main__":
     # shoulder limits [-2, inf]
     joint_limits[1, 0] = -2.0
 
-    arm_control = ArmJoystickControl(arm, [-0.5, -2, 1, 0, 0.5, -0.5], homing_time=7.0, joint_limits=joint_limits)
+    arm_control = ArmJoystickControl(arm, [-0.5, -2, 1, 0, 0.5, -0.5],
+                                     homing_time=7.0,
+                                     shoulder_flip_angle=-np.pi / 2,
+                                     joint_limits=joint_limits)
 
     group = lookup.get_group_from_names(family, module_names)
     while group is None:
