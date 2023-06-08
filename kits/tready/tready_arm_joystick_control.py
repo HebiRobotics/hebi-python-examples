@@ -102,8 +102,8 @@ def parse_mobile_feedback(m: 'MobileIO'):
 
     arm_inputs = ArmJoystickInputs(
         home,
-        [arm_dx, arm_dy, arm_dz],
-        [arm_drx, arm_dry, arm_drz],
+        [-arm_dx, -arm_dy, arm_dz],
+        [-arm_drx, -arm_dry, -arm_drz],
         gripper_closed=gripper_closed)
 
     return base_inputs, arm_inputs
@@ -113,20 +113,21 @@ if __name__ == "__main__":
     lookup = hebi.Lookup()
     sleep(2)
 
-    arm = setup_arm_7dof(lookup, 'Arm')
+    arm = setup_arm_6dof(lookup, 'Arm')
     joint_limits = np.empty((7, 2))
     joint_limits[:, 0] = -np.inf
     joint_limits[:, 1] = np.inf
 
     # base limits [-2, 2] (radians)
-    joint_limits[0, :] = [-2.0, 2.0]
-    # shoulder limits [-2, inf]
-    joint_limits[1, 0] = -2.0
+    joint_limits[0, :] = [1.14, 5.14]
+    # shoulder limits [0, 2.6]
+    joint_limits[1, :] = [0.0, 2.6]
 
     arm_control = ArmJoystickControl(arm,
-                                     [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0],
+                                     #[0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0],
+                                     [3.14, 2.0, 2.0, 1.57, -1.57, -1.57],
                                      homing_time=7.0,
-                                     shoulder_flip_angle=-np.pi / 2,
+                                     shoulder_flip_angle=0.0,
                                      joint_limits=joint_limits)
 
     flipper_names = [f'T{n+1}_J1_flipper' for n in range(4)]

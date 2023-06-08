@@ -4,6 +4,7 @@ import os
 from time import time, sleep
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+from kits.camera.camera import HebiCamera
 
 import hebi
 from hebi.robot_model import endeffector_position_objective
@@ -224,6 +225,14 @@ if __name__ == "__main__":
     for i in range(8):
         m.set_snap(i+1, np.nan)
 
+    zoom_group = lookup.get_group_from_names('C10', ['C10-0003'])
+    while zoom_group is None:
+        print('Looking for zoom camera...')
+        sleep(1)
+        zoom_group = lookup.get_group_from_names('C10', ['C10-0003'])
+
+    zoom_camera = HebiCamera(zoom_group)
+
     maps_group = lookup.get_group_from_names(['MAPS'], ['J1-A', 'J2-B', 'J2-A', 'J3-B', 'J3-A', 'J4-B', 'J4-A'])
     if maps_group is None:
         print('MAPS arm not found: Check connection and make sure all modules are blinking green')
@@ -232,7 +241,7 @@ if __name__ == "__main__":
     # need these b/c MAPS joint zeros are in different locations
     input_arm = ContinuousAngleMaps(maps_group, [0] * 7)
 
-    hrdf_file = 'hrdf/A-2240-06G.hrdf'
+    hrdf_file = 'hrdf/A-2240-06C.hrdf'
     gains_file = 'gains/A-2240-06.xml'
 
     filename = os.path.abspath(__file__)
@@ -254,7 +263,7 @@ if __name__ == "__main__":
     input_arm.update()
     output_arm.update()
 
-    output_joints_home = [3.14, 2.0, 2.0, 1.57, -1.57, 1.57]
+    output_joints_home = [np.pi, 0.55, -2.50, np.pi / 2, np.pi / 2, np.pi / 2]
 
     leader_follower_control = LeaderFollowerControl(input_arm, output_arm, output_joints_home, input_scale=2.0)
     #gripper_control = GripperControl(gripper)
@@ -262,10 +271,18 @@ if __name__ == "__main__":
     # Because we don't need mobileIO for this demo, just initialize this at the beginning
     arm_inputs = LeaderFollowerInputs()
 
+    roll_cmd = hebi.GroupCommand(1)
+
     while leader_follower_control.running:
         t = time()
         try:
             if m.update(0.0):
+                roll_cmd.io.c.set_float(1, zoom_camera.roll)
+                m._group.send_command(roll_cmd)
+                zoom_camera.flood_light = (m.get_axis_state(3) + 1.0) / 2
+                zoom_camera.spot_light = (m.get_axis_state(4) + 1.0) / 2
+                zoom_camera.zoom_level = (m.get_axis_state(5) + 1.0) / 2
+
                 if m.get_button_state(1):
                     arm_inputs.align = True
 
@@ -273,7 +290,9 @@ if __name__ == "__main__":
                     leader_follower_control.transition_to(LeaderFollowerControlState.EXIT)
 
             leader_follower_control.update(t, arm_inputs)
+            zoom_camera.update()
 
             leader_follower_control.send()
+            zoom_camera.send()
         except KeyboardInterrupt:
             leader_follower_control.transition_to(LeaderFollowerControlState.EXIT)
