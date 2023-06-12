@@ -393,7 +393,12 @@ def config_mobile_io(m: 'MobileIO'):
     joy_rot = 1
 
     # set mobileIO control config
+    m.resetUI()
     m.set_led_color("blue")
+    m.set_axis_label(slider_flip1, 'FL', blocking=False)
+    m.set_axis_label(slider_flip2, 'FR', blocking=False)
+    m.set_axis_label(slider_flip3, 'BL', blocking=False)
+    m.set_axis_label(slider_flip4, 'BR', blocking=False)
     m.set_snap(slider_flip1, 0)
     m.set_snap(slider_flip2, 0)
     m.set_snap(slider_flip3, 0)

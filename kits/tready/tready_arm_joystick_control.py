@@ -32,6 +32,10 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_snap(5, 0)
     m.set_axis_label(6, 'rear', blocking=False)
     m.set_snap(6, 0)
+    m.set_snap(1,0)
+    m.set_snap(2,0)
+    m.set_snap(7,0)
+    m.set_snap(8,0)
 
     m.set_axis_label(1, '')
     m.set_axis_label(7, '')
@@ -50,6 +54,8 @@ def setup_mobile_io(m: 'MobileIO'):
 def parse_mobile_feedback(m: 'MobileIO'):
     if not m.update(0.0):
         return None, None
+
+    m.set_led_color('blue', blocking=False)
 
     home = m.get_button_state(1)
 

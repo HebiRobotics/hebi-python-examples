@@ -10,6 +10,12 @@ from hebi.robot_model import endeffector_position_objective
 from hebi.robot_model import endeffector_so3_objective
 from hebi.robot_model import endeffector_tipaxis_objective
 
+from hebi.arm import Gripper
+from .gripper_control import GripperControl, GripperInputs
+
+#from kits.arm.joystick_control_sm import ArmJoystickControl, ArmControlState, ArmJoystickInputs
+#from kits.tready.tready_utils import setup_arm_6dof, setup_arm_7dof
+
 from .MAPS_input_device_example import ContinuousAngleMaps, LeaderFollowerControlState
 
 import typing
@@ -210,8 +216,12 @@ if __name__ == "__main__":
     m.update()
     m.resetUI()
 
+    m.set_led_color('magenta', blocking=False)
+
     m.set_button_label(1, 'start')
     m.set_button_label(4, 'quit')
+    m.set_button_label(7, 'grip', blocking=False)
+    m.set_button_mode(7, 1)
 
     m.set_axis_label(3, 'flood')
     m.set_axis_label(4, 'spot')
@@ -246,6 +256,10 @@ if __name__ == "__main__":
         ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
         hrdf_file=hrdf_file,
         lookup=lookup)
+    
+    gripper_group = lookup.get_group_from_names(['Arm'], ['gripperSpool'])
+    gripper = Gripper(gripper_group, -5, 1)
+    gripper.load_gains(os.path.join(os.path.dirname(__file__), '../../../kits/arm/gains/gripper_spool_gains.xml'))
 
     output_arm.load_gains(gains_file)
 
@@ -257,7 +271,7 @@ if __name__ == "__main__":
     output_joints_home = [3.14, 2.0, 2.0, 1.57, -1.57, 1.57]
 
     leader_follower_control = LeaderFollowerControl(input_arm, output_arm, output_joints_home, input_scale=2.0)
-    #gripper_control = GripperControl(gripper)
+    gripper_control = GripperControl(gripper)
 
     # Because we don't need mobileIO for this demo, just initialize this at the beginning
     arm_inputs = LeaderFollowerInputs()
@@ -271,9 +285,15 @@ if __name__ == "__main__":
 
                 if m.get_button_state(4):
                     leader_follower_control.transition_to(LeaderFollowerControlState.EXIT)
-
+                if m.get_button_state(7):
+                    gripper_target = 1.0
+                else:
+                    gripper_target = 0.0
+            
+            GripperInputs(gripper_target)
+            gripper_control.send()
+            gripper_control.update(t, GripperInputs(gripper_target))
             leader_follower_control.update(t, arm_inputs)
-
             leader_follower_control.send()
         except KeyboardInterrupt:
             leader_follower_control.transition_to(LeaderFollowerControlState.EXIT)
