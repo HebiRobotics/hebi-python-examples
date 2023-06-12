@@ -59,8 +59,11 @@ if __name__ == "__main__":
         last_seen_time = time()
         # clear buttons before demo selection
         m.resetUI()
+        m.set_led_color('yellow', blocking=False)
+
         for i in range(8):
-            m.set_snap(i+1, None)
+            m.set_snap(i+1, 0)
+            #m.set_snap(i+1, None)
 
         demos_text = [f'B{i+1}: {k}\n' for i, k in enumerate(DEMOS.keys())]
         for i, k in enumerate(DEMOS.keys()):
