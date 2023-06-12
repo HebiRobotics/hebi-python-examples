@@ -29,13 +29,11 @@ def setup_mobile_io(m: 'MobileIO'):
 
     m.set_axis_label(4, '', blocking=False)
     m.set_axis_label(5, 'front', blocking=False)
-    m.set_snap(5, 0)
     m.set_axis_label(6, 'rear', blocking=False)
-    m.set_snap(6, 0)
-    m.set_snap(1,0)
-    m.set_snap(2,0)
-    m.set_snap(7,0)
-    m.set_snap(8,0)
+    
+
+    for i in range(8):
+        m.set_snap(i+1, 0)
 
     m.set_axis_label(1, '')
     m.set_axis_label(7, '')
