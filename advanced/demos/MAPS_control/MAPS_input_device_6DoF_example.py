@@ -232,7 +232,8 @@ if __name__ == "__main__":
     m.set_axis_value(5, -1.0)
 
     for i in range(8):
-        m.set_snap(i+1, np.nan)
+        m.set_snap(i+1, 0)
+        #m.set_snap(i+1, np.nan)
 
     maps_group = lookup.get_group_from_names(['MAPS'], ['J1-A', 'J2-B', 'J2-A', 'J3-B', 'J3-A', 'J4-B', 'J4-A'])
     if maps_group is None:
