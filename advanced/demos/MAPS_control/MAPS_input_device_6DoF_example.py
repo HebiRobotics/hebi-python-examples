@@ -218,8 +218,9 @@ if __name__ == "__main__":
 
     m.set_led_color('magenta', blocking=False)
 
-    m.set_button_label(1, 'start')
-    m.set_button_label(4, 'quit')
+    m.set_button_label(1, 'start', blocking=False)
+    m.set_button_label(4, 'quit', blocking=False)
+    m.set_button_label(5, 'reset', blocking=False)
     m.set_button_label(7, 'grip', blocking=False)
     m.set_button_mode(7, 1)
 
@@ -283,9 +284,11 @@ if __name__ == "__main__":
             if m.update(0.0):
                 if m.get_button_state(1):
                     arm_inputs.align = True
-
                 if m.get_button_state(4):
                     leader_follower_control.transition_to(LeaderFollowerControlState.EXIT)
+                if m.get_button_state(5):
+                    leader_follower_control.transition_to(LeaderFollowerControlState.HOMING)
+                    arm_inputs.align = False
                 if m.get_button_state(7):
                     gripper_target = 1.0
                 else:
