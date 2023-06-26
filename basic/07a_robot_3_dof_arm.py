@@ -61,7 +61,7 @@ def execute_trajectory(group, model, trajectory, feedback):
         # compensate for the weight of the arm. Dynamic Compensation uses the
         # kinematics and mass to compensate for the commanded accelerations of the arm.
 
-        eff_cmd = model.get_grav_comp_efforts(feedback.position, [0, 0, 1])
+        eff_cmd = model.get_grav_comp_efforts(feedback.position, np.array([0, 0, 1], dtype='float'))
         # NOTE: dynamic compensation effort computation has not yet been added to the APIs
 
         # Fill in the command and send commands to the arm
