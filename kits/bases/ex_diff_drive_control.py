@@ -122,7 +122,7 @@ if __name__ == "__main__":
 
     # Print Instructions
     instructions = "B8 - Quit"
-
+    print(instructions)
     m.clear_text()
     m.add_text(instructions)
 

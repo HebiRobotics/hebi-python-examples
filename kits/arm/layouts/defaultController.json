@@ -1,0 +1,196 @@
+[
+    {
+        "id": "b1",
+        "type": "button",
+        "x": -0.96,
+        "y": -0.96,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": "B1"
+        }
+    },
+    {
+        "id": "b2",
+        "type": "button",
+        "x": -0.55078125,
+        "y": -0.96,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": "B2"
+        }
+    },
+    {
+        "id": "b3",
+        "type": "button",
+        "x": -0.96,
+        "y": -0.5,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": "B3"
+        }
+    },
+    {
+        "id": "b4",
+        "type": "button",
+        "x": -0.55078125,
+        "y": -0.5,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": "B4"
+        }
+    },
+    {
+        "id": "b5",
+        "type": "button",
+        "x": 0.55,
+        "y": -0.96,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": "B5"
+        }
+    },
+    {
+        "id": "b6",
+        "type": "button",
+        "x": 0.96,
+        "y": -0.96,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": "B6"
+        }
+    },
+    {
+        "id": "b7",
+        "type": "button",
+        "x": 0.55,
+        "y": -0.5,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": "B7"
+        }
+    },
+    {
+        "id": "b8",
+        "type": "button",
+        "x": 0.96,
+        "y": -0.5,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": "B8"
+        }
+    },
+    {
+        "id": "a1,a2",
+        "type": "joystick",
+        "x": -0.96,
+        "y": 0.88,
+        "width": 0.18,
+        "height": 0.22,
+        "parameters": {
+            "text1": "A1",
+            "text2": "A2"
+        }
+    },
+    {
+        "id": "a3",
+        "type": "rotslider",
+        "x": -0.45,
+        "y": 0.96,
+        "width": 0.05,
+        "height": 0.5,
+        "parameters": {
+            "text": "A3",
+            "steps": 10,
+            "min": -1,
+            "max": 1,
+            "rest": 0
+        }
+    },
+    {
+        "id": "a4",
+        "type": "rotslider",
+        "x": -0.3,
+        "y": 0.96,
+        "width": 0.05,
+        "height": 0.5,
+        "parameters": {
+            "text": "A4",
+            "steps": 10,
+            "min": -1,
+            "max": 1,
+            "rest": 0
+        }
+    },
+    {
+        "id": "a5",
+        "type": "rotslider",
+        "x": 0.3,
+        "y": 0.96,
+        "width": 0.05,
+        "height": 0.5,
+        "parameters": {
+            "text": "A5",
+            "steps": 10,
+            "min": -1,
+            "max": 1,
+            "rest": 0
+        }
+    },
+    {
+        "id": "a6",
+        "type": "rotslider",
+        "x": 0.45,
+        "y": 0.96,
+        "width": 0.05,
+        "height": 0.5,
+        "parameters": {
+            "text": "A6",
+            "steps": 10,
+            "min": -1,
+            "max": 1,
+            "rest": 0
+        }
+    },
+    {
+        "id": "a7,a8",
+        "type": "joystick",
+        "x": 0.96,
+        "y": 0.86,
+        "width": 0.18,
+        "height": 0.22,
+        "parameters": {
+            "text1": "A7",
+            "text2": "A8"
+        }
+    },
+    {
+        "id": "disp1",
+        "type": "text display",
+        "x": -0.23,
+        "y": 1.0,
+        "width": 0.22,
+        "height": 0.98,
+        "parameters": {
+            "text": ""
+        }
+    },
+    {
+        "id": "led",
+        "type": "led",
+        "x": 0,
+        "y": 0.8,
+        "width": 0.2,
+        "height": 0.2,
+        "parameters": {
+            "text": "led"
+        }
+    }
+]

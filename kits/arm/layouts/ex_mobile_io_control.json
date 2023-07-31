@@ -1,0 +1,68 @@
+[
+  {
+      "id": "b1",
+      "type": "button",
+      "x": -0.8,
+      "y":  -0.73,
+      "width": 0.15,
+      "height": 0.15,
+      "parameters": {
+          "text": "Waypoint 1"
+      }
+  },
+  {
+      "id": "b2",
+      "type": "button",
+      "x": -0.4,
+      "y": -0.73,
+      "width": 0.15,
+      "height": 0.15,
+      "parameters": {
+          "text": "Waypoint 2"
+      }
+  },
+  {
+      "id": "b3",
+      "type": "button",
+      "x": -0,
+      "y":  -0.73,
+      "width": 0.15,
+      "height": 0.15,
+      "parameters": {
+          "text": "Waypoint 3"
+      }
+  },
+  {
+      "id": "b4",
+      "type": "button",
+      "x": 0.4,
+      "y": -0.73,
+      "width": 0.15,
+      "height": 0.15,
+      "parameters": {
+          "text": "Grav Comp Mode"
+      }
+  },
+  {
+      "id": "b5",
+      "type": "button",
+      "x": 0.8,
+      "y": -0.73,
+      "width": 0.15,
+      "height": 0.15,
+      "parameters": {
+          "text": "Quit"
+      }
+  },
+  {
+      "id": "led",
+      "type": "led",
+      "x": -0,
+      "y": -0.15,
+      "width": 0.2,
+      "height": 0.2,
+      "parameters": {
+          "text": "led"
+      }
+  }
+]

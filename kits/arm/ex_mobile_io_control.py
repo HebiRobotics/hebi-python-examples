@@ -30,6 +30,8 @@ sleep(2)
 m = create_mobile_io(lookup, arm_family, phone_name)
 if m is None:
     raise RuntimeError("Could not find Mobile IO device")
+
+m.send_layout('./layouts/ex_mobile_io_control.json')
 m.set_led_color("blue")  # as we start in grav comp
 m.update()
 
@@ -42,13 +44,14 @@ waypoint_2 = np.asarray([np.pi / 4, np.pi / 3, 2 * np.pi / 3, np.pi / 3, np.pi /
 waypoint_3 = np.asarray([-np.pi / 4, np.pi / 3, 2 * np.pi / 3, np.pi / 3, 3 * np.pi / 4, 0], dtype=np.float64)
 
 # Print Instructions
-instructions = """B1-B3 - Waypoints 1-3
-B6 - Grav Comp Mode
-B8 - Quit
+instructions = """
+B1 - Add Waypoint 1
+B2 - Add Waypoint 2
+B3 - Add Waypoint 3
+B4 - Grav Comp Mode
+B5 - Quit
 """
 print(instructions)
-m.clear_text()
-m.add_text(instructions)
 
 #######################
 ## Main Control Loop ##
@@ -83,12 +86,12 @@ while not abort_flag:
         arm.set_goal(goal)
 
     # B6 - Grav Comp
-    if m.get_button_diff(6) == 1:  # "ToOn"
+    if m.get_button_diff(4) == 1:  # "ToOn"
         m.set_led_color("blue")
         arm.cancel_goal()
 
     # B8 - Quit
-    if m.get_button_diff(8) == 1:  # "ToOn"
+    if m.get_button_diff(5) == 1:  # "ToOn"
         # Reset text & color, and quit
         m.clear_text()
         m.set_led_color("transparent")

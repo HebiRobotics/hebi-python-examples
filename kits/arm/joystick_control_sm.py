@@ -167,25 +167,10 @@ class ArmJoystickControl:
 
 def setup_mobile_io(m: 'MobileIO'):
     m.resetUI()
-    m.set_button_label(1, '⟲', blocking=False)
-    m.set_button_label(2, '', blocking=False)
-    m.set_button_label(3, '', blocking=False)
-    m.set_button_label(4, 'Quit', blocking=False)
-    m.set_button_label(6, '\u21E7', blocking=False)
-    m.set_button_label(7, 'grip', blocking=False)
+    m.send_layout('./layouts/joystick_control_sm.json')
     m.set_button_mode(7, 1)
-    m.set_button_label(8, '\u21E9', blocking=False)
-
-    m.set_axis_label(3, '', blocking=False)
-    m.set_axis_label(4, '', blocking=False)
-    m.set_axis_label(5, '', blocking=False)
-    m.set_axis_label(6, '', blocking=False)
-
-    m.set_axis_label(1, '')
-    m.set_axis_label(7, '')
     m.set_axis_label(2, 'rotate')
     m.set_axis_label(8, 'translate')
-    m.set_axis_label(3, 'wrist', blocking=False)
     m.set_snap(3, 0)
 
 
@@ -279,6 +264,16 @@ if __name__ == "__main__":
 
     m.update()
     setup_mobile_io(m)
+
+    # Print Instructions
+    instructions = """B1 - Add waypoint (stop)
+    B2 - Add waypoint (flow)
+    B3 - Toggle training/playback
+    B4 - Clear waypoints
+    B5 - Quit
+    A3 - Up/down for longer/shorter time to waypoint
+    """
+    print(instructions)
 
     #######################
     ## Main Control Loop ##

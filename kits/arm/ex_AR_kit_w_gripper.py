@@ -31,6 +31,7 @@ m = create_mobile_io(lookup, arm_family, phone_name)
 if m is None:
     raise RuntimeError("Could not find Mobile IO device")
 m.update()
+m.send_layout('./layouts/ex_AR_kit_w_gripper.json')
 
 # Add the gripper
 gripper_family = arm_family
@@ -76,11 +77,10 @@ instructions = (
     "Mode: {}\n"
     "A3: Gripper Control\n"
     "B1: Home\n"
-    "B3: AR Control\n"
-    "B6: Grav Comp\n"
-    "B8: Quit")
-m.clear_text()
-m.add_text(instructions.format(run_mode))
+    "B2: AR Control\n"
+    "B3: Grav Comp\n"
+    "B4: Quit")
+print(instructions.format(run_mode))
 
 #######################
 ## Main Control Loop ##
@@ -112,8 +112,8 @@ while not abort_flag:
         m.add_text(instructions.format(run_mode))
         arm.set_goal(softstart)
 
-    # B3 - Start AR Control
-    if m.get_button_diff(3) == 1 and run_mode != "ar_mode":
+    # B2 - Start AR Control
+    if m.get_button_diff(2) == 1 and run_mode != "ar_mode":
         m.set_led_color("green")
         run_mode = "ar_mode"
         m.clear_text()
@@ -123,16 +123,16 @@ while not abort_flag:
         xyzw = [*wxyz[1:], wxyz[0]]
         rot_phone_init = R.from_quat(xyzw).as_matrix()
 
-    # B6 - Grav Comp Mode
-    if m.get_button_diff(6) == 1:
+    # B3 - Grav Comp Mode
+    if m.get_button_diff(3) == 1:
         m.set_led_color("blue")
         run_mode = "grav_comp"
         m.clear_text()
         m.add_text(instructions.format(run_mode))
         arm.cancel_goal()
 
-    # B8 - Quit
-    if m.get_button_diff(8) == 1:
+    # B4 - Quit
+    if m.get_button_diff(4) == 1:
         m.set_led_color("transparent")
         abort_flag = True
         break

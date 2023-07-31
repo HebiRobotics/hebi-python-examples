@@ -28,9 +28,11 @@ sleep(2)
 # Setup MobileIO
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, arm_family, phone_name)
+
 if m is None:
     raise RuntimeError("Could not find Mobile IO device")
 m.update()
+m.send_layout('./layouts/ex_AR_kit.json')
 
 # Demo Variables
 abort_flag = False
@@ -57,6 +59,15 @@ rot_phone_init = np.zeros((3, 3))
 
 # # Target variables
 # target_joints = np.zeros(arm.size)
+
+# Print Instructions
+instructions = (
+    "Mode: {}\n"
+    "B1: Return to Home Position\n"
+    "B2: Start AR Control\n"
+    "B3: Grav Comp Mode\n"
+    "B4: Quit")
+print(instructions.format(run_mode))
 
 #######################
 ## Main Control Loop ##
@@ -85,7 +96,7 @@ while not abort_flag:
         arm.set_goal(softstart)
 
     # B3 - Start AR Control
-    if m.get_button_diff(3) == 1 and run_mode != "ar_mode":  # "ToOn"
+    if m.get_button_diff(2) == 1 and run_mode != "ar_mode":  # "ToOn"
         m.set_led_color("green")
         run_mode = "ar_mode"
         xyz_phone_init = m.position.copy()
@@ -94,13 +105,13 @@ while not abort_flag:
         rot_phone_init = R.from_quat(xyzw).as_matrix()
 
     # B6 - Grav Comp Mode
-    if m.get_button_diff(6) == 1:  # "ToOn"
+    if m.get_button_diff(3) == 1:  # "ToOn"
         m.set_led_color("blue")
         run_mode = "grav_comp"
         arm.cancel_goal()
 
     # B8 - Quit
-    if m.get_button_diff(8) == 1:  # "ToOn"
+    if m.get_button_diff(4) == 1:  # "ToOn"
         m.set_led_color("transparent")
         abort_flag = True
         break

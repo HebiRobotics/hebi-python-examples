@@ -32,6 +32,8 @@ print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, arm_family, phone_name)
 if m is None:
     raise RuntimeError("Could not find Mobile IO device")
+
+m.send_layout('./layouts/ex_teach_repeat.json')
 m.set_led_color("blue")  # as we start in grav comp
 m.clear_text()  # Clear any garbage on screen
 m.update()
@@ -45,14 +47,12 @@ goal = arm_api.Goal(arm.size)
 # Print Instructions
 instructions = """B1 - Add waypoint (stop)
 B2 - Add waypoint (flow)
-A3 - Up/down for longer/shorter time to waypoint
 B3 - Toggle training/playback
 B4 - Clear waypoints
-B8 - Quit
+B5 - Quit
+A3 - Up/down for longer/shorter time to waypoint
 """
 print(instructions)
-m.clear_text()
-m.add_text(instructions)
 
 #######################
 ## Main Control Loop ##
@@ -74,8 +74,8 @@ while not abort_flag:
 
     slider3 = m.get_axis_state(3)
 
-    # B8 - Quit
-    if m.get_button_diff(8) == 1:  # "ToOn"
+    # B5 - Quit
+    if m.get_button_diff(5) == 1:  # "ToOn"
         m.set_led_color("transparent")
         m.clear_text()
         abort_flag = True
