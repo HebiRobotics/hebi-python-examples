@@ -198,7 +198,6 @@ if __name__ == "__main__":
     module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
     hrdf_file = "hrdf/A-2085-06.hrdf"
     gains_file = "gains/A-2085-06.xml"
-    run_mode = "softstart"
 
     # Create Arm object
     arm = hebi.arm.create([arm_family],
