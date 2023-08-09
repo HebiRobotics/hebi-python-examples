@@ -64,7 +64,7 @@ rot_phone_init = np.zeros((3, 3))
 instructions = (
     "Mode: {}\n"
     "B1: Return to Home Position\n"
-    "B2: Start AR Control\n"
+    "B3: Start AR Control\n"
     "B6: Grav Comp Mode\n"
     "B8: Quit")
 print(instructions.format(run_mode))
@@ -96,7 +96,7 @@ while not abort_flag:
         arm.set_goal(softstart)
 
     # B3 - Start AR Control
-    if m.get_button_diff(2) == 1 and run_mode != "ar_mode":  # "ToOn"
+    if m.get_button_diff(3) == 1 and run_mode != "ar_mode":  # "ToOn"
         m.set_led_color("green")
         run_mode = "ar_mode"
         xyz_phone_init = m.position.copy()
