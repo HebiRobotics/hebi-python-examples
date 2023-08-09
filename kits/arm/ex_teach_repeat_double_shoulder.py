@@ -62,7 +62,6 @@ print(instructions)
 #######################
 
 last_mio_recv = time()
-last_mio_recv = time()
 
 while not abort_flag:
     arm.update()  # update the arm
