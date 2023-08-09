@@ -168,7 +168,6 @@ class ArmJoystickControl:
 def setup_mobile_io(m: 'MobileIO'):
     m.resetUI()
     m.send_layout('./layouts/joystick_control_sm.json')
-    m.set_button_mode(7, 1)
     m.set_axis_label(2, 'rotate')
     m.set_axis_label(8, 'translate')
     m.set_snap(3, 0)

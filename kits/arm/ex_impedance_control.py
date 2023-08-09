@@ -21,8 +21,6 @@ if m is None:
     raise RuntimeError("Could not find Mobile IO device")
 
 m.send_layout('./layouts/ex_impedance_control.json')
-m.set_button_mode(1, 'momentary')
-m.set_button_mode(2, 'toggle')
 m.update()
 
 # Setup arm components

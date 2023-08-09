@@ -7,7 +7,8 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Home"
+          "text": "Home",
+          "mode": 0
       }
   },
   {
@@ -18,7 +19,8 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Arm Control"
+          "text": "Arm Control",
+          "mode": 0
       }
   },
   {
@@ -29,7 +31,8 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Gripper"
+          "text": "Gripper",
+          "mode": 0
       }
   },
   {

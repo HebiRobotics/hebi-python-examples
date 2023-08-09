@@ -7,7 +7,8 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Home"
+          "text": "Home",
+          "mode": 0
       }
   },
   {
@@ -18,7 +19,8 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Quit"
+          "text": "Quit",
+          "mode": 0
       }
   },
   {
@@ -29,7 +31,8 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "\u21E7"
+          "text": "\u21E7",
+          "mode": 0
       }
   },
   {
@@ -40,7 +43,8 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Grip"
+          "text": "Grip",
+          "mode": 1
       }
   },
   {
@@ -51,7 +55,8 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "\u21E9"
+          "text": "\u21E9",
+          "mode": 0
       }
   },
   {
