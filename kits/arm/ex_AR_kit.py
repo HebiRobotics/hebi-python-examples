@@ -58,6 +58,29 @@ rot_phone_init = np.zeros((3, 3))
 # # Target variables
 # target_joints = np.zeros(arm.size)
 
+# Print Instructions
+instructions = (
+    "Mode: {}\n"
+    "B1: Return to Home Position\n"
+    "B3: Start AR Control\n"
+    "B6: Grav Comp Mode\n"
+    "B8: Quit")
+print(instructions.format(run_mode))
+
+
+m.set_button_label(1, 'Home')
+m.set_button_label(3, 'AR Control')
+m.set_button_label(6, 'Grav Comp')
+m.set_button_label(8, 'Quit')
+
+m.set_button_label(2, '')
+m.set_button_label(4, '')
+m.set_button_label(5, '')
+m.set_button_label(7, '')
+
+for axis in range(1, 9):
+    m.set_axis_label(axis, '')
+
 #######################
 ## Main Control Loop ##
 #######################

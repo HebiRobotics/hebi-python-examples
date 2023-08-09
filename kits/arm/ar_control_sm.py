@@ -159,11 +159,18 @@ class ArmMobileIOControl:
 
 
 def setup_mobile_io(m: 'MobileIO'):
-    m.set_button_label(1, '⟲')
-    m.set_button_label(5, 'arm')
-    m.set_button_mode(5, 1)
-    m.set_button_label(7, 'grip')
-    m.set_button_mode(7, 1)
+    m.set_button_label(1, 'Home')
+    m.set_button_label(2, 'Arm Control')
+    m.set_button_label(3, 'Gripper')
+
+    for button in range(4, 9):
+        m.set_button_label(button, '')
+
+    for axis in range(1, 9):
+        m.set_axis_label(axis, '')
+      
+    m.set_button_mode(2, 1)
+    m.set_button_mode(3, 1)
 
 
 def parse_mobile_feedback(m: 'MobileIO'):
@@ -185,8 +192,8 @@ def parse_mobile_feedback(m: 'MobileIO'):
         np.copy(m.position),
         rotation,
         home,
-        m.get_button_state(5),
-        m.get_button_state(7))
+        m.get_button_state(2),
+        m.get_button_state(3))
 
     return arm_inputs
 
@@ -200,6 +207,7 @@ if __name__ == "__main__":
     module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
     hrdf_file = "hrdf/A-2085-06.hrdf"
     gains_file = "gains/A-2085-06.xml"
+    run_mode = "softstart"
 
     # Create Arm object
     arm = hebi.arm.create([arm_family],
@@ -220,6 +228,14 @@ if __name__ == "__main__":
 
     m.update()
     setup_mobile_io(m)
+
+    # Print Instructions
+    instructions = (
+        "Mode: {}\n"
+        "B1: R\n"
+        "B2: Arm Control\n"
+        "B3: Gripper Control")
+    print(instructions.format(run_mode))
 
     #######################
     ## Main Control Loop ##
