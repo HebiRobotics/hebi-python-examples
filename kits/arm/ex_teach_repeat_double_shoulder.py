@@ -52,7 +52,7 @@ instructions = """B1 - Add waypoint (stop)
 B2 - Add waypoint (flow)
 B3 - Toggle training/playback
 B4 - Clear waypoints
-B5 - Quit
+B8 - Quit
 A3 - Up/down for longer/shorter time to waypoint
 """
 print(instructions)
@@ -78,8 +78,8 @@ while not abort_flag:
 
     slider3 = m.get_axis_state(3)
     
-    # B5 - Quit
-    if m.get_button_diff(5) == 1:  # "ToOn"
+    # B8 - Quit
+    if m.get_button_diff(8) == 1:  # "ToOn"
         m.set_led_color("transparent")
         m.clear_text()
         abort_flag = True

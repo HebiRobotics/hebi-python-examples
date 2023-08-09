@@ -48,8 +48,8 @@ instructions = """
 B1 - Add Waypoint 1
 B2 - Add Waypoint 2
 B3 - Add Waypoint 3
-B4 - Grav Comp Mode
-B5 - Quit
+B6 - Grav Comp Mode
+B8 - Quit
 """
 print(instructions)
 
@@ -86,12 +86,12 @@ while not abort_flag:
         arm.set_goal(goal)
 
     # B6 - Grav Comp
-    if m.get_button_diff(4) == 1:  # "ToOn"
+    if m.get_button_diff(6) == 1:  # "ToOn"
         m.set_led_color("blue")
         arm.cancel_goal()
 
     # B8 - Quit
-    if m.get_button_diff(5) == 1:  # "ToOn"
+    if m.get_button_diff(8) == 1:  # "ToOn"
         # Reset text & color, and quit
         m.clear_text()
         m.set_led_color("transparent")

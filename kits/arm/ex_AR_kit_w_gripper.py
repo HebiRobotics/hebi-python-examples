@@ -77,9 +77,9 @@ instructions = (
     "Mode: {}\n"
     "A3: Gripper Control\n"
     "B1: Home\n"
-    "B2: AR Control\n"
-    "B3: Grav Comp\n"
-    "B4: Quit")
+    "B3: AR Control\n"
+    "B6: Grav Comp\n"
+    "B8: Quit")
 print(instructions.format(run_mode))
 
 #######################
@@ -112,8 +112,8 @@ while not abort_flag:
         m.add_text(instructions.format(run_mode))
         arm.set_goal(softstart)
 
-    # B2 - Start AR Control
-    if m.get_button_diff(2) == 1 and run_mode != "ar_mode":
+    # B3 - Start AR Control
+    if m.get_button_diff(3) == 1 and run_mode != "ar_mode":
         m.set_led_color("green")
         run_mode = "ar_mode"
         m.clear_text()
@@ -123,16 +123,16 @@ while not abort_flag:
         xyzw = [*wxyz[1:], wxyz[0]]
         rot_phone_init = R.from_quat(xyzw).as_matrix()
 
-    # B3 - Grav Comp Mode
-    if m.get_button_diff(3) == 1:
+    # B6 - Grav Comp Mode
+    if m.get_button_diff(6) == 1:
         m.set_led_color("blue")
         run_mode = "grav_comp"
         m.clear_text()
         m.add_text(instructions.format(run_mode))
         arm.cancel_goal()
 
-    # B4 - Quit
-    if m.get_button_diff(4) == 1:
+    # B8 - Quit
+    if m.get_button_diff(8) == 1:
         m.set_led_color("transparent")
         abort_flag = True
         break
