@@ -4,7 +4,6 @@ import numpy as np
 import hebi
 
 from .body import PeripheralBody, RobotModel
-from util import math_utils
 
 
 class Arm(PeripheralBody):
@@ -80,17 +79,16 @@ class Arm(PeripheralBody):
         adjusted_grip_v_term[1] *= self._direction
 
         # Integrate the adjusted grip velocity term to find the new grip position
-        adjusted_grip_v_term *= dt
-        self._grip_pos += adjusted_grip_v_term
+        np.multiply(adjusted_grip_v_term, dt, out=adjusted_grip_v_term)
+        np.add(self._grip_pos, adjusted_grip_v_term, out=self._new_grip_pos)
 
-        robot = self._kin
         xyz_objective = hebi.robot_model.endeffector_position_objective(self._new_grip_pos)
-        new_arm_joint_angs = robot.solve_inverse_kinematics(self._fbk.position, xyz_objective)
+        new_arm_joint_angs = self._kin.solve_inverse_kinematics(self._fbk.position, xyz_objective)
 
         # Find the determinant of the jacobian at the endeffector of the solution
         # to the IK. If below a set threshold, set the joint velocities to zero
         # in an attempt to avoid nearing the kinematic singularity.
-        jacobian_new = robot.get_jacobian_end_effector(new_arm_joint_angs)[0:3, 0:3]
+        jacobian_new = self._kin.get_jacobian_end_effector(new_arm_joint_angs)[0:3, 0:3]
         det_J_new = abs(np.linalg.det(jacobian_new))
 
         if (self._current_det_expected < Arm.Jacobian_Determinant_Threshold) and (det_J_new < self._current_det_expected):

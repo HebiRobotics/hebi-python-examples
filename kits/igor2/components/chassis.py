@@ -23,7 +23,7 @@ class Chassis(BaseBody):
                                              self._jerks)
 
   def __init__(self, val_lock):
-    super(Chassis, self).__init__(val_lock, mass=6.0, com=[-0.05, 0.0, 0.10+0.3])
+    super(Chassis, self).__init__(val_lock, mass=6.0, com=[0.05, 0.0, 0.10+0.3])
     self._user_commanded_directional_velocity = 0.0
     self._user_commanded_yaw_velocity = 0.0
     self._min_ramp_time = 0.5
@@ -135,8 +135,8 @@ class Chassis(BaseBody):
     # For calibrating Igor (finding the ideal I term for the individual kit), uncomment this out and find a good value from the `a5` slider (Mobile IO only)
     # BE CAREFUL! adjusting the I term too quickly can cause the balance controller to command a very fast rotation to the wheels,
     # possibly causing Igor to fall forwards/backwards without anybody to support the kit.
-    #velI = Chassis.Velocity_I * (self._i_term_adjust + 1.0)
-    velI = Chassis.Velocity_I
+    velI = Chassis.Velocity_I * (self._i_term_adjust + 1.0)
+    #velI = Chassis.Velocity_I
     velD = Chassis.Velocity_D
 
     inv_dt = 1.0/dt
