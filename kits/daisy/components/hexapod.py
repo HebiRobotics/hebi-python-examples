@@ -106,7 +106,7 @@ class Hexapod:
         '_input_lock', '_state_lock', '_proc_thread', '_quit_flag', '_started',
         '_on_stop_callbacks', '_on_startup_callbacks', '_num_spins',
         # Fields whjch pertain to controlling demo
-        '_joy', '_rotation_velocity', '_translation_velocity',
+        '_mobile_io', '_rotation_velocity', '_translation_velocity',
         # High level kinematic state of the entire robot
         '_foot_forces', '_gravity', '_vel_xyz',
         # Timestamps
@@ -143,7 +143,6 @@ class Hexapod:
         self._state_lock = Lock()
 
     def _wait_for_feedback(self):
-        legs = self._legs
         self._group.get_next_feedback(reuse_fbk=self._group_feedback)
 
         # compute gravity vector
@@ -152,8 +151,7 @@ class Hexapod:
 
         rot_matrix = np.identity(3, dtype=float64)
 
-        for i in range(6):
-            leg = legs[i]
+        for leg in self._legs:
             orientation = leg._feedback_view.orientation[0]
 
             local_gravity = leg.kinematics.base_frame[0:3, 0:3] @ quat2rot(orientation, rot_matrix).T @ down
@@ -202,7 +200,6 @@ class Hexapod:
 
     def _create_startup_trajectories(self, startup_seconds):
         startup_trajectories = self._startup_trajectories
-        legs = self._legs
 
         # Note: It is very unclear what the C++ code is doing in the `first_run` block here.
         # It appears that the intention is that `startup_trajectory` uses the initial state of the trajectory from the leg's `step` variable
@@ -216,8 +213,7 @@ class Hexapod:
         velocities = np.zeros((num_joints, 5))
         accelerations = np.zeros((num_joints, 5))
 
-        for i in range(6):
-            leg = legs[i]
+        for i, leg in enumerate(self._legs):
             leg_start = leg._feedback_view.position
             leg_end, v = leg.get_state_at_time(0)
 
@@ -295,9 +291,7 @@ class Hexapod:
         self.update_steps(current_time)
         self.compute_foot_forces(current_time, foot_forces)
 
-        legs = self._legs
-        for i in range(6):
-            leg = legs[i]
+        for i, leg in enumerate(self._legs):
             leg.compute_state(current_time)
             leg.compute_torques(gravity, foot_forces[:, i])
             # Make sure to send position, velocity and effort
@@ -397,7 +391,7 @@ class Hexapod:
             # The legs need to start with valid feedback, so we must wait for a feedback here
             self._group.get_next_feedback(reuse_fbk=self._group_feedback)
 
-            legs = list()
+            legs: 'list[Leg]' = list()
             for i, angle, distance, leg_configuration in zip(range(num_modules), leg_angles, leg_distances, leg_configs):
                 start_idx = num_joints_in_leg * i
                 indices = [start_idx, start_idx + 1, start_idx + 2]
@@ -407,15 +401,14 @@ class Hexapod:
             self._legs = legs
             self._weight = weight
 
-            joystick_selector = self._config.joystick_selector
+            setup_controller = self._config.setup_controller
 
             while True:
                 try:
-                    joy = joystick_selector()
-                    if joy is None:
-                        raise RuntimeError
-                    self._joy = joy
-                    break
+                    mio = setup_controller()
+                    if mio is not None:
+                        self._mobile_io = mio
+                        break
                 except:
                     pass
 
@@ -654,8 +647,8 @@ class Hexapod:
         return self._params.joystick_dead_zone
 
     @property
-    def joystick(self):
-        return self._joy
+    def mobile_io(self):
+        return self._mobile_io
 
     @property
     def last_feedback_time(self):
