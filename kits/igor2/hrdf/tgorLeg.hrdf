@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot version="1.4.0">
+  <actuator type="T5-9"/>
+  <link type="R8" extension="0.375" twist="pi"/>
+  <actuator type="T8-16"/>
+  <link type="R8" extension="0.325" twist="pi"/>
+  <end-effector />
+</robot>

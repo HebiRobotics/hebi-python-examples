@@ -63,8 +63,8 @@ daisy.add_on_stop_callback(stop_running_callback)
 daisy.start()
 
 # The joystick has been initialized once `daisy.start()` returns
-joy = daisy.joystick
-if joy is None:
+controller = daisy.mobile_io
+if controller is None:
     daisy.request_stop()
     raise RuntimeError('Could not initialize controller for Daisy.')
 

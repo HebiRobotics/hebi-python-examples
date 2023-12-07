@@ -1,7 +1,5 @@
 import os
 
-from util.input.joystick import Joystick
-from util.input.module_controller import HebiModuleController
 
 # ------------------------------------------------------------------------------
 # Controller selectors
@@ -13,13 +11,14 @@ def _controller_by_mobile_io_selector(family, name, feedback_frequency):
     from time import sleep
     lookup = hebi.Lookup()
     sleep(2)
-    group = lookup.get_group_from_names([family], [name])
-    if group is None:
+    mio = hebi.util.create_mobile_io(lookup, family, name)
+    while mio is None:
         msg = 'Could not find Mobile IO on network with\nfamily: {0}\nname: {1}'.format(family, name)
         print(msg)
-        raise RuntimeError(msg)
-    group.feedback_frequency = feedback_frequency
-    return HebiModuleController(group)
+        sleep(1)
+        mio = hebi.util.create_mobile_io(lookup, family, name)
+
+    return mio  # HebiModuleController(group)
 
 
 # ------------------------------------------------------------------------------
@@ -116,12 +115,12 @@ class HexapodConfig(object):
 
     def __init__(self, imitation=False, family='Daisy', robot_feedback_frequency=200.0, robot_command_lifetime=500):
         self._module_names = [
-            'L1_J1_Base', 'L1_J2_Shoulder', 'L1_J3_Elbow',
-            'L2_J1_Base', 'L2_J2_Shoulder', 'L2_J3_Elbow',
-            'L3_J1_Base', 'L3_J2_Shoulder', 'L3_J3_Elbow',
-            'L4_J1_Base', 'L4_J2_Shoulder', 'L4_J3_Elbow',
-            'L5_J1_Base', 'L5_J2_Shoulder', 'L5_J3_Elbow',
-            'L6_J1_Base', 'L6_J2_Shoulder', 'L6_J3_Elbow'
+            'L1_J1_base', 'L1_J2_shoulder', 'L1_J3_elbow',
+            'L2_J1_base', 'L2_J2_shoulder', 'L2_J3_elbow',
+            'L3_J1_base', 'L3_J2_shoulder', 'L3_J3_elbow',
+            'L4_J1_base', 'L4_J2_shoulder', 'L4_J3_elbow',
+            'L5_J1_base', 'L5_J2_shoulder', 'L5_J3_elbow',
+            'L6_J1_base', 'L6_J2_shoulder', 'L6_J3_elbow'
         ]
         self._family = family
         self._resources_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'resources'))
@@ -154,7 +153,7 @@ class HexapodConfig(object):
         return self._resources_directory
 
     @property
-    def joystick_selector(self):
+    def setup_controller(self):
         return self._find_joystick_strategy
 
     @property

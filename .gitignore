@@ -16,3 +16,6 @@ __pycache__/
 
 # Example gains output by some examples
 **/my_actuator_gains.xml
+
+# Ignore Mac added files
+.DS_Store

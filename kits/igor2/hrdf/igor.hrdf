@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Igor Body -->
+<robot version="1.3.0" description="Igor">
+  <rigid-body mass="0">
+    <output trans="0 0.1 0.2">
+      <include path="igorArm-Left.hrdf"/>
+    </output>
+    <output trans="0 -0.1 0.2">
+      <include path="igorArm-Right.hrdf"/>
+    </output>
+    <output rot="Rx(-pi/2)" trans="0 0.15 0">
+      <include path="igorLeg.hrdf"/>
+    </output>
+    <output rot="Rx(pi/2)" trans="0 -0.15 0">
+      <include path="igorLeg.hrdf"/>
+    </output>
+  </rigid-body>
+</robot>

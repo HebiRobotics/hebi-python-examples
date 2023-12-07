@@ -1,7 +1,9 @@
+from typing import List
+
 import numpy as np
 import hebi
 
-from .body import PeripheralBody
+from .body import PeripheralBody, RobotModel
 from util import math_utils
 
 
@@ -12,44 +14,27 @@ class Arm(PeripheralBody):
 
     Jacobian_Determinant_Threshold = 0.020
     """
-    The lower threshold allowed for the determinant calculation of the jacobians.
-    Anything below this will be considered at or near a singularity.
-    """
+  The lower threshold allowed for the determinant calculation of the jacobians.
+  Anything below this will be considered at or near a singularity.
+  """
 
-    def __init__(self, val_lock, name, group_indices):
-        assert name == 'Left' or name == 'Right'
-        super(Arm, self).__init__(val_lock, group_indices, name)
+    def __init__(self, val_lock, name, group_indices: List[int], robot_model: RobotModel):
+        super(Arm, self).__init__(val_lock, group_indices, robot_model)
 
-        self._name = name
         self._user_commanded_grip_velocity = np.zeros(3, dtype=np.float64)
-        base_frame = np.identity(4, dtype=np.float64)
-        kin = self._robot
-        kin.add_actuator('X5-4')
 
         if name == 'Left':
             self._direction = 1.0
-            mounting = 'left-inside'
-            base_frame[0:3, 3] = [0.0, 0.10, 0.20]
-            home_angles = np.array([0.0, 20.0, 60.0, 0.0], dtype=np.float64)
         else:
             self._direction = -1.0
-            mounting = 'right-inside'
-            base_frame[0:3, 3] = [0.0, -0.10, 0.20]
-            home_angles = np.array([0.0, -20.0, -60.0, 0.0], dtype=np.float64)
 
-        kin.add_bracket('X5-HeavyBracket', mounting)
-        kin.add_actuator('X5-9')
-        kin.add_link('X5', extension=0.325, twist=0.0)
-        kin.add_actuator('X5-4')
-        kin.add_link('X5', extension=0.325, twist=np.pi)
-        kin.add_actuator('X5-4')
-        kin.add_end_effector('custom')
-        kin.base_frame = base_frame
+        home_angles = self._direction * np.array([0.0, 20.0, 60.0, 0.0], dtype=np.float64)
+        home_angles = np.deg2rad(home_angles)
 
         # ----------------------
         # Populate cached fields
-        output_frame_count = kin.get_frame_count('output')
-        com_frame_count = kin.get_frame_count('CoM')
+        output_frame_count = self._kin.get_frame_count('output')
+        com_frame_count = self._kin.get_frame_count('CoM')
 
         self._current_xyz = np.zeros((3, com_frame_count), dtype=np.float64)
 
@@ -60,12 +45,11 @@ class Arm(PeripheralBody):
             self._current_coms.append(np.zeros((4, 4), dtype=np.float64))
 
         # Calculate home FK
-        home_angles = np.deg2rad(home_angles)
         self.home_angles = home_angles
-        self._home_fk = kin.get_forward_kinematics('output', home_angles)
+        self._home_fk = self._kin.get_forward_kinematics('output', home_angles)
         self._home_ef = self._home_fk[-1]
-        self._set_mass(np.sum(kin.masses))
-        self._set_masses(kin.masses)
+        self._set_mass(np.sum(self._kin.masses))
+        self._set_masses(self._kin.masses)
 
         self._grip_pos = np.array(self._home_ef[0:3, 3])
         self._new_grip_pos = self._grip_pos.copy()
@@ -74,7 +58,7 @@ class Arm(PeripheralBody):
         self._joint_efforts = np.zeros(4, np.float32)
         self._user_commanded_wrist_velocity = 0.0
 
-        self._grav_comp_torque = np.zeros(len(group_indices), np.float64)
+        self._grav_comp_torque = np.zeros(len(home_angles), np.float64)
 
         # Additionally, calculate determinant of jacobians
         self._current_det_actual = 0.0
@@ -90,19 +74,18 @@ class Arm(PeripheralBody):
         :param calculated_grip_velocity:
         :type calculated_grip_velocity:  np.array
         """
-        positions = self._fbk_position
 
         # Make endeffector velocities mirrored in Y
         adjusted_grip_v_term = calculated_grip_velocity.reshape((3,)).copy()
-        adjusted_grip_v_term[1] = self._direction * adjusted_grip_v_term[1]
+        adjusted_grip_v_term[1] *= self._direction
 
         # Integrate the adjusted grip velocity term to find the new grip position
-        np.multiply(adjusted_grip_v_term, dt, out=adjusted_grip_v_term)
-        np.add(self._grip_pos, adjusted_grip_v_term, out=self._new_grip_pos)
+        adjusted_grip_v_term *= dt
+        self._grip_pos += adjusted_grip_v_term
 
-        robot = self._robot
+        robot = self._kin
         xyz_objective = hebi.robot_model.endeffector_position_objective(self._new_grip_pos)
-        new_arm_joint_angs = robot.solve_inverse_kinematics(positions, xyz_objective)
+        new_arm_joint_angs = robot.solve_inverse_kinematics(self._fbk.position, xyz_objective)
 
         # Find the determinant of the jacobian at the endeffector of the solution
         # to the IK. If below a set threshold, set the joint velocities to zero
@@ -173,7 +156,7 @@ class Arm(PeripheralBody):
         self._current_det_actual = abs(np.linalg.det(self._current_j_actual[0:3, 0:3]))
         self._current_det_expected = abs(np.linalg.det(self._current_j_expected[0:3, 0:3]))
 
-    def update_command(self, group_command, pose, soft_start):
+    def update_command(self, pose, soft_start):
         """Write into the command object based on the current state of the arm.
 
         :param group_command:
@@ -181,37 +164,25 @@ class Arm(PeripheralBody):
         :param soft_start:
         """
 
-        commanded_positions = self._joint_angles
-        commanded_velocities = self._joint_velocities
-
-        positions = self._fbk_position
-        velocities = self._fbk_velocity
-
         # ----------------
         # Calculate effort
-        np.subtract(self._grip_pos, self.current_tip_fk[0:3, 3], out=self._xyz_error)
-        np.copyto(self._pos_error[0:3], self._xyz_error)
-        np.subtract(commanded_velocities, velocities, out=self._vel_error[0:4])
+        np.subtract(self._grip_pos, self.current_tip_fk[0:3, 3], out=self.xyz_error)
+        np.subtract(self._joint_velocities, self._fbk.velocity, out=self._vel_error[0:4])
         np.dot(self._current_j_actual_f, np.asarray(self._vel_error[0:4]), out=self._vel_error)
 
-        np.multiply(Arm.spring_gains, self._pos_error, out=self._pos_error)
-        np.multiply(Arm.damper_gains, self._vel_error, out=self._vel_error)
+        self._pos_error *= Arm.spring_gains
+        self._vel_error *= Arm.damper_gains
         np.add(self._pos_error, self._vel_error, out=self._impedance_err)
-        np.dot(self.current_j_actual.T, np.asarray(self._impedance_err), out=self._impedance_torque)
-        self._robot.get_grav_comp_efforts(positions, -pose[2, 0:3], output=self._grav_comp_torque.ravel())
+        np.dot(self._current_j_actual.T, np.asarray(self._impedance_err), out=self._impedance_torque)
+        np.copyto(self._grav_comp_torque.ravel(), self._kin.get_grav_comp_efforts(self._fbk.position, -pose[2, 0:3]))
 
         np.multiply(soft_start, self._impedance_torque, out=self._joint_efforts)
         np.add(self._joint_efforts, self._grav_comp_torque, out=self._joint_efforts)
-        effort = self._joint_efforts
 
-        # Send commands
-        idx = 0
-        for i in self.group_indices:
-            cmd = group_command[i]
-            cmd.position = commanded_positions[idx]
-            cmd.velocity = commanded_velocities[idx]
-            cmd.effort = effort[idx]
-            idx = idx + 1
+        # Set command
+        self._cmd.position = self._joint_angles
+        self._cmd.velocity = self._joint_velocities
+        self._cmd.effort = self._joint_efforts
 
     def set_x_velocity(self, value):
         """

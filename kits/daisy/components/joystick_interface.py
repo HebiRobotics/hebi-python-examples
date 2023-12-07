@@ -1,112 +1,11 @@
 _last_toggle_value = False
 import hebi
 
+import typing
 
-# ------------------------------------------------------------------------------
-# Event handlers
-# ------------------------------------------------------------------------------
-
-
-def rotation_y_vel_event(hexapod, vel_calc, ts, axis_value):
-    """This event handler will set the Hexapod's horizontal rotation velocity a
-    value proportional to the given input `axis_value` when outside the
-    deadzone. When the value is within the deadzone, the horizontal rotation
-    velocity is set to zero.
-
-    :param hexapod:          (bound parameter)
-    :param vel_calc:         (bound parameter)
-    :param ts:               (ignored)
-    :param axis_value:       [-1,1] value of the axis
-    """
-    vel = vel_calc(axis_value)
-    # Note: C++ demo does not have rotate y handler.
-    #hexapod.set_rotation_velocity_y(vel)
-
-
-def rotation_z_vel_event(hexapod, vel_calc, ts, axis_value):
-    """This event handler will set the Hexapod's vertical rotation velocity a
-    value proportional to the given input `axis_value` when outside the
-    deadzone. When the value is within the deadzone, the vertical rotation
-    velocity is set to zero.
-
-    :param hexapod:          (bound parameter)
-    :param vel_calc:         (bound parameter)
-    :param ts:               (ignored)
-    :param axis_value:       [-1,1] value of the axis
-    """
-    vel = vel_calc(axis_value)
-    hexapod.set_rotation_velocity_z(vel)
-
-
-def translation_x_vel_event(hexapod, vel_calc, ts, axis_value):
-    """This event handler will set the Hexapod's forward/backward translation
-    velocity a value proportional to the given input `axis_value` when outside
-    the deadzone. When the value is within the deadzone, the forward/backward
-    translation velocity is set to zero.
-
-    :param hexapod:          (bound parameter)
-    :param vel_calc:         (bound parameter)
-    :param ts:               (ignored)
-    :param axis_value:       [-1,1] value of the axis
-    """
-    vel = vel_calc(axis_value)
-    hexapod.set_translation_velocity_x(-vel)
-
-
-def translation_y_vel_event(hexapod, vel_calc, ts, axis_value):
-    """This event handler will set the Hexapod's horizontal translation
-    velocity a value proportional to the given input `axis_value` when outside
-    the deadzone. When the value is within the deadzone, the horizontal
-    translation velocity is set to zero.
-
-    :param hexapod:          (bound parameter)
-    :param vel_calc:         (bound parameter)
-    :param ts:               (ignored)
-    :param axis_value:       [-1,1] value of the axis
-    """
-    vel = vel_calc(axis_value)
-    hexapod.set_translation_velocity_y(vel)
-
-
-def translation_z_vel_event(hexapod, vel_calc, ts, axis_value):
-    """This event handler will set the Hexapod's vertical translation velocity
-    a value proportional to the given input `axis_value` when outside the
-    deadzone. When the value is within the deadzone, the vertical translation
-    velocity is set to zero.
-
-    :param hexapod:          (bound parameter)
-    :param vel_calc:         (bound parameter)
-    :param ts:               (ignored)
-    :param axis_value:       [-1,1] value of the axis
-    """
-    vel = vel_calc(axis_value)
-    hexapod.set_translation_velocity_z(-vel)
-
-
-def toggle_mode_event(hexapod, ts, pressed):
-    """Event handler to react to the "toggle" button being pressed or released.
-
-    When the button is pressed, and the robot is ready (in the "started"
-    state), the mode will toggle.
-    """
-    global _last_toggle_value
-    if _last_toggle_value == pressed:
-        # Ignore, since we care about edge triggers
-        return
-
-    _last_toggle_value = pressed
-    if hexapod.started:
-        hexapod.update_mode(None)
-
-
-def quit_session_event(hexapod, ts, pressed):
-    """Event handler to react to the "toggle" button being pressed or released.
-
-    When the button is pressed, and the robot is ready (in the "started"
-    state), the session will begin to quit.
-    """
-    if pressed and hexapod.started:
-        hexapod.request_stop()
+if typing.TYPE_CHECKING:
+    from .hexapod import Hexapod
+    from hebi._internal.mobile_io import MobileIO
 
 
 # ------------------------------------------------------------------------------
@@ -129,74 +28,61 @@ def _get_pin_number_from_name(name):
 
 
 def _set_mobile_io_gui_state(hexapod, controller_mapping):
-    cmd = hebi.GroupCommand(1)
-
-    io = cmd.io
-    a_bank = io.a
-    b_bank = io.b
-    e_bank = io.e
-
     body_height_pin = _get_pin_number_from_name(controller_mapping.body_height_velocity)
     toggle_mode_pin = _get_pin_number_from_name(controller_mapping.mode_selection)
     quit_pin = _get_pin_number_from_name(controller_mapping.quit)
 
-    a_bank.set_float(body_height_pin, 0.001)  # Use a small value as opposed to 0.0 to work around bug in older versions of Mobile IO app
-    b_bank.set_int(toggle_mode_pin, 1)  # Set to toggle mode
-    e_bank.set_int(toggle_mode_pin, 1)  # Highlight
-    e_bank.set_int(quit_pin, 1)        # Highlight
+    mio: 'MobileIO' = hexapod.mobile_io
 
-    hexapod.joystick.group.send_command(cmd)
+    mio.set_snap(body_height_pin, 0.001)
+    mio.set_axis_label(body_height_pin, 'height', blocking=False)
+    mio.set_button_mode(toggle_mode_pin, 1)
+    mio.set_button_label(toggle_mode_pin, 'Stance', blocking=False)
+    mio.set_button_label(quit_pin, 'Quit', blocking=False)
 
 
-def _add_event_handlers(hexapod, controller, controller_mapping):
+def _add_event_handlers(hexapod: 'Hexapod', controller: 'MobileIO', controller_mapping):
     # Shortcut closure to get around having to use functool.partial
     def bind_to_method(method, *args):
         def bound_meth(ts, val):
             method(*args, ts, val)
         return bound_meth
 
-    def reset_mobile_io_gui_state():
-        cmd = hebi.GroupCommand(1)
+    #def reset_mobile_io_gui_state():
+    #    hexapod.mobile_io.resetUI()
 
-        io = cmd.io
-        a_bank = io.a
-        b_bank = io.b
-        e_bank = io.e
-        # set UI back to original state
-        body_height_pin = _get_pin_number_from_name(controller_mapping.body_height_velocity)
-        toggle_mode_pin = _get_pin_number_from_name(controller_mapping.mode_selection)
-        quit_pin = _get_pin_number_from_name(controller_mapping.quit)
-
-        a_bank.set_float(body_height_pin, None)
-        b_bank.set_int(toggle_mode_pin, 0)
-        e_bank.set_int(toggle_mode_pin, 0)
-        e_bank.set_int(quit_pin, 0)
-
-        hexapod.joystick.group.send_command(cmd)
-
-    hexapod.add_on_stop_callback(reset_mobile_io_gui_state)
+    hexapod.add_on_stop_callback(lambda: hexapod.mobile_io.resetUI())
 
     _set_mobile_io_gui_state(hexapod, controller_mapping)
 
     translation_vel_calc = deadzone_clip_scaled(hexapod, 0.175)
     rotation_vel_calc = deadzone_clip_scaled(hexapod, 0.4)
 
-    # Quit event
-    controller.add_button_event_handler(controller_mapping.quit, bind_to_method(quit_session_event, hexapod))
+    def feedback_handler(fbk: 'hebi.GroupFeedback'):
+        global _last_toggle_value
+        pressed = fbk.io.b.get_int(controller_mapping.mode_selection)
+        if fbk.io.b.get_int(controller_mapping.quit):
+            hexapod.request_stop()
+        elif pressed != _last_toggle_value:
+            _last_toggle_value = pressed
+            hexapod.update_mode(None)
+        else:
+            vel_x = translation_vel_calc(fbk.io.a.get_float(controller_mapping.translate_x_velocity))
+            vel_y = translation_vel_calc(fbk.io.a.get_float(controller_mapping.translate_y_velocity))
+            vel_z = translation_vel_calc(fbk.io.a.get_float(controller_mapping.translate_z_velocity))
 
-    # Toggle mode event
-    controller.add_button_event_handler(controller_mapping.mode_selection, bind_to_method(toggle_mode_event, hexapod))
+            rot_vel_y = rotation_vel_calc(fbk.io.a.get_float(controller_mapping.pitch_velocity))
+            rot_vel_z = rotation_vel_calc(fbk.io.a.get_float(controller_mapping.rotation_velocity))
 
-    # Rotation events
-    # Note: Might need to swap y and z vel event handlers here
-    controller.add_axis_event_handler(controller_mapping.pitch_velocity, bind_to_method(rotation_y_vel_event, hexapod, rotation_vel_calc))
-    controller.add_axis_event_handler(controller_mapping.rotation_velocity, bind_to_method(rotation_z_vel_event, hexapod, rotation_vel_calc))
+            hexapod.set_translation_velocity_x(vel_x)
+            hexapod.set_translation_velocity_y(vel_y)
+            hexapod.set_translation_velocity_z(vel_z)
 
-    # Velocity translation events
-    controller.add_axis_event_handler(controller_mapping.translate_x_velocity, bind_to_method(translation_x_vel_event, hexapod, translation_vel_calc))
-    controller.add_axis_event_handler(controller_mapping.translate_y_velocity, bind_to_method(translation_y_vel_event, hexapod, translation_vel_calc))
-    controller.add_axis_event_handler(controller_mapping.body_height_velocity, bind_to_method(translation_z_vel_event, hexapod, translation_vel_calc))
+            #hexapod.set_rotation_velocity_y(rot_vel_y)
+            hexapod.set_rotation_velocity_z(rot_vel_z)
+
+    controller._group.add_feedback_handler(feedback_handler)
 
 
-def register_hexapod_event_handlers(hexapod):
-    _add_event_handlers(hexapod, hexapod.joystick, hexapod.config.controller_mapping)
+def register_hexapod_event_handlers(hexapod: 'Hexapod'):
+    _add_event_handlers(hexapod, hexapod.mobile_io, hexapod.config.controller_mapping)
