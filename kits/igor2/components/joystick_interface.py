@@ -88,8 +88,8 @@ def _add_event_handlers(igor: 'Igor', controller: 'MobileIO', controller_mapping
     igor.left_arm.set_x_velocity(vel)
     igor.right_arm.set_x_velocity(vel)
     vel = arm_vel_calc(label_to_pin_map[controller_mapping.arm_vel_y](fbk))
-    igor.left_arm.set_y_velocity(vel)
-    igor.right_arm.set_y_velocity(vel)
+    igor.left_arm.set_y_velocity(-vel)
+    igor.right_arm.set_y_velocity(-vel)
 
     raise_button_value = label_to_pin_map[controller_mapping.raise_arm](fbk)
     lower_button_value = label_to_pin_map[controller_mapping.lower_arm](fbk)
