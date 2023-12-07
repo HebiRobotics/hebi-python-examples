@@ -155,6 +155,11 @@ class Igor(object):
     def _update_com(self):
         """Updates the CoM of all bodies."""
 
+        self._left_arm.update_position()
+        self._right_arm.update_position()
+        self._left_leg.update_position()
+        self._right_leg.update_position()
+
         coms = self._coms
         coms[0:3, 0] = self.left_leg.com
         coms[0:3, 1] = self.right_leg.com
@@ -171,7 +176,6 @@ class Igor(object):
         :param gryo:
         :param orientation: [numModules x 4] matrix of orientation
         """
-        imu_frames = self._imu_frames
 
         # Update gyro values from current modules feedback
         # Transposing allows us to do calculations a bit easier below
@@ -179,20 +183,20 @@ class Igor(object):
 
         # Update imu frames
         # Leg endeffectors
-        np.copyto(imu_frames[0], self._left_leg.current_tip_fk)
-        np.copyto(imu_frames[1], self._right_leg.current_tip_fk)
+        np.copyto(self._imu_frames[0], self._left_leg.current_tip_fk)
+        np.copyto(self._imu_frames[1], self._right_leg.current_tip_fk)
         # Hip link output frames
-        np.copyto(imu_frames[3], self._left_leg._current_fk[1])
-        np.copyto(imu_frames[5], self._right_leg._current_fk[1])
+        np.copyto(self._imu_frames[3], self._left_leg._current_fk[1])
+        np.copyto(self._imu_frames[5], self._right_leg._current_fk[1])
         # Arm base bracket
-        np.copyto(imu_frames[7], self._left_arm._current_fk[1])
-        np.copyto(imu_frames[11], self._right_arm._current_fk[1])
+        np.copyto(self._imu_frames[7], self._left_arm._current_fk[1])
+        np.copyto(self._imu_frames[11], self._right_arm._current_fk[1])
         # Arm shoulder link
-        np.copyto(imu_frames[8], self._left_arm._current_fk[3])
-        np.copyto(imu_frames[12], self._right_arm._current_fk[3])
+        np.copyto(self._imu_frames[8], self._left_arm._current_fk[3])
+        np.copyto(self._imu_frames[12], self._right_arm._current_fk[3])
         # Arm elbow link
-        np.copyto(imu_frames[9], self._left_arm._current_fk[5])
-        np.copyto(imu_frames[13], self._right_arm._current_fk[5])
+        np.copyto(self._imu_frames[9], self._left_arm._current_fk[5])
+        np.copyto(self._imu_frames[13], self._right_arm._current_fk[5])
 
         q_rot = np.empty((3, 3), dtype=np.float64)
         imu_rotation = np.empty((3, 3), dtype=np.float64)
@@ -201,7 +205,7 @@ class Igor(object):
 
         for i in range(14):
             # Copy the rotation transformation into our temporary 3x3 matrix
-            np.copyto(imu_rotation, imu_frames[i][0:3, 0:3])
+            np.copyto(imu_rotation, self._imu_frames[i][0:3, 0:3])
 
             # Apply the rotation transformation from the current imu frame to the
             # pose calculated by the gyroscope from the module at the index `i`
@@ -491,6 +495,8 @@ class Igor(object):
             l_wheel = self._group_command[0]
             r_wheel = self._group_command[1]
 
+            print(f'LeanAngle: {self._feedback_lean_angle}  |  LeanVel: {self._feedback_lean_angle_velocity}')
+
             p_effort = (leanP * self._chassis.lean_angle_error) +\
                        (leanI * self._chassis.lean_angle_error_cumulative) +\
                        (leanD * self._feedback_lean_angle_velocity)
@@ -662,10 +668,32 @@ class Igor(object):
         chassis = Chassis(value_lock)
         # path to 'hrdf' folder
         hrdf_dir = os.path.join(os.path.dirname(__file__), '..', 'hrdf')
-        l_leg = Leg(value_lock, 'Left', [2, 3], robot_model=hebi.robot_model.import_from_hrdf(os.path.join(hrdf_dir, 'tgorLeg.hrdf')))
-        r_leg = Leg(value_lock, 'Right', [4, 5], robot_model=hebi.robot_model.import_from_hrdf(os.path.join(hrdf_dir, 'tgorLeg.hrdf')))
-        l_arm = Arm(value_lock, 'Left', [6, 7, 8, 9], robot_model=hebi.robot_model.import_from_hrdf(os.path.join(hrdf_dir, 'tgorArm-Left.hrdf')))
-        r_arm = Arm(value_lock, 'Right', [10, 11, 12, 13], robot_model=hebi.robot_model.import_from_hrdf(os.path.join(hrdf_dir, 'tgorArm-Right.hrdf')))
+
+        model = hebi.robot_model.import_from_hrdf(os.path.join(hrdf_dir, 'tgorLeg.hrdf'))
+        base_frame = np.eye(4, dtype=np.float64)
+        base_frame[:3, 3] = [0.0, 0.15, 0.0]
+        base_frame[:3, :3] = math_utils.rotate_x(np.pi * -0.5)
+        model.base_frame = base_frame
+        l_leg = Leg(value_lock, 'Left', [2, 3], robot_model=model)
+
+        model = hebi.robot_model.import_from_hrdf(os.path.join(hrdf_dir, 'tgorLeg.hrdf'))
+        base_frame = np.eye(4, dtype=np.float64)
+        base_frame[:3, 3] = [0.0, -0.15, 0.0]
+        base_frame[:3, :3] = math_utils.rotate_x(np.pi * 0.5)
+        model.base_frame = base_frame
+        r_leg = Leg(value_lock, 'Right', [4, 5], robot_model=model)
+
+        model = hebi.robot_model.import_from_hrdf(os.path.join(hrdf_dir, 'tgorArm-Left.hrdf'))
+        base_frame = np.eye(4, dtype=np.float64)
+        base_frame[0:3, 3] = [0.0, 0.10, 0.20]
+        model.base_frame = base_frame
+        l_arm = Arm(value_lock, 'Left', [6, 7, 8, 9], robot_model=model)
+
+        model = hebi.robot_model.import_from_hrdf(os.path.join(hrdf_dir, 'tgorArm-Right.hrdf'))
+        base_frame = np.eye(4, dtype=np.float64)
+        base_frame[0:3, 3] = [0.0, -0.10, 0.20]
+        model.base_frame = base_frame
+        r_arm = Arm(value_lock, 'Right', [10, 11, 12, 13], robot_model=model)
 
         self._chassis = chassis
         self._left_leg = l_leg
@@ -690,14 +718,13 @@ class Igor(object):
 
         # ----------------------------------
         # Cached fields for pose estimation
-        imu_frames = [np.identity(4, dtype=np.float64) for i in range(15)]
+        self._imu_frames = [np.identity(4, dtype=np.float64) for i in range(15)]
 
         # These frames are constant
-        np.copyto(imu_frames[2], l_leg._kin.base_frame)
-        np.copyto(imu_frames[4], r_leg._kin.base_frame)
-        np.copyto(imu_frames[6], l_arm._kin.base_frame)
-        np.copyto(imu_frames[10], r_arm._kin.base_frame)
-        self._imu_frames = imu_frames
+        np.copyto(self._imu_frames[2], l_leg._kin.base_frame)
+        np.copyto(self._imu_frames[4], r_leg._kin.base_frame)
+        np.copyto(self._imu_frames[6], l_arm._kin.base_frame)
+        np.copyto(self._imu_frames[10], r_arm._kin.base_frame)
 
         # All of the leg modules, plus the wheel modules
         self._imu_modules = [0, 1, 2, 3, 4, 5]

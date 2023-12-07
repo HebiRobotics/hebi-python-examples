@@ -1,5 +1,6 @@
 from typing import List, Optional
 import numpy as np
+from numpy import matlib
 
 import hebi
 from hebi.robot_model import RobotModel

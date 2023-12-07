@@ -4,7 +4,6 @@ import numpy as np
 import hebi
 
 from .body import PeripheralBody, RobotModel
-from util import math_utils
 
 
 class Arm(PeripheralBody):
