@@ -117,6 +117,8 @@ def _add_event_handlers(igor: 'Igor', controller: 'MobileIO', controller_mapping
     else:
       igor_state.soft_shutdown_enabled = False
 
+    igor.allow_transition_to_idle(igor_state.soft_shutdown_enabled)
+
     # Only do this if soft shutdown is currently being requested
     if not igor_state.soft_shutdown_enabled:
       val = deadzone_clip_scaled(igor, 5.0, -1.0)(label_to_pin_map[controller_mapping.stance_height](fbk))
