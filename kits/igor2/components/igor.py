@@ -461,76 +461,76 @@ class Igor(object):
         # Value Critical section begin
         self._value_lock.acquire()
 
-        # For now, we only use the left arm velocity values.
-        # This is because we send the same values to both the left and right arm,
-        # and also because the chassis trajectory only has 3 command entries for arm velocity values
+        with self._value_lock:
+            # For now, we only use the left arm velocity values.
+            # This is because we send the same values to both the left and right arm,
+            # and also because the chassis trajectory only has 3 command entries for arm velocity values
 
-        # The knee velocities are commanded by the user (joystick `OPTIONS`), and the event callback
-        # sets the velocity on the Leg objects in response to user interaction
-        user_commanded_knee_velocity = self._left_leg.user_commanded_knee_velocity
-        user_commanded_grip_velocity = self._left_arm.user_commanded_grip_velocity
+            # The knee velocities are commanded by the user (joystick `OPTIONS`), and the event callback
+            # sets the velocity on the Leg objects in response to user interaction
+            user_commanded_knee_velocity = self._left_leg.user_commanded_knee_velocity
+            user_commanded_grip_velocity = self._left_arm.user_commanded_grip_velocity
 
-        self._chassis.update_trajectory(user_commanded_knee_velocity, user_commanded_grip_velocity)
-        self._chassis.integrate_step(dt)
+            self._chassis.update_trajectory(user_commanded_knee_velocity, user_commanded_grip_velocity)
+            self._chassis.integrate_step(dt)
 
-        calculated_knee_velocity = self._chassis.calculated_knee_velocity
-        calculated_grip_velocity = self._chassis.calculated_grip_velocity
+            calculated_knee_velocity = self._chassis.calculated_knee_velocity
+            calculated_grip_velocity = self._chassis.calculated_grip_velocity
 
-        self._left_leg.integrate_step(dt, calculated_knee_velocity)
-        self._right_leg.integrate_step(dt, calculated_knee_velocity)
+            self._left_leg.integrate_step(dt, calculated_knee_velocity)
+            self._right_leg.integrate_step(dt, calculated_knee_velocity)
 
-        self._left_arm.integrate_step(dt, calculated_grip_velocity)
-        self._right_arm.integrate_step(dt, calculated_grip_velocity)
+            self._left_arm.integrate_step(dt, calculated_grip_velocity)
+            self._right_arm.integrate_step(dt, calculated_grip_velocity)
 
-        self._chassis.update_velocity_controller(dt, self._group_feedback.velocity, self._wheel_radius,
-                                                 self._height_com, self._feedback_lean_angle_velocity,
-                                                 self._mass, self._feedback_lean_angle)
+            self._chassis.update_velocity_controller(dt, self._group_feedback.velocity, self._wheel_radius,
+                                                     self._height_com, self._feedback_lean_angle_velocity,
+                                                     self._mass, self._feedback_lean_angle)
 
-        #bc = False
-        if bc:  # bc
-            leanP = Igor.Lean_P
-            leanI = Igor.Lean_I
-            leanD = Igor.Lean_D
+            #bc = False
+            if bc:  # bc
+                leanP = Igor.Lean_P
+                leanI = Igor.Lean_I
+                leanD = Igor.Lean_D
 
-            l_wheel = self._group_command[0]
-            r_wheel = self._group_command[1]
+                l_wheel = self._group_command[0]
+                r_wheel = self._group_command[1]
 
-            print(f'LeanAngle: {self._feedback_lean_angle}  |  LeanVel: {self._feedback_lean_angle_velocity}')
+                print(f'LeanAngle: {self._feedback_lean_angle}  |  LeanVel: {self._feedback_lean_angle_velocity}')
 
-            p_effort = (leanP * self._chassis.lean_angle_error) +\
-                       (leanI * self._chassis.lean_angle_error_cumulative) +\
-                       (leanD * self._feedback_lean_angle_velocity)
-            effort = p_effort * soft_start
-            l_wheel.effort = effort
-            r_wheel.effort = -effort
-        else:
-            self._group_command[0].effort = None
-            self._group_command[1].effort = None
+                p_effort = (leanP * self._chassis.lean_angle_error) +\
+                           (leanI * self._chassis.lean_angle_error_cumulative) +\
+                           (leanD * self._feedback_lean_angle_velocity)
+                effort = p_effort * soft_start
+                l_wheel.effort = effort
+                r_wheel.effort = -effort
+            else:
+                self._group_command[0].effort = None
+                self._group_command[1].effort = None
 
-        # --------------------------------
-        # Wheel Commands
-        max_velocity = 10.0
-        l_wheel_vel = self._chassis.calculated_yaw_velocity + self._chassis.velocity_feedforward
-        r_wheel_vel = self._chassis.calculated_yaw_velocity - self._chassis.velocity_feedforward
-        # Limit velocities
-        l_wheel_vel = min(max(l_wheel_vel, -max_velocity), max_velocity)
-        r_wheel_vel = min(max(r_wheel_vel, -max_velocity), max_velocity)
-        self._group_command[0].velocity = l_wheel_vel
-        self._group_command[1].velocity = r_wheel_vel
+            # --------------------------------
+            # Wheel Commands
+            max_velocity = 10.0
+            l_wheel_vel = self._chassis.calculated_yaw_velocity + self._chassis.velocity_feedforward
+            r_wheel_vel = self._chassis.calculated_yaw_velocity - self._chassis.velocity_feedforward
+            # Limit velocities
+            l_wheel_vel = min(max(l_wheel_vel, -max_velocity), max_velocity)
+            r_wheel_vel = min(max(r_wheel_vel, -max_velocity), max_velocity)
+            self._group_command[0].velocity = l_wheel_vel
+            self._group_command[1].velocity = r_wheel_vel
 
-        # ------------
-        # Leg Commands
+            # ------------
+            # Leg Commands
 
-        self.left_leg.update_command(self._roll_angle, soft_start)
-        self.right_leg.update_command(self._roll_angle, soft_start)
+            self.left_leg.update_command(self._roll_angle, soft_start)
+            self.right_leg.update_command(self._roll_angle, soft_start)
 
-        # ------------
-        # Arm Commands
+            # ------------
+            # Arm Commands
 
-        self.left_arm.update_command(self._pose_transform, soft_start)
-        self.right_arm.update_command(self._pose_transform, soft_start)
+            self.left_arm.update_command(self._pose_transform, soft_start)
+            self.right_arm.update_command(self._pose_transform, soft_start)
 
-        self._value_lock.release()
         # --------------------------
         # Value Critical section end
 
