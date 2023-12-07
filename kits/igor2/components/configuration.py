@@ -1,37 +1,11 @@
 import os
 
-from util.input.joystick import Joystick
-
 # ------------------------------------------------------------------------------
 # Controller selectors
 # ------------------------------------------------------------------------------
 
 
 def _joystick_first_available_selector():
-  for i in range(Joystick.joystick_count()):
-    try:
-      return Joystick.at_index(i)
-    except:
-      pass
-  return None
-
-
-def _joystick_by_index_selector(index):
-  try:
-    return Joystick.at_index(index)
-  except:
-    return None
-
-
-def _joystick_by_name_selector(name):
-  for pair in Joystick.available_joysticks():
-    try:
-      index = pair[0]
-      joystick_name = pair[1]
-      if name in joystick_name:
-        return Joystick.at_index(index)
-    except:
-      pass
   return None
 
 

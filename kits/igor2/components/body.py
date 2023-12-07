@@ -6,7 +6,6 @@ from hebi.robot_model import RobotModel
 from hebi._internal.ffi._message_types import GroupCommand, GroupFeedback
 
 from util.type_utils import assert_type
-from util import math_utils
 
 
 class BaseBody(object):
