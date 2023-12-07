@@ -494,7 +494,7 @@ class Igor(object):
                 l_wheel = self._group_command[0]
                 r_wheel = self._group_command[1]
 
-                print(f'LeanAngle: {self._feedback_lean_angle}  |  LeanVel: {self._feedback_lean_angle_velocity}')
+                #print(f'LeanAngle: {self._feedback_lean_angle}  |  LeanVel: {self._feedback_lean_angle_velocity}')
 
                 p_effort = (leanP * self._chassis.lean_angle_error) +\
                            (leanI * self._chassis.lean_angle_error_cumulative) +\

@@ -9,8 +9,8 @@ from util import math_utils
 class Leg(PeripheralBody):
     """Represents a leg (and wheel)"""
 
-    damper_gains = np.array([2.0, 0.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float64)
-    spring_gains = np.array([400.0, 0.0, 100.0, 0.0, 0.0, 0.0], dtype=np.float64)
+    damper_gains = np.array([10.0, 0.0, 2.0, 0.0, 0.0, 0.0], dtype=np.float64)
+    spring_gains = np.array([500.0, 0.0, 100.0, 0.0, 0.0, 0.0], dtype=np.float64)
     roll_gains = np.array([0.0, 0.0, 10.0, 0.0, 0.0, 0.0], dtype=np.float64)  # (N or Nm) / degree
 
     def __init__(self, val_lock, name, group_indices: List[int], robot_model: RobotModel):
@@ -79,7 +79,10 @@ class Leg(PeripheralBody):
         """Updates calculations based on the position of the leg at the given
         point in time."""
         super(Leg, self).update_position()
-        self._kin.get_forward_kinematics('endeffector', self._fbk.position_command, output=[self._current_cmd_tip_fk])
+        pos = self._fbk.position_command
+        if np.any(np.isnan(pos)):
+            pos = self._fbk.position
+        self._kin.get_forward_kinematics('endeffector', pos, output=[self._current_cmd_tip_fk])
 
     def update_command(self, roll_angle, soft_start):
         """Write into the command object based on the current state of the leg.

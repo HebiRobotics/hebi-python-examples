@@ -4,9 +4,9 @@
 <!-- 1 = left side -->
 <!-- 2 = right side -->
 <group_gains>
-   <control_strategy>3 3 4 4 4 4 4 4 4 3 4 4 4 3</control_strategy>
+   <control_strategy>3 3 4 4 4 4 4 4 4 4 4 4 4 4</control_strategy>
    <position>
-      <kp>0 0 10 75 10 75 15 20 10 1 15 20 10 1</kp>
+      <kp>0 0 10 75 10 75 15 20 10 10 15 20 10 10</kp>
       <ki>0 0 10 20 10 20 0 0 0 0 0 0 0 0</ki>
       <kd>0 0 0 0 0 0 0 0 0 0 0 0 0 0</kd>
       <feed_forward>0 0 0 0 0 0 0 0 0 0 0 0 0 0</feed_forward>
@@ -22,7 +22,7 @@
       <d_on_error>1 1 1 1 1 1 1 1 1 1 1 1 1 1</d_on_error>
    </position>
    <velocity>
-      <kp>0 0 0.2 0.1 0.2 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1</kp>
+      <kp>0 0 0.3 0.3 0.3 0.3 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1</kp>
       <ki>0 0 0 0 0 0 0 0 0 0 0 0 0 0</ki>
       <kd>0 0 0 0 0 0 0 0 0 0 0 0 0 0</kd>
       <feed_forward>1 1 1 1 1 1 1 1 1 1 1 1 1 1</feed_forward>
@@ -38,7 +38,7 @@
       <d_on_error>1 1 1 1 1 1 1 0 1 1 1 1 1 1</d_on_error>
    </velocity>
    <effort>
-      <kp>0 0 0.1 0.25 0.1 0.25 0.5 0.2 0.2 0.5 0.5 0.2 0.2 0.5</kp>
+      <kp>0 0 0.1 0.1 0.1 0.1 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2</kp>
       <ki>0 0 0 0 0 0 0 0 0 0 0 0 0 0</ki>
       <kd>0 0 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001 0.001</kd>
       <feed_forward>1 1 1 1 1 1 1 1 1 1 1 1 1 1</feed_forward>
@@ -50,7 +50,7 @@
       <target_lowpass>1 1 1 1 1 1 1 1 1 1 1 1 1 1</target_lowpass>
       <min_output>-1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1</min_output>
       <max_output>1 1 1 1 1 1 1 1 1 1 1 1 1 1</max_output>
-      <output_lowpass>0.02 0.02 0.1 0.1 0.1 0.1 0.5 1 0.5 0.5 0.5 0.5 0.5 0.5</output_lowpass>
+      <output_lowpass>0.01 0.01 0.1 0.1 0.1 0.1 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5</output_lowpass>
       <d_on_error>0 0 0 0 0 0 0 0 0 0 0 0 0 0</d_on_error>
    </effort>
 </group_gains>
