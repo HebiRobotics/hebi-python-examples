@@ -4,7 +4,7 @@ from numpy import matlib
 from .arm import Arm
 from .chassis import Chassis
 from .leg import Leg
-from .joystick_interface import register_igor_event_handlers
+from .joystick_interface import register_igor_event_handlers, label_to_pin_map
 from .configuration import Igor2Config
 
 from math import atan2, degrees, radians
@@ -13,8 +13,12 @@ from util import math_utils
 
 import hebi
 import sys
+import os
 import threading
 
+import typing
+if typing.TYPE_CHECKING:
+    from hebi import GroupFeedback
 
 # ------------------------------------------------------------------------------
 # Helper Functions
@@ -43,21 +47,21 @@ def retry_on_error(func, on_error_func=None, sleep_time=0.1):
             sleep(sleep_time)
 
 
-def load_gains(igor):
-    group = igor.group
+def load_gains(igor: 'Igor'):
+    group = igor._group
 
     # Bail out if group is imitation
-    if igor.config.is_imitation:
+    if igor._config.is_imitation:
         return
 
     gains_command = hebi.GroupCommand(group.size)
     sleep(0.1)
 
     try:
-        if igor.has_camera:
-            gains_command.read_gains(igor.config.gains_xml)
+        if igor._has_camera:
+            gains_command.read_gains(igor._config.gains_xml)
         else:
-            gains_command.read_gains(igor.config.gains_no_camera_xml)
+            gains_command.read_gains(igor._config.gains_no_camera_xml)
     except Exception as e:
         print(f'Warning - Could not load gains: {e}')
         return
@@ -108,40 +112,6 @@ def create_group(config, has_camera):
         return retry_on_error(connect)
 
 
-def set_command_subgroup_pve(group_command, pos, vel, effort, indices):
-    """Set position, velocity, and effort for certain modules in a group.
-
-    :param group_command: the GroupCommand instance into which the values will be sent
-    :param pos:           the whole group's position array
-    :param vel:           the whole group's velocity array
-    :param effort:        the whole group's effort array
-    :param indices:       the indices in the group which will be modified
-    """
-    idx = 0
-    for i in indices:
-        cmd = group_command[i]
-        cmd.position = pos[idx]
-        cmd.velocity = vel[idx]
-        cmd.effort = effort[idx]
-        idx = idx + 1
-
-
-def set_command_subgroup_pv(group_command, pos, vel, indices):
-    """Set position and velocity for certain modules in a group.
-
-    :param group_command: the GroupCommand instance into which the values will be sent
-    :param pos:           the whole group's position array
-    :param vel:           the whole group's velocity array
-    :param indices:       the indices in the group which will be modified
-    """
-    idx = 0
-    for i in indices:
-        cmd = group_command[i]
-        cmd.position = pos[idx]
-        cmd.velocity = vel[idx]
-        idx = idx + 1
-
-
 # ------------------------------------------------------------------------------
 # Igor Class
 # ------------------------------------------------------------------------------
@@ -178,32 +148,18 @@ class Igor(object):
 
         return True
 
-    def _transition_from_idle_to_running(self, ts, pressed):
-        """Controller event handler to transition from idle to running mode."""
-        if pressed:
-            self._leave_idle_flag = True
-
 # ------------------------------------------------
 # Calculations
 # ------------------------------------------------
 
     def _update_com(self):
         """Updates the CoM of all bodies."""
-        l_arm = self._left_arm
-        r_arm = self._right_arm
-        l_leg = self._left_leg
-        r_leg = self._right_leg
-
-        l_arm.update_position()
-        r_arm.update_position()
-        l_leg.update_position()
-        r_leg.update_position()
 
         coms = self._coms
-        coms[0:3, 0] = l_leg.com
-        coms[0:3, 1] = r_leg.com
-        coms[0:3, 2] = l_arm.com
-        coms[0:3, 3] = r_arm.com
+        coms[0:3, 0] = self.left_leg.com
+        coms[0:3, 1] = self.right_leg.com
+        coms[0:3, 2] = self.left_arm.com
+        coms[0:3, 3] = self.right_arm.com
 
         masses = self._masses
 
@@ -216,10 +172,6 @@ class Igor(object):
         :param orientation: [numModules x 4] matrix of orientation
         """
         imu_frames = self._imu_frames
-        l_leg = self._left_leg
-        r_leg = self._right_leg
-        l_arm = self._left_arm
-        r_arm = self._right_arm
 
         # Update gyro values from current modules feedback
         # Transposing allows us to do calculations a bit easier below
@@ -227,25 +179,24 @@ class Igor(object):
 
         # Update imu frames
         # Leg endeffectors
-        np.copyto(imu_frames[0], l_leg.current_tip_fk)
-        np.copyto(imu_frames[1], r_leg.current_tip_fk)
+        np.copyto(imu_frames[0], self._left_leg.current_tip_fk)
+        np.copyto(imu_frames[1], self._right_leg.current_tip_fk)
         # Hip link output frames
-        np.copyto(imu_frames[3], l_leg.current_fk[1])
-        np.copyto(imu_frames[5], r_leg.current_fk[1])
+        np.copyto(imu_frames[3], self._left_leg._current_fk[1])
+        np.copyto(imu_frames[5], self._right_leg._current_fk[1])
         # Arm base bracket
-        np.copyto(imu_frames[7], l_arm.current_fk[1])
-        np.copyto(imu_frames[11], r_arm.current_fk[1])
+        np.copyto(imu_frames[7], self._left_arm._current_fk[1])
+        np.copyto(imu_frames[11], self._right_arm._current_fk[1])
         # Arm shoulder link
-        np.copyto(imu_frames[8], l_arm.current_fk[3])
-        np.copyto(imu_frames[12], r_arm.current_fk[3])
+        np.copyto(imu_frames[8], self._left_arm._current_fk[3])
+        np.copyto(imu_frames[12], self._right_arm._current_fk[3])
         # Arm elbow link
-        np.copyto(imu_frames[9], l_arm.current_fk[5])
-        np.copyto(imu_frames[13], r_arm.current_fk[5])
+        np.copyto(imu_frames[9], self._left_arm._current_fk[5])
+        np.copyto(imu_frames[13], self._right_arm._current_fk[5])
 
         q_rot = np.empty((3, 3), dtype=np.float64)
         imu_rotation = np.empty((3, 3), dtype=np.float64)
         pose_tmp = self._pose_tmp
-        rpy_modules = self._rpy
         quaternion_tmp = self._quaternion_tmp
 
         for i in range(14):
@@ -268,7 +219,7 @@ class Igor(object):
             # column of the roll-pitch-yaw matrix
             np.copyto(quaternion_tmp, orientation[i, 0:4])
             if math_utils.any_nan(quaternion_tmp):
-                rpy_modules[0:3, i] = np.nan
+                self._rpy[0:3, i] = np.nan
             else:
                 # `quat2rot` is a helper function which
                 # converts a quaternion vector into a 3x3 rotation matrix
@@ -276,10 +227,10 @@ class Igor(object):
                 # Apply module's orientation (rotation transform) to the module's
                 # Rotation matrix transpose is same as inverse,
                 # since `q_rot` is an SO(3) matrix
-                np.matmul(q_rot, imu_rotation.T, out=q_rot)
+                q_rot = q_rot @ imu_rotation.T
                 # `rot2ea` is a helper function which
                 # converts a 3x3 rotation matrix into a roll-pitch-yaw Euler angle vector
-                math_utils.rot2ea(q_rot, rpy_modules[0:3, i])
+                math_utils.rot2ea(q_rot, self._rpy[0:3, i])
 
         # TODO: document this
         self._pose_gyros_mean = np.nanmean(self._pose_gyros[:, self._imu_modules], axis=1)
@@ -287,12 +238,11 @@ class Igor(object):
     def _calculate_lean_angle(self):
         """The CoM of all individual bodies and pose estimate have been updated
         at this point."""
-        rpy_modules = self._rpy
         imu_modules = self._imu_modules
 
         # {roll,pitch}_angle are in radians here
-        roll_angle = np.nanmean(rpy_modules[0, imu_modules])
-        pitch_angle = np.nanmean(rpy_modules[1, imu_modules])
+        roll_angle = np.nanmean(self._rpy[0, imu_modules])
+        pitch_angle = np.nanmean(self._rpy[1, imu_modules])
 
         # Update roll transform (rotation matrix)
         math_utils.rotate_x(roll_angle, output=self._roll_rot)
@@ -358,25 +308,13 @@ class Igor(object):
 
         from time import sleep
 
-        joy = self._joy
-        if joy.controller_type == 'MobileIO':
-            joy_group = joy.group
-            joy_cmd = hebi.GroupCommand(1)
-            joy_cmd.io.a.set_int(3, 0)    # Set to snap
-            joy_cmd.io.a.set_int(6, 0)    # Set to snap
-            joy_cmd.io.e.set_int(3, 1)    # Highlight start button
-            joy_cmd.io.e.set_int(4, 0)    # Don't highlight stop button
-            joy_cmd.io.f.set_float(5, -1)  # Gains slider all the way down
-            joy_cmd.led.color = 'blue'
-
-            success = False
-            for _ in range(10):
-                success = joy_group.send_command_with_acknowledgement(joy_cmd)
-                if success:
-                    break
-
-            if not success:
-                raise RuntimeError('Could not communicate with Mobile IO device')
+        mio = self._mobile_io
+        mio.set_snap(3, 0)
+        mio.set_snap(6, 0)
+        mio.set_button_output(3, 1)
+        mio.set_button_output(4, 0)
+        mio.set_axis_value(5, -1)
+        mio.set_led_color('blue')
 
         if self._num_spins > 0:
             # This is not the first time we have been in the idle state. We will clear
@@ -406,22 +344,12 @@ class Igor(object):
         group_command.led.color = 'transparent'
         group.send_command(group_command)
 
-        if joy.controller_type == 'MobileIO':
-            joy_group = joy.group
-            joy_cmd = hebi.GroupCommand(1)
-            joy_cmd.io.e.set_int(3, 0)    # Make button 'b3' not highlight
-            joy_cmd.io.e.set_int(4, 1)    # Make button 'b4' highlight, so we know it quits.
-            joy_cmd.io.f.set_float(5, -1)  # Gains slider all the way down
-            joy_cmd.led.color = 'green'
+        mio = self._mobile_io
+        mio.set_button_output(3, 0)
+        mio.set_button_output(4, 1)
+        mio.set_axis_value(5, -1)
+        mio.set_led_color('green')
 
-            success = False
-            for _ in range(10):
-                success = joy_group.send_command_with_acknowledgement(joy_cmd)
-                if success:
-                    break
-
-            if not success:
-                raise RuntimeError('Could not communicate with Mobile IO device')
 
     def _soft_startup(self):
         """Performs the startup phase, which takes about 3 seconds."""
@@ -434,28 +362,15 @@ class Igor(object):
         l_leg = self._left_leg
         r_leg = self._right_leg
 
-        l_arm_i = l_arm.group_indices
-        r_arm_i = r_arm.group_indices
-        l_leg_i = l_leg.group_indices
-        r_leg_i = r_leg.group_indices
-
         group = self._group
-        group_feedback = self._group_feedback
-        group_command = self._group_command
+        group.get_next_feedback(reuse_fbk=self._group_feedback)
 
-        positions = self._current_position
+        self._time_last[:] = self._group_feedback.receive_time
 
-        group.send_feedback_request()
-        group.get_next_feedback(reuse_fbk=group_feedback)
-        self._group_feedback = group_feedback
-
-        self._time_last[:] = group_feedback.receive_time
-        group_feedback.get_position(positions)
-
-        l_arm_t = l_arm.create_home_trajectory(positions)
-        r_arm_t = r_arm.create_home_trajectory(positions)
-        l_leg_t = l_leg.create_home_trajectory(positions)
-        r_leg_t = r_leg.create_home_trajectory(positions)
+        l_arm_t = l_arm.create_home_trajectory()
+        r_arm_t = r_arm.create_home_trajectory()
+        l_leg_t = l_leg.create_home_trajectory()
+        r_leg_t = r_leg.create_home_trajectory()
 
         start_time = time()
         t = 0.0
@@ -474,31 +389,34 @@ class Igor(object):
             # Limit commands initially
             soft_start = min(t * soft_start_scale, 1.0)
 
-            grav_comp_efforts = l_arm.get_grav_comp_efforts(positions, gravity)
-            pos, vel, accel = l_arm_t.get_state(t)
-            np.multiply(grav_comp_efforts, soft_start, out=grav_comp_efforts)
-            set_command_subgroup_pve(group_command, pos, vel, grav_comp_efforts, l_arm_i)
+            grav_comp_efforts = l_arm.get_grav_comp_efforts(gravity)
+            pos, vel, _ = l_arm_t.get_state(t)
+            self.left_arm._cmd.position = pos
+            self.left_arm._cmd.velocity = vel
+            np.multiply(grav_comp_efforts, soft_start, out=self.left_arm._cmd.effort)
 
-            grav_comp_efforts = r_arm.get_grav_comp_efforts(positions, gravity)
-            pos, vel, accel = r_arm_t.get_state(t)
-            np.multiply(grav_comp_efforts, soft_start, out=grav_comp_efforts)
-            set_command_subgroup_pve(group_command, pos, vel, grav_comp_efforts, r_arm_i)
+            grav_comp_efforts = r_arm.get_grav_comp_efforts(gravity)
+            pos, vel, _ = r_arm_t.get_state(t)
+            self.right_arm._cmd.position = pos
+            self.right_arm._cmd.velocity = vel
+            np.multiply(grav_comp_efforts, soft_start, out=self.right_arm._cmd.effort)
 
-            pos, vel, accel = l_leg_t.get_state(t)
-            set_command_subgroup_pv(group_command, pos, vel, l_leg_i)
+            pos, vel, _ = l_leg_t.get_state(t)
+            self.left_leg._cmd.position = pos
+            self.left_leg._cmd.velocity = vel
             left_knee = pos[1]
 
-            pos, vel, accel = r_leg_t.get_state(t)
-            set_command_subgroup_pv(group_command, pos, vel, r_leg_i)
+            pos, vel, _ = r_leg_t.get_state(t)
+            self.right_leg._cmd.position = pos
+            self.right_leg._cmd.velocity = vel
             right_knee = pos[1]
 
             # Scale effort
-            group.send_command(group_command)
-            group.get_next_feedback(reuse_fbk=group_feedback)
-            group_feedback.get_position(positions)
+            group.send_command(self._group_command)
+            group.get_next_feedback(reuse_fbk=self._group_feedback)
             t = time() - start_time
 
-        self._time_last[:] = group_feedback.receive_time
+        self._time_last[:] = self._group_feedback.receive_time
         self._left_leg._knee_angle = left_knee
         self._right_leg._knee_angle = -right_knee
 
@@ -508,12 +426,10 @@ class Igor(object):
         :type bc:  bool
         """
         self._group.get_next_feedback(reuse_fbk=self._group_feedback)
-        group_feedback = self._group_feedback
-        group_command = self._group_command
 
         rel_time = time() - self._start_time
         soft_start = min(rel_time, 1.0)
-        rx_time = group_feedback.receive_time
+        rx_time = self._group_feedback.receive_time
 
         if self._config.is_imitation:
             dt = 0.01
@@ -523,28 +439,9 @@ class Igor(object):
 
         np.copyto(self._time_last, rx_time)
 
-        # ------------------------------------------------------
-        # These fields are cached to avoid instantiating objects
-        positions = self._current_position
-        commanded_positions = self._current_position_command
-        velocities = self._current_velocity
-        velocity_commands = self._current_velocity_command
-        velocity_error = self._current_velocity_error
-
-        group_feedback.get_position(positions)
-        group_feedback.get_position_command(commanded_positions)
-        group_feedback.get_velocity(velocities)
-        group_feedback.get_velocity_command(velocity_commands)
-        np.subtract(velocity_commands, velocities, out=velocity_error)
-
-        self._left_leg.on_feedback_received(positions, commanded_positions, velocities, velocity_error)
-        self._right_leg.on_feedback_received(positions, commanded_positions, velocities, velocity_error)
-        self._left_arm.on_feedback_received(positions, commanded_positions, velocities, velocity_error)
-        self._right_arm.on_feedback_received(positions, commanded_positions, velocities, velocity_error)
-
         # TODO: cache these too
-        gyro = group_feedback.gyro
-        orientation = group_feedback.orientation
+        gyro = self._group_feedback.gyro
+        orientation = self._group_feedback.orientation
 
         if self._config.is_imitation:
             gyro[:, :] = 0.33
@@ -581,7 +478,7 @@ class Igor(object):
         self._left_arm.integrate_step(dt, calculated_grip_velocity)
         self._right_arm.integrate_step(dt, calculated_grip_velocity)
 
-        self._chassis.update_velocity_controller(dt, velocities, self._wheel_radius,
+        self._chassis.update_velocity_controller(dt, self._group_feedback.velocity, self._wheel_radius,
                                                  self._height_com, self._feedback_lean_angle_velocity,
                                                  self._mass, self._feedback_lean_angle)
 
@@ -591,8 +488,8 @@ class Igor(object):
             leanI = Igor.Lean_I
             leanD = Igor.Lean_D
 
-            l_wheel = group_command[0]
-            r_wheel = group_command[1]
+            l_wheel = self._group_command[0]
+            r_wheel = self._group_command[1]
 
             p_effort = (leanP * self._chassis.lean_angle_error) +\
                        (leanI * self._chassis.lean_angle_error_cumulative) +\
@@ -601,8 +498,8 @@ class Igor(object):
             l_wheel.effort = effort
             r_wheel.effort = -effort
         else:
-            group_command[0].effort = None
-            group_command[1].effort = None
+            self._group_command[0].effort = None
+            self._group_command[1].effort = None
 
         # --------------------------------
         # Wheel Commands
@@ -612,26 +509,26 @@ class Igor(object):
         # Limit velocities
         l_wheel_vel = min(max(l_wheel_vel, -max_velocity), max_velocity)
         r_wheel_vel = min(max(r_wheel_vel, -max_velocity), max_velocity)
-        group_command[0].velocity = l_wheel_vel
-        group_command[1].velocity = r_wheel_vel
+        self._group_command[0].velocity = l_wheel_vel
+        self._group_command[1].velocity = r_wheel_vel
 
         # ------------
         # Leg Commands
 
-        self._left_leg.update_command(group_command, self._roll_angle, soft_start)
-        self._right_leg.update_command(group_command, self._roll_angle, soft_start)
+        self.left_leg.update_command(self._roll_angle, soft_start)
+        self.right_leg.update_command(self._roll_angle, soft_start)
 
         # ------------
         # Arm Commands
 
-        self._left_arm.update_command(group_command, self._pose_transform, soft_start)
-        self._right_arm.update_command(group_command, self._pose_transform, soft_start)
+        self.left_arm.update_command(self._pose_transform, soft_start)
+        self.right_arm.update_command(self._pose_transform, soft_start)
 
         self._value_lock.release()
         # --------------------------
         # Value Critical section end
 
-        self._group.send_command(group_command)
+        self._group.send_command(self._group_command)
 
 # ------------------------------------------------
 # Lifecycle functions
@@ -707,7 +604,7 @@ class Igor(object):
 # Initialization functions
 # ------------------------------------------------
 
-    def __init__(self, has_camera=False, config=None):
+    def __init__(self, has_camera=False, config: Igor2Config = None):
         if config is None:
             self._config = Igor2Config()
         elif type(config) is not Igor2Config:
@@ -721,7 +618,7 @@ class Igor(object):
             num_dofs = 14
 
         # The joystick interface
-        self._joy = None
+        self._mobile_io = None
 
         # ------------
         # Group fields
@@ -763,10 +660,12 @@ class Igor(object):
         # ---------------------
         # Kinematic body fields
         chassis = Chassis(value_lock)
-        l_leg = Leg(value_lock, 'Left', [2, 3])
-        r_leg = Leg(value_lock, 'Right', [4, 5])
-        l_arm = Arm(value_lock, 'Left', [6, 7, 8, 9])
-        r_arm = Arm(value_lock, 'Right', [10, 11, 12, 13])
+        # path to 'hrdf' folder
+        hrdf_dir = os.path.join(os.path.dirname(__file__), '..', 'hrdf')
+        l_leg = Leg(value_lock, 'Left', [2, 3], robot_model=hebi.robot_model.import_from_hrdf(os.path.join(hrdf_dir, 'tgorLeg.hrdf')))
+        r_leg = Leg(value_lock, 'Right', [4, 5], robot_model=hebi.robot_model.import_from_hrdf(os.path.join(hrdf_dir, 'tgorLeg.hrdf')))
+        l_arm = Arm(value_lock, 'Left', [6, 7, 8, 9], robot_model=hebi.robot_model.import_from_hrdf(os.path.join(hrdf_dir, 'tgorArm-Left.hrdf')))
+        r_arm = Arm(value_lock, 'Right', [10, 11, 12, 13], robot_model=hebi.robot_model.import_from_hrdf(os.path.join(hrdf_dir, 'tgorArm-Right.hrdf')))
 
         self._chassis = chassis
         self._left_leg = l_leg
@@ -791,15 +690,13 @@ class Igor(object):
 
         # ----------------------------------
         # Cached fields for pose estimation
-        imu_frames = list()
-        for i in range(0, 15):
-            imu_frames.append(np.identity(4, dtype=np.float64))
+        imu_frames = [np.identity(4, dtype=np.float64) for i in range(15)]
 
         # These frames are constant
-        np.copyto(imu_frames[2], l_leg._robot.base_frame)
-        np.copyto(imu_frames[4], r_leg._robot.base_frame)
-        np.copyto(imu_frames[6], l_arm._robot.base_frame)
-        np.copyto(imu_frames[10], r_arm._robot.base_frame)
+        np.copyto(imu_frames[2], l_leg._kin.base_frame)
+        np.copyto(imu_frames[4], r_leg._kin.base_frame)
+        np.copyto(imu_frames[6], l_arm._kin.base_frame)
+        np.copyto(imu_frames[10], r_arm._kin.base_frame)
         self._imu_frames = imu_frames
 
         # All of the leg modules, plus the wheel modules
@@ -830,14 +727,6 @@ class Igor(object):
         self._quaternion_tmp = np.zeros(4, dtype=np.float64)
         self._T_pose_rot = np.zeros((3, 3), dtype=np.float64)
 
-        # --------------------------
-        # Cached fields for feedback
-        self._current_position = np.zeros(num_dofs, dtype=np.float64)
-        self._current_position_command = np.zeros(num_dofs, dtype=np.float64)
-        self._current_velocity = np.zeros(num_dofs, dtype=np.float32)
-        self._current_velocity_command = np.zeros(num_dofs, dtype=np.float32)
-        self._current_velocity_error = np.zeros(num_dofs, dtype=np.float32)
-
 # ------------------------------------------------
 # Public Interface
 # ------------------------------------------------
@@ -849,66 +738,75 @@ class Igor(object):
         after the first invocation. All processing will be done on a
         background thread which is spawned in this method.
         """
-        self._state_lock.acquire()
-        if self._started:
-            self._state_lock.release()
-            return
+        with self._state_lock:
+            if self._started:
+                self._state_lock.release()
+                return
 
-        group = create_group(self._config, self._has_camera)
-        group.command_lifetime = 500
-        group.feedback_frequency = 100.0
+            group = create_group(self._config, self._has_camera)
+            group.command_lifetime = 500
+            group.feedback_frequency = 100.0
 
-        self._group = group
-        self._group_command = hebi.GroupCommand(group.size)
-        self._group_feedback = hebi.GroupFeedback(group.size)
-        self._group_info = hebi.GroupInfo(group.size)
+            self._group = group
+            self._group_command = hebi.GroupCommand(group.size)
+            self._group_feedback = hebi.GroupFeedback(group.size)
+            self._group_info = hebi.GroupInfo(group.size)
 
-        joystick_selector = self._config.joystick_selector
+            self._left_leg.set_message_views(self._group_command, self._group_feedback)
+            self._right_leg.set_message_views(self._group_command, self._group_feedback)
+            self._left_arm.set_message_views(self._group_command, self._group_feedback)
+            self._right_arm.set_message_views(self._group_command, self._group_feedback)
 
-        while True:
-            try:
-                joy = joystick_selector()
-                if joy is None:
-                    raise RuntimeError
-                self._joy = joy
-                break
-            except:
-                pass
+            setup_controller = self._config.setup_controller
 
-        self._joy.add_button_event_handler(self._config.controller_mapping.exit_idle_modle, self._transition_from_idle_to_running)
+            while True:
+                try:
+                    mio = setup_controller()
+                    if mio is None:
+                        raise RuntimeError
+                    self._mobile_io = mio
+                    break
+                except:
+                    pass
 
-        load_gains(self)
+            def idle_to_running(fbk: 'GroupFeedback'):
+                data_getter = label_to_pin_map[self._config.controller_mapping.exit_idle_mode]
+ 
+                if data_getter(fbk) == 1:
+                    self._leave_idle_flag = True
 
-        from threading import Condition, Lock, Thread
-        start_condition = Condition(Lock())
+            self._mobile_io._group.add_feedback_handler(idle_to_running)
 
-        def start_routine(start_condition):
-            start_condition.acquire()
+            load_gains(self)
 
-            # Calling thread holds `__state_lock` AND
-            # is also blocked until we call `start_condition.notify_all()`
-            # So we can safely modify this here.
-            self._started = True
+            from threading import Condition, Lock, Thread
+            start_condition = Condition(Lock())
 
-            # Allow the calling thread to continue
-            start_condition.notify_all()
-            start_condition.release()
+            def start_routine(start_condition):
+                start_condition.acquire()
 
-            self._start()
+                # Calling thread holds `__state_lock` AND
+                # is also blocked until we call `start_condition.notify_all()`
+                # So we can safely modify this here.
+                self._started = True
 
-        self._proc_thread = Thread(target=start_routine,
-                                   name='Igor II Controller',
-                                   args=(start_condition,))
+                # Allow the calling thread to continue
+                start_condition.notify_all()
+                start_condition.release()
 
-        # We will have started the thread before returning,
-        # but make sure the function has begun running before
-        # we release the `_state_lock` and return
-        start_condition.acquire()
-        self._proc_thread.start()
-        start_condition.wait()
-        start_condition.release()
+                self._start()
 
-        self._state_lock.release()
+            self._proc_thread = Thread(target=start_routine,
+                                       name='Igor II Controller',
+                                       args=(start_condition,))
+
+            # We will have started the thread before returning,
+            # but make sure the function has begun running before
+            # we release the `_state_lock` and return
+            with start_condition:
+                self._proc_thread.start()
+                start_condition.wait()
+
 
     def request_stop(self):
         """Send a request to stop the demo. If the demo has not been started,
@@ -955,36 +853,8 @@ class Igor(object):
 # ------------------------------------------------
 
     @property
-    def config(self):
-        """
-        The configuration of this Igor instance
-        :rtype: Igor2Config
-        """
-        return self._config
-
-    @property
-    def group(self):
-        """The HEBI group containing the Igor modules."""
-        return self._group
-
-    @property
-    def joystick(self):
-        return self._joy
-
-    @property
-    def joystick_dead_zone(self):
-        """
-        The deadzone of the joystick used to control Igor
-        :rtype: float
-        """
-        return self._joy_dead_zone
-
-    @property
-    def has_camera(self):
-        """
-        :rtype: bool
-        """
-        return self._has_camera
+    def mobile_io(self):
+        return self._mobile_io
 
     @property
     def started(self):

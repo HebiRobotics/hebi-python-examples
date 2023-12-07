@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Igor Leg -->
+<robot version="1.2.0">
+  <actuator type="X5-9"/>
+  <link type="X5" extension="0.375" twist="pi"/>
+  <actuator type="X5-4"/>
+  <link type="X5" extension="0.375" twist="pi"/>
+  <actuator type="X5-4"/>
+  <end-effector />
+</robot>

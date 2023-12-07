@@ -1,6 +1,8 @@
+from typing import List
+
 import numpy as np
 
-from .body import PeripheralBody
+from .body import PeripheralBody, RobotModel
 from util import math_utils
 
 
@@ -11,57 +13,39 @@ class Leg(PeripheralBody):
     spring_gains = np.array([400.0, 0.0, 100.0, 0.0, 0.0, 0.0], dtype=np.float64)
     roll_gains = np.array([0.0, 0.0, 10.0, 0.0, 0.0, 0.0], dtype=np.float64)  # (N or Nm) / degree
 
-    def __init__(self, val_lock, name, group_indices):
+    def __init__(self, val_lock, name, group_indices: List[int], robot_model: RobotModel):
         assert name == 'Left' or name == 'Right'
-        super(Leg, self).__init__(val_lock, group_indices, name)
-
-        self._name = name
-        base_frame = np.identity(4, dtype=np.float64)
+        super(Leg, self).__init__(val_lock, group_indices, robot_model)
 
         hip_t = np.identity(4, dtype=np.float64)
         hip_t[0:3, 0:3] = math_utils.rotate_x(np.pi * 0.5)
         hip_t[0:3, 3] = [0.0, 0.0225, 0.055]
         self._hip_t = hip_t
 
-        kin = self._robot
-        kin.add_actuator('X5-9')
-        kin.add_link('X5', extension=0.375, twist=np.pi)
-        kin.add_actuator('X5-4')
-        kin.add_link('X5', extension=0.325, twist=np.pi)
-        kin.add_end_effector('custom')
-
         home_knee_angle = np.deg2rad(130)
         home_hip_angle = (np.pi + home_knee_angle) * 0.5
 
         if name == 'Left':
             self._direction = 1.0
-            home_angles = np.array([home_hip_angle, home_knee_angle], dtype=np.float64)
-            base_frame[0:3, 3] = [0.0, 0.15, 0.0]
-            base_frame[0:3, 0:3] = math_utils.rotate_x(np.pi * -0.5)
         else:
             self._direction = -1.0
-            home_angles = np.array([-home_hip_angle, -home_knee_angle], dtype=np.float64)
-            base_frame[0:3, 3] = [0.0, -0.15, 0.0]
-            base_frame[0:3, 0:3] = math_utils.rotate_x(np.pi * 0.5)
 
-        kin.base_frame = base_frame
-        self.home_angles = home_angles
-        masses = kin.masses
+        home_angles = np.array([home_hip_angle, home_knee_angle], dtype=np.float64)
+
+        self.home_angles = self._direction * home_angles
+        masses = self._kin.masses
         self._set_mass(np.sum(masses))
         self._set_masses(masses)
 
         # ----------------------
         # Populate cached fields
-        output_frame_count = kin.get_frame_count('output')
-        com_frame_count = kin.get_frame_count('CoM')
+        output_frame_count = self._kin.get_frame_count('output')
+        com_frame_count = self._kin.get_frame_count('CoM')
 
         self._current_xyz = np.zeros((3, com_frame_count), dtype=np.float64)
 
-        for i in range(output_frame_count):
-            self._current_fk.append(np.zeros((4, 4), dtype=np.float64))
-
-        for i in range(com_frame_count):
-            self._current_coms.append(np.zeros((4, 4), dtype=np.float64))
+        self._current_fk = [np.zeros((4, 4), dtype=np.float64) for _ in range(output_frame_count)]
+        self._current_coms = [np.zeros((4, 4), dtype=np.float64) for _ in range(com_frame_count)]
 
         # Calculate home FK
         self._hip_angle = home_hip_angle
@@ -95,49 +79,38 @@ class Leg(PeripheralBody):
         """Updates calculations based on the position of the leg at the given
         point in time."""
         super(Leg, self).update_position()
-        self._robot.get_forward_kinematics('endeffector', self._fbk_position_cmd, output=[self._current_cmd_tip_fk])
+        self._kin.get_forward_kinematics('endeffector', self._fbk.position_command, output=[self._current_cmd_tip_fk])
 
-    def update_command(self, group_command, roll_angle, soft_start):
+    def update_command(self, roll_angle, soft_start):
         """Write into the command object based on the current state of the leg.
 
-        :param group_command:
         :param roll_angle:
         :param soft_start:
         :return:
         """
-        indices = self.group_indices
-        hip_idx = indices[0]
-        knee_idx = indices[1]
-
-        hip_cmd = group_command[hip_idx]
-        knee_cmd = group_command[knee_idx]
 
         # -------------------------------
         # Calculate position and velocity
-        knee_velocity = self._direction * self._knee_velocity
-        hip_cmd.position = self._direction * self._hip_angle
-        hip_cmd.velocity = knee_velocity * 0.5
-        knee_cmd.position = self._direction * self._knee_angle
-        knee_cmd.velocity = knee_velocity
+        self._cmd.position = self._direction * np.array([self._hip_angle, self._knee_angle])
+        self._cmd.velocity = self._direction * np.array([0.5 * self._knee_velocity, self._knee_velocity])
 
         # ----------------
         # Calculate effort
 
         # Calculate the current positional error
-        np.subtract(self._current_cmd_tip_fk[0:3, 3], self.current_tip_fk[0:3, 3], out=self._xyz_error)
-        np.copyto(self._pos_error[0:3], self._xyz_error)
+        np.subtract(self._current_cmd_tip_fk[0:3, 3], self.current_tip_fk[0:3, 3], out=self.xyz_error)
         # Calculate the current velocity error by:
         #  multiplying the current jacobian at the endeffector frame
         # by the:
         #  difference of the commanded velocity feedfback and actual velocity feedfback
+        np.subtract(self._fbk.velocity_command, self._fbk.velocity, out=self._fbk_velocity_err)
         np.dot(self._current_j_actual_f, self._fbk_velocity_err, out=self._vel_error)
-        roll_sign = self._direction
 
         # piecewise multiply the error terms by the predefined gains
-        np.multiply(Leg.spring_gains, self._pos_error, out=self._pos_error)
-        np.multiply(Leg.damper_gains, self._vel_error, out=self._vel_error)
+        self._pos_error *= Leg.spring_gains
+        self._vel_error *= Leg.damper_gains
         # `self._e_term` is an intermediate value used to calculate the impedance error
-        np.multiply(Leg.roll_gains, roll_sign * roll_angle, out=self._e_term)
+        np.multiply(Leg.roll_gains, self._direction * roll_angle, out=self._e_term)
 
         # add the 3 error terms (pos+vel+e) to find the impedance error
         np.add(self._pos_error, self._vel_error, out=self._impedance_err)
@@ -145,11 +118,10 @@ class Leg(PeripheralBody):
         # Multiply the jacobian matrix at the endeffector
         # by the impedance error to find the impedance torque, and scale it
         # by the soft startup scale
-        np.dot(self.current_j_actual.T, self._impedance_err, out=self._impedance_torque)
+        np.dot(self._current_j_actual.T, self._impedance_err, out=self._impedance_torque)
         np.multiply(self._impedance_torque, soft_start, out=self._impedance_torque)
 
-        hip_cmd.effort = self._impedance_torque[0]
-        knee_cmd.effort = self._impedance_torque[1]
+        self._cmd.effort = self._impedance_torque
 
     @property
     def hip_angle(self):
