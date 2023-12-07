@@ -459,8 +459,6 @@ class Igor(object):
 
         # ----------------------------
         # Value Critical section begin
-        self._value_lock.acquire()
-
         with self._value_lock:
             # For now, we only use the left arm velocity values.
             # This is because we send the same values to both the left and right arm,
