@@ -28,9 +28,11 @@ sleep(2)
 # Setup MobileIO
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, arm_family, phone_name)
+
 if m is None:
     raise RuntimeError("Could not find Mobile IO device")
 m.update()
+m.send_layout('./layouts/ex_AR_kit.json')
 
 # Demo Variables
 abort_flag = False
@@ -57,6 +59,15 @@ rot_phone_init = np.zeros((3, 3))
 
 # # Target variables
 # target_joints = np.zeros(arm.size)
+
+# Print Instructions
+instructions = (
+    "Mode: {}\n"
+    "B1: Return to Home Position\n"
+    "B3: Start AR Control\n"
+    "B6: Grav Comp Mode\n"
+    "B8: Quit")
+print(instructions.format(run_mode))
 
 #######################
 ## Main Control Loop ##

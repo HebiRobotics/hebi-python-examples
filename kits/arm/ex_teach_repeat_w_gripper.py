@@ -49,6 +49,8 @@ print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, arm_family, phone_name)
 if m is None:
     raise RuntimeError("Could not find Mobile IO device")
+
+m.send_layout('./layouts/ex_teach_repeat_w_gripper.json')
 m.set_led_color("blue")  # as we start in grav comp
 m.clear_text()  # Clear any garbage on screen
 m.update()
@@ -69,8 +71,6 @@ A3 - Up/down for longer/shorter time to waypoint
 B8 - Quit
 """
 print(instructions)
-m.clear_text()
-m.add_text(instructions)
 
 #######################
 ## Main Control Loop ##

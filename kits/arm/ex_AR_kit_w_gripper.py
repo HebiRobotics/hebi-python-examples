@@ -31,6 +31,7 @@ m = create_mobile_io(lookup, arm_family, phone_name)
 if m is None:
     raise RuntimeError("Could not find Mobile IO device")
 m.update()
+m.send_layout('./layouts/ex_AR_kit_w_gripper.json')
 
 # Add the gripper
 gripper_family = arm_family
@@ -79,8 +80,7 @@ instructions = (
     "B3: AR Control\n"
     "B6: Grav Comp\n"
     "B8: Quit")
-m.clear_text()
-m.add_text(instructions.format(run_mode))
+print(instructions.format(run_mode))
 
 #######################
 ## Main Control Loop ##
