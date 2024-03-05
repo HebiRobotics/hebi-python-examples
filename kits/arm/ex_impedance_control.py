@@ -19,9 +19,6 @@ print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io(lookup, phone_family, phone_name)
 if m is None:
     raise RuntimeError("Could not find Mobile IO device")
-m.set_button_mode(1, 'momentary')
-m.set_button_mode(2, 'toggle')
-m.update()
 
 # Setup arm components
 arm = hebi.arm.create([arm_family],
@@ -54,11 +51,26 @@ goal = hebi.arm.Goal(arm.size)
 if enable_logging:
     arm.group.start_log('dir', 'logs', mkdirs=True)
 
-print('Commanded gravity-compensated zero force to the arm.')
-print('  b2 - Toggles an impedance controller on/off:')
-print('          ON  - Apply controller based on current position')
-print('          OFF - Go back to gravity-compensated mode')
-print('  b1 - Exits the demo.')
+# Print Instructions
+instructions = """Commanded gravity-compensated zero force to the arm.
+B1 - Exit Demo
+B2 - Toggles an impedance controller on/off:
+          ON  - Apply controller based on current position
+          OFF - Go back to gravity-compensated mode
+"""
+print(instructions)
+
+m.set_button_label(1, 'Exit')
+m.set_button_label(2, 'Toggle Impedance')
+
+for button in range(3, 9):
+    m.set_button_label(button, '')
+
+for axis in range(1, 9):
+    m.set_axis_label(axis, '')
+  
+m.set_button_mode(2, 1)
+m.update()
 
 controller_on = False
 

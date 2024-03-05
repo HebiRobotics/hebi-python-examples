@@ -59,6 +59,7 @@ pending_goal = False
 run_mode = "training"
 goal = arm_api.Goal(arm.size)
 
+
 # Print Instructions
 instructions = """B1 - Add waypoint (stop)
 B2 - Add waypoint (stop) and toggle the gripper
@@ -69,8 +70,22 @@ A3 - Up/down for longer/shorter time to waypoint
 B8 - Quit
 """
 print(instructions)
-m.clear_text()
-m.add_text(instructions)
+
+m.set_button_label(1, 'Add waypoint (Stop)')
+m.set_button_label(2, 'Add Waypoint (Stop) & Toggle Gripper')
+m.set_button_label(3, 'Add waypoint (Flow)')
+m.set_button_label(5, 'Toggle training/playback')
+m.set_button_label(6, 'Clear waypoints')
+m.set_button_label(8, 'Quit')
+
+m.set_button_label(4, '')
+m.set_button_label(7, '')
+
+for axis in range(1, 9):
+    if (axis != 3):
+        m.set_axis_label(axis, '')
+    else:
+        m.set_axis_label(axis, 'Time to waypoint')
 
 #######################
 ## Main Control Loop ##

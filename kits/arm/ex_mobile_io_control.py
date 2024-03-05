@@ -41,14 +41,27 @@ waypoint_1 = np.asarray([0, 0, 0, 0, 0, 0], dtype=np.float64)
 waypoint_2 = np.asarray([np.pi / 4, np.pi / 3, 2 * np.pi / 3, np.pi / 3, np.pi / 4, 0], dtype=np.float64)
 waypoint_3 = np.asarray([-np.pi / 4, np.pi / 3, 2 * np.pi / 3, np.pi / 3, 3 * np.pi / 4, 0], dtype=np.float64)
 
-# Print Instructions
-instructions = """B1-B3 - Waypoints 1-3
+instructions = """
+B1 - Add Waypoint 1
+B2 - Add Waypoint 2
+B3 - Add Waypoint 3
 B6 - Grav Comp Mode
 B8 - Quit
 """
 print(instructions)
-m.clear_text()
-m.add_text(instructions)
+
+m.set_button_label(1, 'Add Waypoint 1')
+m.set_button_label(2, 'Add Waypoint 2')
+m.set_button_label(3, 'Add Waypoint 3')
+m.set_button_label(6, 'Grav Comp Mode')
+m.set_button_label(8, 'Quit')
+
+m.set_button_label(4, '')
+m.set_button_label(5, '')
+m.set_button_label(7, '')
+
+for axis in range(1, 9):
+    m.set_axis_label(axis, '')
 
 #######################
 ## Main Control Loop ##
