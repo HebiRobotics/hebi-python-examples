@@ -5,14 +5,14 @@ from time import sleep
 from hebi.util import create_mobile_io
 from matplotlib import pyplot as plt
 
-# Arm setup
-phone_family = "Arm"
-phone_name = "mobileIO"
-arm_family = "Arm"
-hrdf_file = "hrdf/A-2085-06G.hrdf"
-
 lookup = hebi.Lookup()
 sleep(2)
+
+# Arm setup
+phone_family = "HEBIArm"
+phone_name = "mobileIO"
+arm_family = "HEBIArm"
+hrdf_file = "hrdf/A-2085-06.hrdf"
 
 # Setup Mobile IO
 print('Waiting for Mobile IO device to come online...')
@@ -20,7 +20,9 @@ m = create_mobile_io(lookup, phone_family, phone_name)
 if m is None:
     raise RuntimeError("Could not find Mobile IO device")
 m.set_button_mode(1, 'momentary')
+m.set_button_label(1, '📈')
 m.set_button_mode(2, 'toggle')
+m.set_button_label(2, '💪')
 m.update()
 
 # Setup arm components
@@ -55,32 +57,40 @@ if enable_logging:
     arm.group.start_log('dir', 'logs', mkdirs=True)
 
 print('Commanded gravity-compensated zero force to the arm.')
-print('  b2 - Toggles an impedance controller on/off:')
-print('          ON  - Apply controller based on current position')
-print('          OFF - Go back to gravity-compensated mode')
-print('  b1 - Exits the demo.')
+print('  💪 (B2) - Toggles an impedance controller on/off:')
+print('            ON  - Apply controller based on current position')
+print('            OFF - Go back to gravity-compensated mode')
+print('  📈 (B1) - Exits the demo, and plots graphs. May take a while.')
 
 controller_on = False
 
 # while button 1 is not pressed
 while not m.get_button_state(1):
 
-    if not arm.update():
-        print("Failed to update arm")
-        continue
+    # if not arm.update():
+    #     print("Failed to update arm")
+    #     continue
+    arm.update()
+    arm.send()
 
     if m.update(timeout_ms=0):
-        # If button 2 is pressed set to impedance mode
-        controller_on = bool(m.get_button_state(2))
+
+        # Set and unset impedance mode when button is pressed and released, respectively
+        if (m.get_button_diff(2) == 1):
+
+            controller_on = True
+            arm.set_goal(goal.clear().add_waypoint(position=arm.last_feedback.position))
+
+        elif (m.get_button_diff(2) == -1):
+            
+            controller_on = False
+
         # If in impedance mode set led blue
         m.set_led_color("blue" if controller_on else "green", blocking=False)
 
-    arm.send()
-
-    if controller_on:
-        arm.set_goal(goal.clear().add_waypoint(position=arm.last_feedback.position))
-    else:
+    if not controller_on:
         arm.cancel_goal()
+        
 
 m.set_led_color("red")
 
