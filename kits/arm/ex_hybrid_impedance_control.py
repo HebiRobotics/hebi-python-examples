@@ -112,18 +112,19 @@ elif state == State.GIMBAL:
 
 elif state == State.FLOOR:
 
-    impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
-    impedance_controller.set_kp(100, 100, 100, 5, 5, 1)
+    # impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
+    # impedance_controller.set_kp(100, 100, 100, 5, 5, 1)
 
     # Dictate impedance controller gains in SE(3) based on the state
     impedance_controller.gains_in_end_effector_frame = True
 
-    # Initialize floor level
+    # Initialize floor demo variables
     floor_level = 0.0
     floor_buffer = 0.01 # 1cm
-    at_floor_orientation = np.eye(3)
-    floor_command_flag = False
-    cancel_command_flag = False
+
+    # Initialize floor demo flags
+    floor_command_flag = False # indicates whether or not to command floor stiffness goals
+    cancel_command_flag = False # Indicates whether or not to cancel goals
 
 # TODO: Need more time
 # elif state == State.PIPE:
@@ -183,12 +184,14 @@ while not m.get_button_state(1):
             # Store current height as floor level, for floor demo
             elif state == State.FLOOR:
 
-                # print(impedance_controller._actual_tip_fk)
+                # Use forward kinematics to find end-effector pose
                 ee_pos0 = np.eye(4)
                 arm.robot_model.get_end_effector(arm.last_feedback.position, ee_pos0)
 
+                # Give a little margin to floor level
                 floor_level = ee_pos0[2,3] - floor_buffer
-                at_floor_orientation = ee_pos0[0:3,0:3]
+
+                # Update flags to indicate having left the floor
                 cancel_command_flag = True
 
         elif (m.get_button_diff(2) == -1):
