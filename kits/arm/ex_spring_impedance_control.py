@@ -25,12 +25,12 @@ class Spring(Enum):
 # Specify the type of spring you want to use in the demo right here
 # NOTE: Angle wraparound is an unresolved issue which can lead to unstable behaviour for any case involving rotational springs. 
 #       Make sure that the rotational gains are high enough to prevent large angular errors. The gains provided in these examples are (mostly) well behaved.
-#       Also ensure that nothing prevents the wrist's actuators from moving, and do not place your fingers between them. 
-#       Interacting with the end-effector is perfectly safe.
+#       Interacting with the end-effector in these examples is perfectly safe.
+#       However, ensure that nothing prevents the wrist's actuators from moving, and DO NOT place your fingers between them. 
 # spring = Spring.ALL
-# spring = Spring.CARTESIAN
+spring = Spring.CARTESIAN
 # spring = Spring.TORSION 
-spring = Spring.PLANE
+# spring = Spring.PLANE
 
 # Initialize the interface for network connected modules
 lookup = hebi.Lookup()
@@ -122,14 +122,12 @@ if enable_logging:
     arm.group.start_log('dir', 'logs', mkdirs=True)
 
 print('Commanded gravity-compensated zero force to the arm.')
-print('  💪 (B2) - Toggles an impedance controller on/off:')
+print('  🌀 (B2) - Toggles an impedance controller on/off:')
 print('            ON  - Apply controller based on current position')
 print('            OFF - Go back to gravity-compensated mode')
 print('  📈 (B1) - Exits the demo, and plots graphs. May take a while.')
 
 controller_on = False
-
-print("After2", cmd.position_kp, cmd.position_kd, cmd.position_ki)
 
 # while button 1 is not pressed
 while not m.get_button_state(1):
