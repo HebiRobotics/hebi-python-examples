@@ -223,7 +223,7 @@ while not m.get_button_state(1):
 
             # Set surface stiffness of floor
             impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
-            impedance_controller.set_kp(300, 300, 300, 5, 5, 1)
+            impedance_controller.set_kp(500, 500, 500, 5, 5, 1)
 
             # Snap current pose to floor
             ee_pose_floor = ee_pose_curr
