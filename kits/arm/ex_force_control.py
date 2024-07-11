@@ -23,26 +23,20 @@ import numpy as np
 class State(Enum):
     """ Used to denote each specific demo.
     """
-    POSITION = auto(),
-    GIMBAL = auto(),
-    SCREW = auto(),
-    FLOOR = auto(),
+    FIXED = auto(),
+    BALL_ON_FLOOR = auto(),
     ROPE = auto(),
-    PIPE = auto(),
-    BOOK = auto()
 
 # Specify the type of spring you want to use in the demo right here
 # NOTE: Angle wraparound is an unresolved issue which can lead to unstable behaviour for any case involving rotational positional control. 
 #       Make sure that the rotational gains are high enough to prevent large angular errors. The gains provided in these examples are (mostly) well behaved.
 #       Interacting with the end-effector in these examples is perfectly safe.
 #       However, ensure that nothing prevents the wrist's actuators from moving, and DO NOT place your fingers between them. 
-# state = State.POSITION # ✅
-# state = State.GIMBAL # ✅
-# state = State.SCREW # ❌
-# state = State.FLOOR # ✅
+# state = State.FIXED # ❌
+# state = State.BALL_ON_FLOOR # ❌
 state = State.ROPE # ✅
-# state = State.PIPE # ❌
-# state = State.BOOK # ❌
+# state = State.GAME # ❌
+state = State.WEIGHT # ❌
 
 # Initialize the interface for network connected modules
 lookup = hebi.Lookup()
@@ -85,20 +79,11 @@ cmd.position_ki = 0.0
 # Configure arm components
 arm.add_plugin(impedance_controller)
 
-if state == State.POSITION:
+if state == State.FIXED:
 
     # Dictate impedance controller gains in SE(3) based on the state
     impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
     impedance_controller.set_kp(200, 200, 200, 5, 5, 1)
-
-    # Keep in end-effector frame since it is more intuitive to define rotational stiffness
-    impedance_controller.gains_in_end_effector_frame = True
-
-elif state == State.GIMBAL:
-
-    # Dictate impedance controller gains in SE(3) based on the state
-    impedance_controller.set_kd(0, 0, 0, 0, 0, 0)
-    impedance_controller.set_kp(0, 0, 0, 8, 8, 1)
 
     # Keep in end-effector frame since it is more intuitive to define rotational stiffness
     impedance_controller.gains_in_end_effector_frame = True
@@ -116,7 +101,7 @@ elif state == State.GIMBAL:
 #     screw_angle = 0.0
 #     screw_pitch = 2.0
 
-elif state == State.FLOOR:
+elif state == State.BALL_ON_FLOOR:
 
     # No need to specify gains now since they will keep switching later
 
@@ -138,33 +123,26 @@ elif state == State.ROPE:
     impedance_controller.set_kp(0, 0, 0, 0, 0, 0)
     
     # Keep in end-effector frame since it is more intuitive to define rotational stiffness
-    impedance_controller.gains_in_end_effector_frame = True
+    impedance_controller.gains_in_end_effector_frame = False
 
     # Initialize floor demo variables
     anchor_point = np.zeros(3)
     rope_length = 0.2 # meters
-    rope_stiffness = 100 
+    rope_stiffness = 500 
 
-elif state == State.PIPE:
-
-    # impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
-    # impedance_controller.set_kp(100, 100, 100, 5, 5, 1)
-
-    # Dictate impedance controller gains in SE(3) based on the state
-    impedance_controller.gains_in_end_effector_frame = True
-
-elif state == State.BOOK:
+# elif state == State.GAME:
+elif state == State.WEIGHT:
 
     impedance_controller.set_kd(0, 0, 0, 0, 0, 0)
-    impedance_controller.set_kp(0, 0, 0, 8, 8, 8)
+    impedance_controller.set_kp(0, 0, 0, 0, 0, 0)
 
-    # Dictate impedance controller gains in SE(3) based on the state
+    # Keep in end-effector frame since it is more intuitive to define rotational stiffness
     impedance_controller.gains_in_end_effector_frame = False
 
-    # aligned_orientation = np.eye(3)
-    aligned_orientation = np.array([[-1,  0,  0], 
-                                    [ 0,  1,  0], 
-                                    [ 0,  0, -1]])
+    zone_lower_limits = [0.0, 0.2, 0.4] # meters above the base. Keep in ascending order.
+    zone_weights = [10, 5, 0] # weight in each zone, from the bottom to the top
+
+    zone = -1 # 0, 1, 2... Initialized as -1. Going from the bottom to the top.
 
 # Increase feedback frequency since we're calculating velocities at the
 # high level for damping. Going faster can help reduce a little bit of
@@ -201,7 +179,7 @@ while not m.get_button_state(1):
     # print("AAAAA")
     # print(np.round(arm.pending_command.effort, 2))
 
-    arm.send()
+    # arm.send()
 
     if m.update(timeout_ms=0):
 
@@ -211,13 +189,8 @@ while not m.get_button_state(1):
             controller_on = True
             arm.set_goal(goal.clear().add_waypoint(position=arm.last_feedback.position))
 
-            # Store original screw angle, for screw demo
-            if state == State.SCREW:
-
-                screw_angle0 = arm.last_feedback.position[5]
-
             # Store current height as floor level, for floor demo
-            elif state == State.FLOOR:
+            if state == State.BALL_ON_FLOOR:
 
                 # Use forward kinematics to find end-effector pose
                 ee_pose0 = np.eye(4)
@@ -238,8 +211,17 @@ while not m.get_button_state(1):
 
                 anchor_point = ee_pose0[0:3,3]
 
-                # Update flags to indicate having left the floor
-                cancel_command_flag = True
+            elif state == State.WEIGHT:
+
+                # Use forward kinematics to find end-effector pose
+                ee_pose0 = np.eye(4)
+                arm.robot_model.get_end_effector(arm.last_feedback.position, ee_pose0)
+
+                for i in range(len(zone_lower_limits)):
+
+                    if ee_pose0[2,3] > zone_lower_limits[i]:
+
+                        zone = i
 
             elif state == State.BOOK:
 
@@ -247,7 +229,7 @@ while not m.get_button_state(1):
                 ee_pose0 = np.eye(4)
                 arm.robot_model.get_end_effector(arm.last_feedback.position, ee_pose0)
 
-                ee_pose0[0:3,0:3] = aligned_orientation
+                # ee_pose0[0:3,0:3] = aligned_orientation
 
                 # print(ee_pose0)
 
@@ -273,7 +255,7 @@ while not m.get_button_state(1):
 
                 # arm.send()
 
-                print(np.round(extra_effort, 3))
+                # print(np.round(extra_effort, 3))
 
         elif (m.get_button_diff(2) == -1):
             
@@ -285,15 +267,8 @@ while not m.get_button_state(1):
     if not controller_on:
         arm.cancel_goal()
 
-    # Command new positions based on screw angle, for screw demo
-    elif controller_on and state == State.SCREW:
-
-        screw_angle = arm.last_feedback.position[5] - screw_angle0
-        # print(screw_angle)
-        # arm.set_goal(goal.clear().add_waypoint(position=arm.last_feedback.position))
-
     # Check when end-effector travels below the floor, for floor demo
-    elif controller_on and state == State.FLOOR:
+    if controller_on and state == State.BALL_ON_FLOOR:
 
         # Use forward kinematics to calculate pose of end-effector
         ee_pose_curr = np.eye(4)
@@ -343,7 +318,7 @@ while not m.get_button_state(1):
 
         # print("ROPPPPEE")
         # print(np.linalg.norm(ee_pose_curr[0:3, 2] - anchor_point))
-        print(ee_pose_curr[0:3, 3], anchor_point)
+        # print(ee_pose_curr[0:3, 3], anchor_point)
 
         # Snap goal to rope edge if end-effector pulls the rope taut, only when it first reaches the edge
         if np.linalg.norm(ee_pose_curr[0:3, 3] - anchor_point) >= rope_length:
@@ -355,24 +330,41 @@ while not m.get_button_state(1):
             # impedance_controller.set_kp(500, 500, 500, 5, 5, 1)
 
             # Snap current pose to floor
-            ee_pose_rope = ee_pose_curr
-            ee_pose_rope[0:3,3] = anchor_point + rope_length * (ee_pose_curr[0:3, 3] - anchor_point) / np.linalg.norm(ee_pose_curr[0:3, 3] - anchor_point)
+            # ee_pose_rope = ee_pose_curr
+            # ee_pose_rope[0:3,3] = anchor_point + rope_length * (ee_pose_curr[0:3, 3] - anchor_point) / np.linalg.norm(ee_pose_curr[0:3, 3] - anchor_point)
 
-            # Use inverse kinematics to calculate appropriate joint positions
-            position_rope = arm.ik_target_xyz_so3(arm.last_feedback.position, ee_pose_rope[0:3,3], ee_pose_rope[0:3,0:3])
+            # # Use inverse kinematics to calculate appropriate joint positions
+            # position_rope = arm.ik_target_xyz_so3(arm.last_feedback.position, ee_pose_rope[0:3,3], ee_pose_rope[0:3,0:3])
 
-            # Set snapped pose as goal
-            arm.set_goal(goal.clear().add_waypoint(t=0.1, position=position_rope))
+            displacement = ee_pose_curr[0:3, 3] - anchor_point
 
-        # Cancel goal if end-effector makes the rope slack, only when it begins to slacken
-        elif np.linalg.norm(ee_pose_curr[0:3, 3] - anchor_point) < rope_length and cancel_command_flag:
+            desired_wrench = np.zeros(6)
+            desired_wrench[0:3] = -rope_stiffness * displacement * ( 1 - (rope_length) / np.linalg.norm(displacement))
 
-            # Set stiffness in air
-            impedance_controller.set_kd(0, 0, 0, 0, 0, 0)
-            impedance_controller.set_kp(0, 0, 0, 5, 5, 1)
+            # print(desired_wrench[0:3])
+            # print(displacement, rope_stiffness, ( 1 - rope_length / np.linalg.norm(displacement)))
+            print(rope_length, np.linalg.norm(displacement))
 
-            # Cancel goal to move freely
-            arm.cancel_goal()
+            jacobian_end_effector = np.zeros([6,6])
+
+            arm.robot_model.get_jacobian_end_effector(arm.last_feedback.position, jacobian_end_effector)
+
+            extra_effort = jacobian_end_effector.T @ desired_wrench
+
+            arm_cmd = arm.pending_command
+            cmd_eff = arm_cmd.effort
+            cmd_eff += extra_effort
+
+            arm_cmd.effort = cmd_eff
+
+            arm.pending_command.effort += extra_effort
+
+        # elif np.linalg.norm(ee_pose_curr[0:3, 3] - anchor_point) < rope_length:
+
+    # elif controller_on and state == State.WEIGHT:
+
+        # if state = 
+
 
     elif controller_on and state == State.BOOK:
             
@@ -397,7 +389,7 @@ while not m.get_button_state(1):
         # print(np.round(extra_effort, 2))
         # print(np.round(arm.pending_command.effort, 2))
 
-    # arm.send()
+    arm.send()
 
 m.set_led_color("red")
 
