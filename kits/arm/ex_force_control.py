@@ -26,6 +26,8 @@ class State(Enum):
     FIXED = auto(),
     BALL_ON_FLOOR = auto(),
     ROPE = auto(),
+    GAME = auto(),
+    WEIGHT = auto(),
 
 # Specify the type of spring you want to use in the demo right here
 # NOTE: Angle wraparound is an unresolved issue which can lead to unstable behaviour for any case involving rotational positional control. 
@@ -130,7 +132,13 @@ elif state == State.ROPE:
     rope_length = 0.2 # meters
     rope_stiffness = 500 
 
-# elif state == State.GAME:
+elif state == State.GAME:
+
+    # No need to specify gains now since they will keep switching later
+    impedance_controller.set_kd(0, 0, 0, 0, 0, 0)
+    impedance_controller.set_kp(0, 0, 0, 0, 0, 0)
+
+
 elif state == State.WEIGHT:
 
     impedance_controller.set_kd(0, 0, 0, 0, 0, 0)
@@ -211,51 +219,17 @@ while not m.get_button_state(1):
 
                 anchor_point = ee_pose0[0:3,3]
 
-            elif state == State.WEIGHT:
+            # elif state == State.WEIGHT:
 
-                # Use forward kinematics to find end-effector pose
-                ee_pose0 = np.eye(4)
-                arm.robot_model.get_end_effector(arm.last_feedback.position, ee_pose0)
+            #     # Use forward kinematics to find end-effector pose
+            #     ee_pose0 = np.eye(4)
+            #     arm.robot_model.get_end_effector(arm.last_feedback.position, ee_pose0)
 
-                for i in range(len(zone_lower_limits)):
+            #     for i in range(len(zone_lower_limits)):
 
-                    if ee_pose0[2,3] > zone_lower_limits[i]:
+            #         if ee_pose0[2,3] > zone_lower_limits[i]:
 
-                        zone = i
-
-            elif state == State.BOOK:
-
-                # Use forward kinematics to find end-effector pose
-                ee_pose0 = np.eye(4)
-                arm.robot_model.get_end_effector(arm.last_feedback.position, ee_pose0)
-
-                # ee_pose0[0:3,0:3] = aligned_orientation
-
-                # print(ee_pose0)
-
-                aligned_position = arm.ik_target_xyz_so3(arm.last_feedback.position, ee_pose0[0:3,3], ee_pose0[0:3,0:3])
-
-                arm.set_goal(goal.clear().add_waypoint(position=aligned_position))
-
-                arm_cmd = arm.pending_command
-                cmd_eff = arm_cmd.effort
-                jacobian_end_effector = np.zeros([6,6])
-
-                desired_wrench = np.array([0, 0, 0.0, 0, 0, 0])
-
-                arm.robot_model.get_jacobian_end_effector(arm.last_feedback.position, jacobian_end_effector)
-
-                extra_effort = jacobian_end_effector.T @ desired_wrench
-
-                cmd_eff += extra_effort
-
-                arm_cmd.effort = cmd_eff
-
-                arm.pending_command.effort += extra_effort
-
-                # arm.send()
-
-                # print(np.round(extra_effort, 3))
+            #             zone = i
 
         elif (m.get_button_diff(2) == -1):
             
@@ -361,9 +335,33 @@ while not m.get_button_state(1):
 
         # elif np.linalg.norm(ee_pose_curr[0:3, 3] - anchor_point) < rope_length:
 
-    # elif controller_on and state == State.WEIGHT:
+    elif controller_on and state == State.WEIGHT:
 
-        # if state = 
+        ee_pose_curr = np.eye(4)
+        arm.robot_model.get_end_effector(arm.last_feedback.position, ee_pose_curr)
+
+        for i in range(len(zone_lower_limits)):
+
+            if ee_pose_curr[2,3] > zone_lower_limits[i]:
+
+                zone = i
+        
+        desired_wrench = np.zeros(6)
+        desired_wrench[2] = -zone_weights[zone]
+
+        jacobian_end_effector = np.zeros([6,6])
+
+        arm.robot_model.get_jacobian_end_effector(arm.last_feedback.position, jacobian_end_effector)
+
+        extra_effort = jacobian_end_effector.T @ desired_wrench
+
+        arm_cmd = arm.pending_command
+        cmd_eff = arm_cmd.effort
+        cmd_eff += extra_effort
+
+        arm_cmd.effort = cmd_eff
+
+        arm.pending_command.effort += extra_effort
 
 
     elif controller_on and state == State.BOOK:
