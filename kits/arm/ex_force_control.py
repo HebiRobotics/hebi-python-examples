@@ -21,7 +21,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 
 class State(Enum):
-    """ Used to denote each specific demo.
+    """ Used to specify the behaviour in a specific demo.
     """
     FIXED = auto(),
     WEIGHT = auto(),

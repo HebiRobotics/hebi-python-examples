@@ -1,11 +1,11 @@
 """
 In this example we will implement various hybrid motion-force controllers using the impedance control plugin, which can be used for a wide variety of 
 applications.
-Impedance control is BEST SUITED for enabling free, rigid, and springy behaviours along/about the different axes.
+Impedance control is BEST SUITED for enabling free, rigid and springy behaviour, along/about each different axis.
 While this is perfectly useful for:
 - Having a selectively compliant end-effector,
-- Switching between fixed and free behaviour to simulate (motly) rigid constraints, and
-- Combining manual and automated motions across different axes,
+- Switching between fixed and free behaviour to simulate (mostly) rigid constraints, and
+- Allowing human intervention for automated operations by separating controls across different axes,
 any applications involving more salient control of the forces (as more complex functions with flexible inputs) should use our force control plugin. See ex_force_control.py.
 
 This comprises the following demos:
