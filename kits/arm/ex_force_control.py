@@ -24,10 +24,11 @@ class State(Enum):
     """ Used to denote each specific demo.
     """
     FIXED = auto(),
+    WEIGHT = auto(),
     BALL_ON_FLOOR = auto(),
     ROPE = auto(),
+    POP = auto(),
     GAME = auto(),
-    WEIGHT = auto(),
 
 # Specify the type of spring you want to use in the demo right here
 # NOTE: Angle wraparound is an unresolved issue which can lead to unstable behaviour for any case involving rotational positional control. 
@@ -38,7 +39,7 @@ class State(Enum):
 # state = State.BALL_ON_FLOOR # ❌
 state = State.ROPE # ✅
 # state = State.GAME # ❌
-state = State.WEIGHT # ❌
+# state = State.WEIGHT # ✅ WARNING: Activate while end-effector is resting on a surface to avoid harm.
 
 # Initialize the interface for network connected modules
 lookup = hebi.Lookup()
@@ -138,6 +139,17 @@ elif state == State.GAME:
     impedance_controller.set_kd(0, 0, 0, 0, 0, 0)
     impedance_controller.set_kp(0, 0, 0, 0, 0, 0)
 
+    hit_radius = 0.3 # Easy: 0.3m, Medium: 0.25m, Hard: 0.2m
+    target_hit_flag = False 
+    generate_target_flag = True
+    reveal = True # Set as true to reveal each target
+
+    lower_bounds = np.array([-0.5, -0.5, 0])
+    upper_bounds = np.array([0.5, 0.5, 0.5])
+
+    target = np.zeros(3)
+    max_repulsion = 5
+    score = 0
 
 elif state == State.WEIGHT:
 
@@ -363,10 +375,26 @@ while not m.get_button_state(1):
 
         arm.pending_command.effort += extra_effort
 
+    elif controller_on and state == State.GAME:
 
-    elif controller_on and state == State.BOOK:
-            
-        desired_wrench = np.array([0, 0, 0.0, 0, 0, 0])
+        if generate_target_flag:
+
+            target = np.random.uniform(lower_bounds, upper_bounds)
+            generate_target_flag = False
+
+            if reveal:
+
+                print(f"Target at X: {np.round(target[0], 2)}, Y: {np.round(target[1], 2)}, Z: {np.round(target[2], 2)}")
+
+        ee_pose_curr = np.eye(4)
+        arm.robot_model.get_end_effector(arm.last_feedback.position, ee_pose_curr)
+
+        displacement = ee_pose_curr[0:3, 3] - target
+        desired_wrench = np.zeros(6)
+        desired_wrench[0:3] = max_repulsion * np.exp(-np.linalg.norm(displacement)) * displacement / np.linalg.norm(displacement)
+
+        # print(desired_wrench[0:3])
+        # print(target)
 
         jacobian_end_effector = np.zeros([6,6])
 
@@ -374,18 +402,44 @@ while not m.get_button_state(1):
 
         extra_effort = jacobian_end_effector.T @ desired_wrench
 
+        arm_cmd = arm.pending_command
+        cmd_eff = arm_cmd.effort
         cmd_eff += extra_effort
 
         arm_cmd.effort = cmd_eff
 
         arm.pending_command.effort += extra_effort
 
-        # arm.send()
+        if np.linalg.norm(displacement) < hit_radius:
 
-        # print("BBBB")
+            score += 1
+            print(f"REACHED! SCORE: {score}")
+            generate_target_flag = True
 
-        # print(np.round(extra_effort, 2))
-        # print(np.round(arm.pending_command.effort, 2))
+        # print(np.linalg.norm(displacement))
+
+    # elif controller_on and state == State.BOOK:
+            
+    #     desired_wrench = np.array([0, 0, 0.0, 0, 0, 0])
+
+    #     jacobian_end_effector = np.zeros([6,6])
+
+    #     arm.robot_model.get_jacobian_end_effector(arm.last_feedback.position, jacobian_end_effector)
+
+    #     extra_effort = jacobian_end_effector.T @ desired_wrench
+
+    #     cmd_eff += extra_effort
+
+    #     arm_cmd.effort = cmd_eff
+
+    #     arm.pending_command.effort += extra_effort
+
+    #     # arm.send()
+
+    #     # print("BBBB")
+
+    #     # print(np.round(extra_effort, 2))
+    #     # print(np.round(arm.pending_command.effort, 2))
 
     arm.send()
 
