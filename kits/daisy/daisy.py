@@ -37,7 +37,7 @@ daisy_parameters = Parameters()
 from math import isfinite
 if args.mobile_io_freq < 1.0 or not isfinite(args.mobile_io_freq):
     print('ignoring specified Mobile IO feedback frequency {0}. Defaulting to 200Hz.'.format(args.mobile_io_freq))
-    fbk_freq = 200.0
+    fbk_freq = 200
 else:
     fbk_freq = args.mobile_io_freq
 

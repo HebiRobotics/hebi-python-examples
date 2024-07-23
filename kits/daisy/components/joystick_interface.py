@@ -1,4 +1,4 @@
-_last_toggle_value = False
+_last_toggle_value = 0
 import hebi
 
 import typing
@@ -60,19 +60,19 @@ def _add_event_handlers(hexapod: 'Hexapod', controller: 'MobileIO', controller_m
 
     def feedback_handler(fbk: 'hebi.GroupFeedback'):
         global _last_toggle_value
-        pressed = fbk.io.b.get_int(controller_mapping.mode_selection)
-        if fbk.io.b.get_int(controller_mapping.quit):
+        pressed = fbk[0].io.b.get_int(int(controller_mapping.mode_selection[-1]))
+        if fbk[0].io.b.get_int(int(controller_mapping.quit[-1])) == 1:
             hexapod.request_stop()
         elif pressed != _last_toggle_value:
+            hexapod.toggle_mode()
             _last_toggle_value = pressed
-            hexapod.update_mode(None)
         else:
-            vel_x = translation_vel_calc(fbk.io.a.get_float(controller_mapping.translate_x_velocity))
-            vel_y = translation_vel_calc(fbk.io.a.get_float(controller_mapping.translate_y_velocity))
-            vel_z = translation_vel_calc(fbk.io.a.get_float(controller_mapping.translate_z_velocity))
+            vel_x = translation_vel_calc(fbk[0].io.a.get_float(int(controller_mapping.translate_x_velocity[-1])))
+            vel_y = translation_vel_calc(fbk[0].io.a.get_float(int(controller_mapping.translate_y_velocity[-1])))
+            vel_z = translation_vel_calc(fbk[0].io.a.get_float(int(controller_mapping.translate_z_velocity[-1])))
 
-            rot_vel_y = rotation_vel_calc(fbk.io.a.get_float(controller_mapping.pitch_velocity))
-            rot_vel_z = rotation_vel_calc(fbk.io.a.get_float(controller_mapping.rotation_velocity))
+            rot_vel_y = rotation_vel_calc(fbk[0].io.a.get_float(int(controller_mapping.pitch_velocity[-1])))
+            rot_vel_z = rotation_vel_calc(fbk[0].io.a.get_float(int(controller_mapping.rotation_velocity[-1])))
 
             hexapod.set_translation_velocity_x(vel_x)
             hexapod.set_translation_velocity_y(vel_y)
