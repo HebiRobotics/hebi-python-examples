@@ -475,7 +475,7 @@ class Hexapod:
         # TODO: gains.read_gains(gains_file)
         return group.send_command_with_acknowledgement(gains)
 
-    def update_mode(self, toggles):
+    def toggle_mode(self):
         if self._mode == 'stance':
             self._mode = 'step'
         else:
