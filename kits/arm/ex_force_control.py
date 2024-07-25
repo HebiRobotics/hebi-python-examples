@@ -36,9 +36,9 @@ class Mode(Enum):
 #       Interacting with the end-effector in these examples is perfectly safe.
 #       However, ensure that nothing prevents the wrist's actuators from moving, and DO NOT place your fingers between them. 
 # mode = Mode.FIXED # ❌
-# mode = Mode.WEIGHT # ❌ WARNING: Activate while end-effector is resting on a surface to avoid harm.
+mode = Mode.WEIGHT # ❌ WARNING: Activate while end-effector is resting on a surface to avoid harm.
 # mode = Mode.BALL_ON_FLOOR # ❌
-mode = Mode.ROPE # ❌
+# mode = Mode.ROPE # ❌
 # mode = Mode.POP # ❌
 # mode = Mode.GAME # ❌
 
@@ -71,7 +71,7 @@ arm = hebi.arm.create([arm_family],
                       hrdf_file=hrdf_file)
 arm.load_gains(gains_file)
 
-impedance_controller = hebi.arm.ImpedanceController()
+force_controller = hebi.arm.ForceController()
 
 # Clear all position control gains for all the actuators
 cmd = arm.pending_command
@@ -81,16 +81,16 @@ cmd.position_kd = 0.0
 cmd.position_ki = 0.0
 
 # Configure arm components
-arm.add_plugin(impedance_controller)
+arm.add_plugin(force_controller)
 
 if mode == Mode.FIXED:
 
     # Dictate impedance controller gains in SE(3) based on the mode
-    impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
-    impedance_controller.set_kp(200, 200, 200, 5, 5, 1)
+    force_controller.set_kd(5, 5, 5, 0, 0, 0)
+    force_controller.set_kp(200, 200, 200, 5, 5, 1)
 
     # Keep in end-effector frame since it is more intuitive to define rotational stiffness
-    impedance_controller.gains_in_end_effector_frame = True
+    force_controller.gains_in_end_effector_frame = True
 
 # TODO: Angle wraparound needs to be fixed in the API
 # elif mode == Mode.SCREW:
@@ -110,7 +110,7 @@ elif mode == Mode.BALL_ON_FLOOR:
     # No need to specify gains now since they will keep switching later
 
     # Keep in end-effector frame since it is more intuitive to define rotational stiffness
-    impedance_controller.gains_in_end_effector_frame = True
+    force_controller.gains_in_end_effector_frame = True
 
     # Initialize floor demo variables
     floor_level = 0.0
@@ -123,11 +123,11 @@ elif mode == Mode.BALL_ON_FLOOR:
 elif mode == Mode.ROPE:
 
     # No need to specify gains now since they will keep switching later
-    impedance_controller.set_kd(0, 0, 0, 0, 0, 0)
-    impedance_controller.set_kp(0, 0, 0, 0, 0, 0)
+    force_controller.set_kd(0, 0, 0, 0, 0, 0)
+    force_controller.set_kp(0, 0, 0, 0, 0, 0)
     
     # Keep in end-effector frame since it is more intuitive to define rotational stiffness
-    impedance_controller.gains_in_end_effector_frame = False
+    force_controller.gains_in_end_effector_frame = False
 
     # Initialize floor demo variables
     anchor_point = np.zeros(3)
@@ -137,8 +137,8 @@ elif mode == Mode.ROPE:
 elif mode == Mode.GAME:
 
     # No need to specify gains now since they will keep switching later
-    impedance_controller.set_kd(0, 0, 0, 0, 0, 0)
-    impedance_controller.set_kp(0, 0, 0, 0, 0, 0)
+    force_controller.set_kd(0, 0, 0, 0, 0, 0)
+    force_controller.set_kp(0, 0, 0, 0, 0, 0)
 
     hit_radius = 0.3 # Easy: 0.3m, Medium: 0.25m, Hard: 0.2m
     target_hit_flag = False 
@@ -154,16 +154,18 @@ elif mode == Mode.GAME:
 
 elif mode == Mode.WEIGHT:
 
-    impedance_controller.set_kd(0, 0, 0, 0, 0, 0)
-    impedance_controller.set_kp(0, 0, 0, 0, 0, 0)
+    force_controller.set_kd(0, 0, 0, 0, 0, 0)
+    force_controller.set_kp(0, 0, 0, 0, 0, 0)
 
     # Keep in end-effector frame since it is more intuitive to define rotational stiffness
-    impedance_controller.gains_in_end_effector_frame = False
+    force_controller.gains_in_end_effector_frame = False
 
     zone_lower_limits = [0.0, 0.2, 0.4] # meters above the base. Keep in ascending order.
-    zone_weights = [10, 5, 0] # weight in each zone, from the bottom to the top
+    zone_weights = [0.0, 0, 0] # weight in each zone, from the bottom to the top
 
     zone = -1 # 0, 1, 2... Initialized as -1. Going from the bottom to the top.
+
+    integral_error = 0
 
 # Increase feedback frequency since we're calculating velocities at the
 # high level for damping. Going faster can help reduce a little bit of
@@ -204,7 +206,7 @@ while not m.get_button_state(1):
 
     if m.update(timeout_ms=0):
 
-        # Set and unset impedance mode when button is pressed and released, respectively
+        # Set and unset force control mode when button is pressed and released, respectively
         if (m.get_button_diff(2) == 1):
 
             controller_on = True
@@ -248,7 +250,7 @@ while not m.get_button_state(1):
             
             controller_on = False
 
-        # If in impedance mode set led blue
+        # If in force control mode set led blue
         m.set_led_color("blue" if controller_on else "green", blocking=False)
 
     if not controller_on:
@@ -265,8 +267,8 @@ while not m.get_button_state(1):
         if ee_pose_curr[2,3] <= floor_level and floor_command_flag:
 
             # Set surface stiffness of floor
-            impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
-            impedance_controller.set_kp(500, 500, 500, 5, 5, 1)
+            force_controller.set_kd(5, 5, 5, 0, 0, 0)
+            force_controller.set_kp(500, 500, 500, 5, 5, 1)
 
             # Snap current pose to floor
             ee_pose_floor = ee_pose_curr
@@ -286,8 +288,8 @@ while not m.get_button_state(1):
         elif ee_pose_curr[2,3] > floor_level and cancel_command_flag:
 
             # Set stiffness in air
-            impedance_controller.set_kd(0, 0, 0, 0, 0, 0)
-            impedance_controller.set_kp(0, 0, 0, 5, 5, 1)
+            force_controller.set_kd(0, 0, 0, 0, 0, 0)
+            force_controller.set_kp(0, 0, 0, 5, 5, 1)
 
             # Cancel goal to move freely
             arm.cancel_goal()
@@ -359,8 +361,35 @@ while not m.get_button_state(1):
 
                 zone = i
         
+        ###
+        wrench_kp = 0.9
+        wrench_ki = 0.0
+
+        jacobian_end_effector = np.zeros([6,6])
+        arm.robot_model.get_jacobian_end_effector(arm.last_feedback.position, jacobian_end_effector)
+
+        arm_fbk = arm.last_feedback
+        fbk_eff = arm_fbk.effort
+
+        # print(arm._plugins[0].grav_efforts)
+        # print("fbk_eff")
+        # print(fbk_eff)
+
+        # print("grav_comp")
+        # print(arm._plugins[0].grav_efforts)
+
+        feedback_wrench = np.linalg.inv(jacobian_end_effector.T) @ (fbk_eff - arm._plugins[0].grav_efforts - arm._plugins[1].dyn_efforts)
+        # feedback_wrench = np.linalg.inv(jacobian_end_effector) @ (- arm._plugins[0].grav_efforts)
+        print(feedback_wrench)
+        ###
+
         desired_wrench = np.zeros(6)
-        desired_wrench[2] = -zone_weights[zone]
+        # desired_wrench[2] = -zone_weights[zone] + wrench_kp * (-zone_weights[zone] - feedback_wrench[2])
+        # integral_error += (-zone_weights[zone] - feedback_wrench[2]) / 200.0
+        # integral_error = max(-1.0, min(integral_error, 1.0))
+        # print(integral_error)
+        # desired_wrench[2] = -zone_weights[zone] 
+        desired_wrench[2] = feedback_wrench[2]
 
         jacobian_end_effector = np.zeros([6,6])
 
@@ -374,7 +403,7 @@ while not m.get_button_state(1):
 
         arm_cmd.effort = cmd_eff
 
-        arm.pending_command.effort += extra_effort
+        # arm.pending_command.effort += extra_effort
 
     elif controller_on and mode == Mode.GAME:
 

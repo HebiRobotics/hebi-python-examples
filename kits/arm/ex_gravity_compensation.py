@@ -4,11 +4,20 @@ import hebi
 from matplotlib import pyplot as plt
 
 # Arm setup
-arm_family = "Arm"
-module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
-hrdf_file = "hrdf/A-2085-06.hrdf"
-gains_file = "gains/A-2085-06.xml"
+# arm_family = "Arm"
+# module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
+# hrdf_file = "hrdf/A-2085-06.hrdf"
+# gains_file = "gains/A-2085-06.xml"
 
+# arm_family = "HEBIArm"
+# module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
+# hrdf_file = "hrdf/A-2085-06.hrdf"
+# gains_file = "gains/A-2085-06.xml"
+
+arm_family = "HEBIArm-T"
+module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
+hrdf_file = "hrdf/T-arm.hrdf"
+gains_file = "gains/T-arm.xml"
 
 # Create Arm object
 arm = hebi.arm.create([arm_family],

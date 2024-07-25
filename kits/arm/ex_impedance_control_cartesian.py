@@ -37,9 +37,12 @@ sleep(2)
 # Set up arm
 phone_family = "HEBIArm"
 phone_name = "mobileIO"
-arm_family = "HEBIArm"
-hrdf_file = "hrdf/A-2085-06.hrdf"
-gains_file = "gains/A-2085-06.xml"
+# arm_family = "HEBIArm"
+arm_family = "HEBIArm-T"
+# hrdf_file = "hrdf/A-2085-06.hrdf"
+hrdf_file = "hrdf/T-arm.hrdf"
+# gains_file = "gains/A-2085-06.xml"
+gains_file = "gains/T-arm.xml"
 
 # Set up Mobile IO
 print('Waiting for Mobile IO device to come online...')
