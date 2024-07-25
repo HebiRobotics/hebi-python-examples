@@ -35,7 +35,7 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Set up arm
-phone_family = "HEBIArm"
+phone_family = "HEBIArm-T"
 phone_name = "mobileIO"
 arm_family = "HEBIArm"
 hrdf_file = "hrdf/A-2085-06.hrdf"
@@ -72,8 +72,10 @@ cmd.position_ki = 0.0
 arm.add_plugin(impedance_controller)
 
 # Dictate impedance controller gains in SE(3) based on the demo
-impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
 impedance_controller.set_kp(300, 300, 300, 5, 5, 1)
+impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
+impedance_controller.set_ki(20, 20, 20, 0.5, 0.5, 0.5)
+impedance_controller.set_i_clamp(10, 10, 10, 1, 1, 1)
 
 # Keep in end-effector frame since it is more intuitive to define rotational stiffness
 impedance_controller.gains_in_end_effector_frame = True

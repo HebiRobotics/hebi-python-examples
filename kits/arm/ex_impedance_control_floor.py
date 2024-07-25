@@ -35,7 +35,7 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Set up arm
-phone_family = "HEBIArm"
+phone_family = "HEBIArm-T"
 phone_name = "mobileIO"
 arm_family = "HEBIArm"
 hrdf_file = "hrdf/A-2085-06.hrdf"
@@ -71,7 +71,11 @@ cmd.position_ki = 0.0
 # Configure arm components
 arm.add_plugin(impedance_controller)
 
-# No need to specify gains now since they will keep switching later
+# Set gains of the floor
+impedance_controller.set_kp(500, 500, 500, 5, 5, 1)
+impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
+impedance_controller.set_ki(20, 20, 20, 0.5, 0.5, 0.5)
+impedance_controller.set_i_clamp(10, 10, 10, 1, 1, 1)
 
 # Keep in end-effector frame since it is more intuitive to define rotational stiffness
 impedance_controller.gains_in_end_effector_frame = True
@@ -158,10 +162,6 @@ while not m.get_button_state(1):
         # Snap goal to floor if end-effector is at or below floor, only when it first reaches the floor
         if ee_pose_curr[2,3] <= floor_level and floor_command_flag:
 
-            # Set surface stiffness of floor
-            impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
-            impedance_controller.set_kp(500, 500, 500, 5, 5, 1)
-
             # Snap current pose to floor
             ee_pose_floor = ee_pose_curr
             ee_pose_floor[2,3] = floor_level
@@ -178,10 +178,6 @@ while not m.get_button_state(1):
 
         # Cancel goal if end-effector is above the floor, only when it leaves the floor
         elif ee_pose_curr[2,3] > floor_level and cancel_command_flag:
-
-            # Set stiffness in air
-            impedance_controller.set_kd(0, 0, 0, 0, 0, 0)
-            impedance_controller.set_kp(0, 0, 0, 5, 5, 1)
 
             # Cancel goal to move freely
             arm.cancel_goal()
