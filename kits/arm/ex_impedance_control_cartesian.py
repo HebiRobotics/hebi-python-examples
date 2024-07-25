@@ -76,7 +76,7 @@ arm.add_plugin(impedance_controller)
 impedance_controller.set_kp(300, 300, 300, 0, 0, 0)
 impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
 impedance_controller.set_ki(20, 20, 20, 0, 0, 0)
-impedance_controller.set_i_clamp(10, 10, 10, 0, 0, 0)
+impedance_controller.set_i_clamp(10, 10, 10, 0, 0, 0) # Clamp on the end-effector wrench and NOT on the integral error
 
 # Keep in end-effector frame since we want to make the orientation of the end-effector itself variable
 impedance_controller.gains_in_end_effector_frame = True

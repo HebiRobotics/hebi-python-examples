@@ -76,7 +76,7 @@ arm.add_plugin(impedance_controller)
 impedance_controller.set_kp(300, 300, 300, 5, 5, 1)
 impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
 impedance_controller.set_ki(20, 20, 20, 0.5, 0.5, 0.5)
-impedance_controller.set_i_clamp(10, 10, 10, 1, 1, 1)
+impedance_controller.set_i_clamp(10, 10, 10, 1, 1, 1) # Clamp on the end-effector wrench and NOT on the integral error
 
 # Keep in end-effector frame since it is more intuitive to define rotational stiffness
 impedance_controller.gains_in_end_effector_frame = True
