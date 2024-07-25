@@ -13,6 +13,7 @@ This comprises the following demos:
 - Cartesian: Locks onto a particular end-effector position while having some compliant orientation.
 - Gimbal: A gimbal that locks a specific end-effector orientation, while keeping the rest of the arm compliant.
 - Floor: The end-effector is free to move but can't travel below a virtual floor. To further simulate sliding on the floor, see force_control example.
+- Damping: The end-effector behaves as 3-different damped systems (overdamped, critically damped, and underdamped), at 3 different heights.
 
 The following example is for the "Floor" demo:
 """

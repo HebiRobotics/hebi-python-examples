@@ -15,7 +15,7 @@ This comprises the following demos:
 - Floor: The end-effector is free to move but can't travel below a virtual floor. To further simulate sliding on the floor, see force_control example.
 - Damping: The end-effector behaves as 3-different damped systems (overdamped, critically damped, and underdamped), at 3 different heights.
 
-The following example is for the "Cartesian" demo:
+The following example is for the "Damping" demo:
 """
 #!/usr/bin/env python3
 
@@ -36,7 +36,7 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Set up arm
-phone_family = "HEBIArm"
+phone_family = "HEBIArm-T"
 phone_name = "mobileIO"
 arm_family = "HEBIArm"
 hrdf_file = "hrdf/A-2085-06.hrdf"
@@ -72,14 +72,31 @@ cmd.position_ki = 0.0
 # Configure arm components
 arm.add_plugin(impedance_controller)
 
-# Dictate impedance controller gains in SE(3) based on the demo
-impedance_controller.set_kp(300, 300, 300, 0, 0, 0)
-impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
-impedance_controller.set_ki(20, 20, 20, 0, 0, 0)
-impedance_controller.set_i_clamp(10, 10, 10, 0, 0, 0)
+# No need to set gains initially
 
-# Keep in end-effector frame since we want to make the orientation of the end-effector itself variable
-impedance_controller.gains_in_end_effector_frame = True
+# Keep in end-effector frame since it is more intuitive to define rotational stiffness
+impedance_controller.gains_in_end_effector_frame = False
+
+# Meters above the base for overdamped, critically damped, and underdamped cases respectively
+lower_limits = [0.0, 0.15, 0.30]
+# State variable for current mode: 0 for overdamped, 1 for crtically damped, 2 for underdamped, -1 for free
+mode = -1
+prevmode = -1
+
+# 0: Overdamped
+overdamped_kp = np.array([100, 100, 0, 5, 5, 1])
+overdamped_kd = np.array([15, 15, 0, 0, 0, 0])
+
+# 1: Critically damped
+critically_damped_kp = np.array([100, 100, 0, 5, 5, 1])
+critically_damped_kd = np.array([5, 5, 0, 0, 0, 0])
+
+# 2: Underdamped
+underdamped_kp = np.array([100, 100, 0, 5, 5, 1])
+underdamped_kd = np.array([0, 0, 0, 0, 0, 0])
+
+damping_kp = [overdamped_kp, critically_damped_kp, underdamped_kp]
+damping_kd = [overdamped_kd, critically_damped_kd, underdamped_kd]
 
 # Increase feedback frequency since we're calculating velocities at the
 # high level for damping. Going faster can help reduce a little bit of
@@ -132,6 +149,32 @@ while not m.get_button_state(1):
 
     if not controller_on:
         arm.cancel_goal()
+        mode = -1 # Free
+        prevmode = -1
+
+    # Check when end-effector travels below the floor, for floor demo
+    else:
+
+        # Use forward kinematics to calculate pose of end-effector
+        ee_pose_curr = np.eye(4)
+        arm.robot_model.get_end_effector(arm.last_feedback.position, ee_pose_curr)
+
+        # Assign mode based on current position
+        for i in range(len(lower_limits)):
+
+            if ee_pose_curr[2,3] > lower_limits[i]:
+
+                mode = i
+        
+        # Change gains only upon mode switches
+        if not mode == prevmode and mode >= 0:
+
+            impedance_controller.set_kp(damping_kp[mode][0], damping_kp[mode][1], damping_kp[mode][2], damping_kp[mode][3], damping_kp[mode][4], damping_kp[mode][5])
+            impedance_controller.set_kd(damping_kd[mode][0], damping_kd[mode][1], damping_kd[mode][2], damping_kd[mode][3], damping_kd[mode][4], damping_kd[mode][5])
+
+            print(f"Mode: {mode}")
+
+        prevmode = mode
 
 m.set_led_color("red")
 
