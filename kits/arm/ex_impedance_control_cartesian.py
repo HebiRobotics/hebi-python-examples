@@ -35,11 +35,9 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Set up arm
-phone_family = "Arm"
+phone_family = "HEBIArm"
 phone_name = "mobileIO"
-arm_family = "Arm"
-hrdf_file = "hrdf/A-2085-06.hrdf"
-gains_file = "gains/A-2085-06.xml"
+example_config_file = "config/examples/ex_impedance_control_cartesian.cfg"
 
 # Set up Mobile IO
 print('Waiting for Mobile IO device to come online...')
@@ -52,14 +50,9 @@ m.set_button_mode(2, 'toggle')
 m.set_button_label(2, '💪')
 m.update()
 
-# Setup arm components
-arm = hebi.arm.create([arm_family],
-                      names=['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
-                      lookup=lookup,
-                      hrdf_file=hrdf_file)
-arm.load_gains(gains_file)
-
-impedance_controller = hebi.arm.ImpedanceController()
+# Set up arm configuration
+example_config = hebi.config.load_config(example_config_file)
+arm = hebi.arm.create_from_config(example_config)
 
 # Clear all position control gains for all the actuators
 cmd = arm.pending_command
@@ -67,18 +60,6 @@ cmd = arm.pending_command
 cmd.position_kp = 0.0
 cmd.position_kd = 0.0
 cmd.position_ki = 0.0
-
-# Configure arm components
-arm.add_plugin(impedance_controller)
-
-# Dictate impedance controller gains in SE(3) based on the demo
-impedance_controller.set_kp(300, 300, 300, 0, 0, 0)
-impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
-impedance_controller.set_ki(20, 20, 20, 0, 0, 0)
-impedance_controller.set_i_clamp(10, 10, 10, 0, 0, 0) # Clamp on the end-effector wrench and NOT on the integral error
-
-# Keep in end-effector frame since we want to make the orientation of the end-effector itself variable
-impedance_controller.gains_in_end_effector_frame = True
 
 # Increase feedback frequency since we're calculating velocities at the
 # high level for damping. Going faster can help reduce a little bit of

@@ -35,11 +35,9 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Set up arm
-phone_family = "Arm"
+phone_family = "HEBIArm"
 phone_name = "mobileIO"
-arm_family = "Arm"
-hrdf_file = "hrdf/A-2085-06.hrdf"
-gains_file = "gains/A-2085-06.xml"
+example_config_file = "config/examples/ex_impedance_control_damping.cfg"
 
 # Set up Mobile IO
 print('Waiting for Mobile IO device to come online...')
@@ -52,14 +50,12 @@ m.set_button_mode(2, 'toggle')
 m.set_button_label(2, '💪')
 m.update()
 
-# Setup arm components
-arm = hebi.arm.create([arm_family],
-                      names=['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
-                      lookup=lookup,
-                      hrdf_file=hrdf_file)
-arm.load_gains(gains_file)
+# Set up arm configuration
+example_config = hebi.config.load_config(example_config_file)
+arm = hebi.arm.create_from_config(example_config)
 
-impedance_controller = hebi.arm.ImpedanceController()
+# Retrieve the impedance control plugin to be altered later
+impedance_controller = arm.get_plugin_by_type(hebi.arm.ImpedanceController)
 
 # Clear all position control gains for all the actuators
 cmd = arm.pending_command
@@ -67,14 +63,6 @@ cmd = arm.pending_command
 cmd.position_kp = 0.0
 cmd.position_kd = 0.0
 cmd.position_ki = 0.0
-
-# Configure arm components
-arm.add_plugin(impedance_controller)
-
-# No need to set gains initially
-
-# Keep in end-effector frame since it is more intuitive to define rotational stiffness
-impedance_controller.gains_in_end_effector_frame = False
 
 # Meters above the base for overdamped, critically damped, and underdamped cases respectively
 lower_limits = [0.0, 0.15, 0.30]
