@@ -20,11 +20,10 @@ The following example is for the "Floor" demo:
 #!/usr/bin/env python3
 
 import hebi
-from enum import Enum, auto
 from time import sleep
 from hebi.util import create_mobile_io
-from matplotlib import pyplot as plt
 import numpy as np
+from plotting import draw_plots
 
 # NOTE: Angle wraparound is an unresolved issue which can lead to unstable behaviour for any case involving rotational positional control. 
 #       Make sure that the rotational gains are high enough to prevent large angular errors. The gains provided in these examples are (mostly) well behaved.
@@ -36,9 +35,9 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Set up arm
-phone_family = "HEBIArm-T"
+phone_family = "Arm"
 phone_name = "mobileIO"
-arm_family = "HEBIArm"
+arm_family = "Arm"
 hrdf_file = "hrdf/A-2085-06.hrdf"
 gains_file = "gains/A-2085-06.xml"
 
@@ -191,44 +190,6 @@ m.set_led_color("red")
 
 if enable_logging:
     hebi_log = arm.group.stop_log()
-
-    # Plot tracking / error from the joints in the arm.
-    time = []
-    position = []
-    velocity = []
-    effort = []
-    # iterate through log
-    for entry in hebi_log.feedback_iterate:
-        time.append(entry.transmit_time)
-        position.append(entry.position)
-        velocity.append(entry.velocity)
-        effort.append(entry.effort)
-
-    # Offline Visualization
-    # Plot the logged position feedback
-    plt.figure(101)
-    plt.plot(time, position)
-    plt.title('Position')
-    plt.xlabel('time (sec)')
-    plt.ylabel('position (rad)')
-    plt.grid(True)
-
-    # Plot the logged velocity feedback
-    plt.figure(102)
-    plt.plot(time, velocity)
-    plt.title('Velocity')
-    plt.xlabel('time (sec)')
-    plt.ylabel('velocity (rad/sec)')
-    plt.grid(True)
-
-    # Plot the logged effort feedback
-    plt.figure(103)
-    plt.plot(time, effort)
-    plt.title('Effort')
-    plt.xlabel('time (sec)')
-    plt.ylabel('effort (N*m)')
-    plt.grid(True)
-
-    plt.show()
+    draw_plots(hebi_log)
 
     # Put more plotting code here
