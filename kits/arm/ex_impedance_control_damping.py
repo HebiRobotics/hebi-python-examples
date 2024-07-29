@@ -36,7 +36,7 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Set up arm
-phone_family = "HEBIArm-T"
+phone_family = "HEBIArm"
 phone_name = "mobileIO"
 arm_family = "HEBIArm"
 hrdf_file = "hrdf/A-2085-06.hrdf"
@@ -169,8 +169,8 @@ while not m.get_button_state(1):
         # Change gains only upon mode switches
         if not mode == prevmode and mode >= 0:
 
-            impedance_controller.set_kp(damping_kp[mode][0], damping_kp[mode][1], damping_kp[mode][2], damping_kp[mode][3], damping_kp[mode][4], damping_kp[mode][5])
-            impedance_controller.set_kd(damping_kd[mode][0], damping_kd[mode][1], damping_kd[mode][2], damping_kd[mode][3], damping_kd[mode][4], damping_kd[mode][5])
+            impedance_controller.set_kp(*damping_kp[mode])
+            impedance_controller.set_kd(*damping_kd[mode])
 
             print(f"Mode: {mode}")
 
