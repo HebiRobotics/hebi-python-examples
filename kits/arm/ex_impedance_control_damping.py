@@ -70,6 +70,7 @@ lower_limits = example_config.user_data['lower_limits']
 mode = -1
 prevmode = -1
 
+# Arrange different gains in an ordered list
 damping_kp = [example_config.user_data['overdamped']['kp'], 
               example_config.user_data['critically_damped']['kp'], 
               example_config.user_data['underdamped']['kp']]
