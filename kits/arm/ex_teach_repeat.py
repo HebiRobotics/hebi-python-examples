@@ -10,37 +10,29 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Arm setup
-arm_family = "Arm"
-module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
-hrdf_file = "hrdf/A-2085-06.hrdf"
-gains_file = "gains/A-2085-06.xml"
+phone_family = "HEBIArm"
+phone_name = "mobileIO"
+example_config_file = "config/examples/ex_teach_repeat.cfg"
 
-
-# Create Arm object
-arm = arm_api.create([arm_family],
-                     names=module_names,
-                     hrdf_file=hrdf_file,
-                     lookup=lookup)
-
-arm.load_gains(gains_file)
+# Set up arm configuration
+example_config = hebi.config.load_config(example_config_file)
+arm = hebi.arm.create_from_config(example_config)
 
 # mobileIO setup
-phone_name = "mobileIO"
-
-# Create mobileIO object
 print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io(lookup, arm_family, phone_name)
+m = create_mobile_io(lookup, phone_family, phone_name)
 if m is None:
     raise RuntimeError("Could not find Mobile IO device")
 m.set_led_color("blue")  # as we start in grav comp
 m.clear_text()  # Clear any garbage on screen
 m.update()
 
-
 # Demo Variables
 abort_flag = False
 run_mode = "training"
 goal = arm_api.Goal(arm.size)
+base_travel_time = example_config.user_data['base_travel_time']
+min_travel_time = example_config.user_data['min_travel_time']
 
 # Print Instructions
 instructions = """B1 - Add waypoint (stop)
@@ -85,12 +77,16 @@ while not abort_flag:
         # B1 - add waypoint (stop)
         if m.get_button_diff(1) == 1:  # "ToOn"
             print("Stop waypoint added")
-            goal.add_waypoint(t=slider3 + 3.0, position=arm.last_feedback.position, velocity=[0] * arm.size)
+            goal.add_waypoint(t= base_travel_time + slider3 * (base_travel_time - min_travel_time), 
+                              position=arm.last_feedback.position, velocity=[0] * arm.size)
+            
+        print(base_travel_time + slider3 * (base_travel_time - min_travel_time))
 
         # B2 - add waypoint (flow)
         if m.get_button_diff(2) == 1:  # "ToOn"
             print("Flow waypoint added")
-            goal.add_waypoint(t=slider3 + 3.0, position=arm.last_feedback.position)
+            goal.add_waypoint(t= base_travel_time + slider3 * (base_travel_time - min_travel_time), 
+                              position=arm.last_feedback.position)
 
         # B3 - toggle training/playback
         if m.get_button_diff(3) == 1:  # "ToOn"
