@@ -4,18 +4,11 @@ import hebi
 from plotting import draw_plots
 
 # Arm setup
-arm_family = "Arm"
-module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
-hrdf_file = "hrdf/A-2085-06.hrdf"
-gains_file = "gains/A-2085-06.xml"
-
+example_config_file = "config/examples/ex_gravity_compensation.cfg"
 
 # Create Arm object
-arm = hebi.arm.create([arm_family],
-                      names=module_names,
-                      hrdf_file=hrdf_file)
-arm.load_gains(gains_file)
-
+example_config = hebi.config.load_config(example_config_file)
+arm = hebi.arm.create_from_config(example_config)
 
 # Start background logging
 enable_logging = True
