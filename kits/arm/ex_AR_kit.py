@@ -5,29 +5,23 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 from time import sleep
 from hebi.util import create_mobile_io
-from hebi import arm as arm_api
-
 
 # Arm setup
-arm_family = "Arm"
-module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
-hrdf_file = "hrdf/A-2085-06.hrdf"
-gains_file = "gains/A-2085-06.xml"
+example_config_file = "config/examples/ex_AR_kit.cfg"
 
 # Create Arm object
-arm = arm_api.create([arm_family],
-                     names=module_names,
-                     hrdf_file=hrdf_file)
-arm.load_gains(gains_file)
+example_config = hebi.config.load_config(example_config_file)
+arm = hebi.arm.create_from_config(example_config)
 
 # mobileIO setup
+phone_family = "HEBIArm"
 phone_name = "mobileIO"
 lookup = hebi.Lookup()
 sleep(2)
 
 # Setup MobileIO
 print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io(lookup, arm_family, phone_name)
+m = create_mobile_io(lookup, phone_family, phone_name)
 if m is None:
     raise RuntimeError("Could not find Mobile IO device")
 m.update()
@@ -35,12 +29,12 @@ m.update()
 # Demo Variables
 abort_flag = False
 run_mode = "softstart"
-goal = arm_api.Goal(arm.size)
-home_position = [0, np.pi / 3, 2 * np.pi / 3, 5 * np.pi / 6, -np.pi / 2, 0]
+goal = hebi.arm.Goal(arm.size)
 
 # Command the softstart to the home position
-softstart = arm_api.Goal(arm.size)
-softstart.add_waypoint(t=4, position=home_position)
+softstart = hebi.arm.Goal(arm.size)
+softstart.add_waypoint(t=example_config.user_data['soft_start_time'], 
+                       position=example_config.user_data['home_position'])
 arm.update()
 arm.set_goal(softstart)
 arm.send()
@@ -48,15 +42,11 @@ arm.send()
 # Get the cartesian position and rotation matrix @ home position
 xyz_home = np.zeros(3)
 rot_home = np.zeros((3, 3))
-# arm.FK(home_position, xyz_home, ori_home)
-arm.FK(home_position, xyz_out=xyz_home, orientation_out=rot_home)
+arm.FK(example_config.user_data['home_position'], xyz_out=xyz_home, orientation_out=rot_home)
 
 # Get the states for the mobile device
 xyz_phone_init = np.zeros(3)
 rot_phone_init = np.zeros((3, 3))
-
-# # Target variables
-# target_joints = np.zeros(arm.size)
 
 #######################
 ## Main Control Loop ##
@@ -88,6 +78,8 @@ while not abort_flag:
     if m.get_button_diff(3) == 1 and run_mode != "ar_mode":  # "ToOn"
         m.set_led_color("green")
         run_mode = "ar_mode"
+
+        # Store initial position and orientation as baseline
         xyz_phone_init = m.position.copy()
         wxyz = m.orientation
         xyzw = [*wxyz[1:], wxyz[0]]
@@ -113,8 +105,7 @@ while not abort_flag:
         rot_phone = R.from_quat(xyzw).as_matrix()
 
         # Calculate new targets
-        # <-- insert xyz_scale here if wanted -->
-        xyz_target = xyz_home + rot_phone_init.T @ (0.75 * (xyz_phone - xyz_phone_init))
+        xyz_target = xyz_home + rot_phone_init.T @ (example_config.user_data['xyz_scale'] * (xyz_phone - xyz_phone_init))
         rot_target = rot_phone_init.T @ rot_phone @ rot_home
 
         # Calculate new arm joint angles
