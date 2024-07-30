@@ -65,25 +65,17 @@ cmd.position_kd = 0.0
 cmd.position_ki = 0.0
 
 # Meters above the base for overdamped, critically damped, and underdamped cases respectively
-lower_limits = [0.0, 0.15, 0.30]
+lower_limits = example_config.user_data['lower_limits'] 
 # State variable for current mode: 0 for overdamped, 1 for crtically damped, 2 for underdamped, -1 for free
 mode = -1
 prevmode = -1
 
-# 0: Overdamped
-overdamped_kp = np.array([100, 100, 0, 5, 5, 1])
-overdamped_kd = np.array([15, 15, 0, 0, 0, 0])
-
-# 1: Critically damped
-critically_damped_kp = np.array([100, 100, 0, 5, 5, 1])
-critically_damped_kd = np.array([5, 5, 0, 0, 0, 0])
-
-# 2: Underdamped
-underdamped_kp = np.array([100, 100, 0, 5, 5, 1])
-underdamped_kd = np.array([0, 0, 0, 0, 0, 0])
-
-damping_kp = [overdamped_kp, critically_damped_kp, underdamped_kp]
-damping_kd = [overdamped_kd, critically_damped_kd, underdamped_kd]
+damping_kp = [example_config.user_data['overdamped']['kp'], 
+              example_config.user_data['critically_damped']['kp'], 
+              example_config.user_data['underdamped']['kp']]
+damping_kd = [example_config.user_data['overdamped']['kd'], 
+              example_config.user_data['critically_damped']['kd'], 
+              example_config.user_data['underdamped']['kd']]
 
 # Increase feedback frequency since we're calculating velocities at the
 # high level for damping. Going faster can help reduce a little bit of
