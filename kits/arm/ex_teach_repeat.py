@@ -5,26 +5,24 @@ from time import time, sleep
 from hebi import arm as arm_api
 from hebi.util import create_mobile_io
 
-# Set up to find actuators on the network
+# Initialize the interface for network connected modules
 lookup = hebi.Lookup()
 sleep(2)
 
-# Arm setup
-phone_family = "HEBIArm"
-phone_name = "mobileIO"
+# Config file
 example_config_file = "config/examples/ex_teach_repeat.cfg"
 
-# Set up arm configuration
+# Set up arm from config
 example_config = hebi.config.load_config(example_config_file)
 arm = hebi.arm.create_from_config(example_config)
 
-# mobileIO setup
+# Set up Mobile IO from config
 print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io(lookup, phone_family, phone_name)
+m = create_mobile_io(lookup, example_config.mobile_io['family'], example_config.mobile_io['name'])
 if m is None:
     raise RuntimeError("Could not find Mobile IO device")
-m.set_led_color("blue")  # as we start in grav comp
-m.clear_text()  # Clear any garbage on screen
+m.send_layout(example_config.mobile_io['layout'])
+m.set_button_mode(2, 'toggle')
 m.update()
 
 # Demo Variables

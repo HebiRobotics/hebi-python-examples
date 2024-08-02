@@ -34,20 +34,20 @@ from plotting import draw_plots
 lookup = hebi.Lookup()
 sleep(2)
 
-# Set up arm
-phone_family = "HEBIArm"
-phone_name = "mobileIO"
+# Config file
 example_config_file = "config/examples/ex_impedance_control_gimbal.cfg"
 
-# Set up Mobile IO
+# Set up arm from config
+example_config = hebi.config.load_config(example_config_file)
+arm = hebi.arm.create_from_config(example_config)
+
+# Set up Mobile IO from config
 print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io(lookup, phone_family, phone_name)
+m = create_mobile_io(lookup, example_config.mobile_io['family'], example_config.mobile_io['name'])
 if m is None:
     raise RuntimeError("Could not find Mobile IO device")
-m.set_button_mode(1, 'momentary')
-m.set_button_label(1, '📈')
+m.send_layout(example_config.mobile_io['layout'])
 m.set_button_mode(2, 'toggle')
-m.set_button_label(2, '💪')
 m.update()
 
 # Set up arm configuration

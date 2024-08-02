@@ -7,8 +7,8 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Exit",
-          "mode": 0
+          "text": "📈",
+          "mode": "momentary"
       }
   },
   {
@@ -19,8 +19,8 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Toggle Impedance",
-          "mode": 1
+          "text": "📌",
+          "mode": "toggle"
       }
   },
   {

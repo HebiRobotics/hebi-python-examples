@@ -7,7 +7,7 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Waypoint 1",
+          "text": "1️⃣",
           "mode": 0
       }
   },
@@ -19,7 +19,7 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Waypoint 2",
+          "text": "2️⃣",
           "mode": 0
       }
   },
@@ -31,7 +31,7 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Waypoint 3",
+          "text": "3️⃣",
           "mode": 0
       }
   },
@@ -43,7 +43,7 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Grav Comp Mode",
+          "text": "⚖️",
           "mode": 0
       }
   },
@@ -55,7 +55,7 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Quit",
+          "text": "❌",
           "mode": 0
       }
   },

@@ -7,7 +7,7 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Add Waypoint (Stop)",
+          "text": "Add Waypoint (Stop) 📌",
           "mode": 0
       }
   },
@@ -19,7 +19,7 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Add Waypoint (Flow)",
+          "text": "Add Waypoint (Flow) ↩️",
           "mode": 0
       }
   },
@@ -31,7 +31,7 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Toggle training/playback",
+          "text": "Toggle training/playback 🔄",
           "mode": 0
       }
   },
@@ -43,7 +43,7 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Clear Waypoints",
+          "text": "Clear Waypoints 🗑️",
           "mode": 0
       }
   },
@@ -55,7 +55,7 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Quit",
+          "text": "Quit ❌",
           "mode": 0
       }
   },
@@ -67,7 +67,7 @@
       "width": 0.05,
       "height": 0.5,
       "parameters": {
-          "text": "Time to Waypoint",
+          "text": "Time to Waypoint ⏱️",
           "steps": 10,
           "min": -1,
           "max": 1,

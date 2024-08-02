@@ -6,24 +6,23 @@ from scipy.spatial.transform import Rotation as R
 from time import sleep
 from hebi.util import create_mobile_io
 
-# Arm setup
-example_config_file = "config/examples/ex_AR_kit.cfg"
-
-# Create Arm object
-example_config = hebi.config.load_config(example_config_file)
-arm = hebi.arm.create_from_config(example_config)
-
-# mobileIO setup
-phone_family = "HEBIArm"
-phone_name = "mobileIO"
 lookup = hebi.Lookup()
 sleep(2)
 
-# Setup MobileIO
+# Config file
+example_config_file = "config/examples/ex_AR_kit.cfg"
+
+# Set up arm from config
+example_config = hebi.config.load_config(example_config_file)
+arm = hebi.arm.create_from_config(example_config)
+
+# Set up Mobile IO from config
 print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io(lookup, phone_family, phone_name)
+m = create_mobile_io(lookup, example_config.mobile_io['family'], example_config.mobile_io['name'])
 if m is None:
     raise RuntimeError("Could not find Mobile IO device")
+m.send_layout(example_config.mobile_io['layout'])
+m.set_button_mode(2, 'toggle')
 m.update()
 
 # Demo Variables

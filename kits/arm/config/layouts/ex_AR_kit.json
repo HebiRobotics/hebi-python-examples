@@ -7,7 +7,7 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Home",
+          "text": "🏠",
           "mode": 0
       }
   },
@@ -19,7 +19,7 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "AR Control",
+          "text": "📳",
           "mode": 0
       }
   },
@@ -31,7 +31,7 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Grav Comp",
+          "text": "⚖️",
           "mode": 0
       }
   },
@@ -43,7 +43,7 @@
       "width": 0.15,
       "height": 0.15,
       "parameters": {
-          "text": "Quit",
+          "text": "❌",
           "mode": 0
       }
   },
