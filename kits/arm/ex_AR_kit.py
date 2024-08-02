@@ -4,7 +4,7 @@ import hebi
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from time import sleep
-from hebi.util import create_mobile_io
+from hebi.util import create_mobile_io_from_config
 
 lookup = hebi.Lookup()
 sleep(2)
@@ -18,10 +18,7 @@ arm = hebi.arm.create_from_config(example_config)
 
 # Set up Mobile IO from config
 print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io(lookup, example_config.mobile_io['family'], example_config.mobile_io['name'])
-if m is None:
-    raise RuntimeError("Could not find Mobile IO device")
-m.send_layout(example_config.mobile_io['layout'])
+m = create_mobile_io_from_config(lookup, example_config)
 m.set_button_mode(2, 'toggle')
 m.update()
 
