@@ -19,7 +19,7 @@ arm = hebi.arm.create_from_config(example_config)
 # Set up Mobile IO from config
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io_from_config(lookup, example_config)
-m.set_button_mode(2, 'toggle')
+m.set_button_mode(2, 'momentary')
 m.update()
 
 # Demo Variables
@@ -30,12 +30,12 @@ base_travel_time = example_config.user_data['base_travel_time']
 min_travel_time = example_config.user_data['min_travel_time']
 
 # Print Instructions
-instructions = """B1 - Add waypoint (stop)
-B2 - Add waypoint (flow)
-A3 - Up/down for longer/shorter time to waypoint
-B3 - Toggle training/playback
-B4 - Clear waypoints
-B8 - Quit
+instructions = """B1 - Add waypoint (stop) 📌
+B2 - Add waypoint (flow) 🚏
+A3 - Up/down for longer/shorter time to waypoint ⏱️
+B3 - Toggle training/playback 🔄
+B4 - Clear waypoints 🗑️
+B8 - Quit ❌
 """
 print(instructions)
 m.clear_text()
@@ -75,8 +75,6 @@ while not abort_flag:
             goal.add_waypoint(t= base_travel_time + slider3 * (base_travel_time - min_travel_time), 
                               position=arm.last_feedback.position, velocity=[0] * arm.size)
             
-        print(base_travel_time + slider3 * (base_travel_time - min_travel_time))
-
         # B2 - add waypoint (flow)
         if m.get_button_diff(2) == 1:  # "ToOn"
             print("Flow waypoint added")

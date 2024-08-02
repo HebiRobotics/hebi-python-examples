@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+"""
+CAUTION: 
+This example uses waypoints containing fixed joint angles, which is a bad idea if your actuators have large wind-up. 
+The correct way to store waypoints is by using se3 coordinates, and converting them to joint positions using our IK functions.
+"""
+
 import hebi
 import numpy as np
 from time import sleep
