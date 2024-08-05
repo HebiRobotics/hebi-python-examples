@@ -4,57 +4,39 @@ import hebi
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from time import sleep
-from hebi.util import create_mobile_io
-from hebi import arm as arm_api
+from hebi.util import create_mobile_io_from_config, create_gripper_from_config
 
 
-# Arm setup
-arm_family = "Arm"
-module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
-hrdf_file = "hrdf/A-2085-06G.hrdf"
-gains_file = "gains/A-2085-06.xml"
-
-# Create Arm object
-arm = arm_api.create([arm_family],
-                     names=module_names,
-                     hrdf_file=hrdf_file)
-arm.load_gains(gains_file)
-
-# mobileIO setup
-phone_name = "mobileIO"
+# Initialize the interface for network connected modules
 lookup = hebi.Lookup()
 sleep(2)
 
-# Setup MobileIO
+# Config file
+example_config_file = "config/examples/ex_AR_kit_w_gripper.cfg"
+
+# Set up arm from config
+example_config = hebi.config.load_config(example_config_file)
+arm = hebi.arm.create_from_config(example_config)
+
+# Set up Mobile IO from config
 print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io(lookup, arm_family, phone_name)
-if m is None:
-    raise RuntimeError("Could not find Mobile IO device")
+m = create_mobile_io_from_config(lookup, example_config)
+m.set_button_mode(2, 'toggle')
 m.update()
 
 # Add the gripper
-gripper_family = arm_family
-gripper_name = 'gripperSpool'
-
-gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
-while gripper_group is None:
-    print(f"Looking for gripper module {gripper_family} / {gripper_name} ...")
-    sleep(1)
-    gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
-
-gripper = arm_api.Gripper(gripper_group, -5, 1)
-gripper.load_gains("gains/gripper_spool_gains.xml")
+gripper = create_gripper_from_config(lookup, example_config)
 arm.set_end_effector(gripper)
 
 # Demo Variables
 abort_flag = False
 run_mode = "softstart"
-goal = arm_api.Goal(arm.size)
-home_position = [0, np.pi / 3, 2 * np.pi / 3, 5 * np.pi / 6, -np.pi / 2, 0]
+goal = hebi.arm.Goal(arm.size)
 
 # Command the softstart to the home position
-softstart = arm_api.Goal(arm.size)
-softstart.add_waypoint(t=4, position=home_position)
+softstart = hebi.arm.Goal(arm.size)
+softstart.add_waypoint(t=example_config.user_data['soft_start_time'], 
+                       position=example_config.user_data['home_position'])
 arm.update()
 arm.set_goal(softstart)
 arm.send()
@@ -62,8 +44,7 @@ arm.send()
 # Get the cartesian position and rotation matrix @ home position
 xyz_home = np.zeros(3)
 rot_home = np.zeros((3, 3))
-# arm.FK(home_position, xyz_home, ori_home)
-arm.FK(home_position, xyz_out=xyz_home, orientation_out=rot_home)
+arm.FK(example_config.user_data['home_position'], xyz_out=xyz_home, orientation_out=rot_home)
 
 # Get the states for the mobile device
 xyz_phone_init = np.zeros(3)
@@ -145,8 +126,7 @@ while not abort_flag:
         rot_phone = R.from_quat(xyzw).as_matrix()
 
         # Calculate new targets
-        # <-- insert xyz_scale here if wanted -->
-        xyz_target = xyz_home + rot_phone_init.T @ (0.75 * (xyz_phone - xyz_phone_init))
+        xyz_target = xyz_home + rot_phone_init.T @ (example_config.user_data['xyz_scale'] * (xyz_phone - xyz_phone_init))
         rot_target = rot_phone_init.T @ rot_phone @ rot_home
 
         # Calculate new arm joint angles
@@ -160,7 +140,7 @@ while not abort_flag:
         # Set the gripper separataly to follow slider A3
         slider3 = m.get_axis_state(3)
         # Map slider range -1 to 1 onto close and open effort for gripper
-        grip_effort = (slider3 + 1) / 2
+        grip_effort = (slider3 + 1.0) / 2.0
         if arm.end_effector is not None:
             arm.end_effector.update(grip_effort)
 
