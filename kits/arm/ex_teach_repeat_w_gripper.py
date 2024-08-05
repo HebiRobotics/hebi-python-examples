@@ -3,61 +3,36 @@
 import os
 import hebi
 from time import time, sleep
-from hebi import arm as arm_api
-from hebi.util import create_mobile_io
+from hebi.util import create_mobile_io_from_config, create_gripper_from_config
 
 # Set up to find actuators on the network
 lookup = hebi.Lookup()
 sleep(2)
 
-# Arm setup
-arm_family = "Arm"
-module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
-hrdf_file = "hrdf/A-2085-06G.hrdf"
-gains_file = "gains/A-2085-06.xml"
+# Config file
+example_config_file = "config/examples/ex_teach_repeat_w_gripper.cfg"
 
-root_dir = os.path.abspath(os.path.dirname(__file__))
-hrdf_file = os.path.join(root_dir, hrdf_file)
-gains_file = os.path.join(root_dir, gains_file)
+# Set up arm from config
+example_config = hebi.config.load_config(example_config_file)
+arm = hebi.arm.create_from_config(example_config)
 
-# Create Arm object
-arm = arm_api.create([arm_family],
-                     names=module_names,
-                     hrdf_file=hrdf_file,
-                     lookup=lookup)
-
-arm.load_gains(gains_file)
+# Set up Mobile IO from config
+print('Waiting for Mobile IO device to come online...')
+m = create_mobile_io_from_config(lookup, example_config)
+m.set_button_mode(2, 'momentary')
+m.update()
 
 # Add the gripper
-gripper_family = arm_family
-gripper_name = 'gripperSpool'
-
-gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
-while gripper_group is None:
-    print(f"Looking for gripper module {gripper_family} / {gripper_name} ...")
-    sleep(1)
-    gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
-
-gripper = arm_api.Gripper(gripper_group, -5, 1)
-gripper_gains = os.path.join(root_dir, "gains/gripper_spool_gains.xml")
-gripper.load_gains(gripper_gains)
+gripper = create_gripper_from_config(lookup, example_config)
 arm.set_end_effector(gripper)
-
-# Create mobileIO object
-phone_name = "mobileIO"
-print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io(lookup, arm_family, phone_name)
-if m is None:
-    raise RuntimeError("Could not find Mobile IO device")
-m.set_led_color("blue")  # as we start in grav comp
-m.clear_text()  # Clear any garbage on screen
-m.update()
 
 # Demo Variables
 abort_flag = False
 pending_goal = False
 run_mode = "training"
-goal = arm_api.Goal(arm.size)
+goal = hebi.arm.Goal(arm.size)
+base_travel_time = example_config.user_data['base_travel_time']
+min_travel_time = example_config.user_data['min_travel_time']
 
 # Print Instructions
 instructions = """B1 - Add waypoint (stop)
@@ -104,21 +79,23 @@ while not abort_flag:
         # B1 add waypoint (stop)
         if m.get_button_diff(1) == 1:  # "ToOn"
             print("Stop waypoint added")
-            goal.add_waypoint(t=slider3 + 3.0, position=arm.last_feedback.position, aux=gripper.state, velocity=[0] * arm.size)
+            goal.add_waypoint(t= base_travel_time + slider3 * (base_travel_time - min_travel_time), 
+                              position=arm.last_feedback.position, velocity=[0] * arm.size)
 
         # B2 add waypoint (stop) and toggle the gripper
         if m.get_button_diff(2) == 1:  # "ToOn"
             # Add 2 waypoints to allow the gripper to open or close
             print("Stop waypoint added and gripper toggled")
             position = arm.last_feedback.position
-            goal.add_waypoint(t=slider3 + 3.0, position=position, aux=gripper.state, velocity=[0] * arm.size)
+            goal.add_waypoint(t= base_travel_time + slider3 * (base_travel_time - min_travel_time), 
+                              position=arm.last_feedback.position, velocity=[0] * arm.size)
             gripper.toggle()
-            goal.add_waypoint(t=2.0, position=position, aux=gripper.state, velocity=[0] * arm.size)
 
         # B3 add waypoint (flow)
         if m.get_button_diff(3) == 1:  # "ToOn"
             print("Flow waypoint added")
-            goal.add_waypoint(t=slider3 + 3.0, position=arm.last_feedback.position, aux=gripper.state)
+            goal.add_waypoint(t= base_travel_time + slider3 * (base_travel_time - min_travel_time), 
+                              position=arm.last_feedback.position, velocity=[0] * arm.size)
 
         # B5 toggle training/playback
         if m.get_button_diff(5) == 1:  # "ToOn"
