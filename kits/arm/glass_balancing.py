@@ -45,6 +45,7 @@ arm = hebi.arm.create_from_config(example_config)
 print('Waiting for Mobile IO device to come online...')
 m = create_mobile_io_from_config(lookup, example_config)
 m.set_button_mode(2, 'toggle')
+m.set_button_mode(3, 'toggle')
 m.update()
 
 # Add the gripper
@@ -96,6 +97,7 @@ while not m.get_button_state(1):
     arm.update()
 
     arm.send()
+    gripper.send()
 
     if m.update(timeout_ms=0):
 
@@ -111,8 +113,15 @@ while not m.get_button_state(1):
 
         if (m.get_button_diff(3) == 1):
 
-            gripper_state = not gripper_state
-            gripper.toggle()
+            gripper.close()
+            gripper_state = True
+            print("gripper closed")
+
+        elif (m.get_button_diff(3) == -1):
+
+            gripper.open()
+            gripper_state = False
+            print("gripper open")
 
         # If in impedance mode set led blue
         m.set_led_color("blue" if controller_on else "green", blocking=False)
