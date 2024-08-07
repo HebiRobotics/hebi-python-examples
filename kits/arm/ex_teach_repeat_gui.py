@@ -134,7 +134,7 @@ if __name__ == "__main__":
                          hrdf_file=hrdf_file)
     arm.load_gains(gains_file)
     
-    
+
     # Add the gripper 
     gripper_family = arm_family
     gripper_name   = 'gripperSpool'
