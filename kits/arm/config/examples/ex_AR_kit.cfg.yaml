@@ -7,11 +7,6 @@ hrdf: "../hrdf/A-2085-06.hrdf"
 gains:
   default: "../gains/A-2085-06.xml"
 
-mobile_io:
-  family: "Arm"
-  layout: "../layouts/ex_AR_kit.json"
-  name: "mobileIO"
-
 plugins:
 
   - type: GravityCompensationEffort
@@ -34,3 +29,8 @@ user_data:
 
   # Displacements of the phone are scaled by this value to give displacement of the end-effector
   xyz_scale: 0.75
+
+  mobile_io:
+    family: "Arm"
+    layout: "../layouts/ex_AR_kit.json"
+    name: "mobileIO"

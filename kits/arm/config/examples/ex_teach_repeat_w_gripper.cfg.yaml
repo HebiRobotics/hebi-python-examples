@@ -7,18 +7,6 @@ hrdf: "../hrdf/A-2240-06G.hrdf"
 gains:
   default: "../gains/A-2240-06.xml"
 
-gripper:
-  family: "Arm"
-  name: "gripperSpool"
-  gains: "../gains/gripper_spool_gains.xml"
-  close_effort: -5.0 # (Nm) Effort applied to close the gripper. More negative effort will pinch the gripper harder.
-  open_effort: 1.0 # (Nm) Effort applied to open the gripper. More positive effort will NOT make the gripper harder to close.
-
-mobile_io:
-  family: "Arm"
-  layout: "../layouts/ex_teach_repeat_w_gripper.json"
-  name: "mobileIO"
-
 plugins:
 
   - type: GravityCompensationEffort
@@ -42,3 +30,15 @@ user_data:
 
   # The default travel time value
   base_travel_time: 3 # seconds
+
+  gripper:
+    family: "Arm"
+    name: "gripperSpool"
+    gains: "../gains/gripper_spool_gains.xml"
+    close_effort: -5.0 # (Nm) Effort applied to close the gripper. More negative effort will pinch the gripper harder.
+    open_effort: 1.0 # (Nm) Effort applied to open the gripper. More positive effort will NOT make the gripper harder to close.
+
+  mobile_io:
+    family: "Arm"
+    layout: "../layouts/ex_teach_repeat_w_gripper.json"
+    name: "mobileIO"

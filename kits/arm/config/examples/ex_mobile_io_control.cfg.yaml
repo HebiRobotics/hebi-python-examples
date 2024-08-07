@@ -7,11 +7,6 @@ hrdf: "../hrdf/A-2085-06.hrdf"
 gains:
   default: "../gains/A-2085-06.xml"
 
-mobile_io:
-  family: "Arm"
-  layout: "../layouts/ex_mobile_io_control.json"
-  name: "mobileIO"
-
 plugins:
 
   - type: GravityCompensationEffort
@@ -34,3 +29,8 @@ user_data:
 
   # Time taken to travel to a waypoint
   travel_time: 3 # seconds
+
+  mobile_io:
+    family: "Arm"
+    layout: "../layouts/ex_mobile_io_control.json"
+    name: "mobileIO"

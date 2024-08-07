@@ -7,11 +7,6 @@ hrdf: "../hrdf/A-2085-06.hrdf"
 gains:
   default: "../gains/A-2085-06.xml"
 
-mobile_io:
-  family: "Arm"
-  layout: "../layouts/ex_impedance_control_damping.json"
-  name: "mobileIO"
-
 plugins:
 
   - type: GravityCompensationEffort
@@ -55,3 +50,8 @@ user_data:
   underdamped:
     kp: [100, 100, 0, 5, 5, 1] # (N/m) or (Nm/rad)
     kd: [0, 0, 0, 0, 0, 0] # (N/(m/sec)) or (Nm/(rad/sec))
+
+  mobile_io:
+    family: "Arm"
+    layout: "../layouts/ex_impedance_control_damping.json"
+    name: "mobileIO"

@@ -7,11 +7,6 @@ hrdf: "../hrdf/A-2085-06.hrdf"
 gains:
   default: "../gains/A-2085-06.xml"
 
-mobile_io:
-  family: "Arm"
-  layout: "../layouts/ex_impedance_control_cartesian.json"
-  name: "mobileIO"
-
 plugins:
 
   - type: GravityCompensationEffort
@@ -39,3 +34,10 @@ plugins:
     kd: [5, 5, 5, 0, 0, 0] # (N/(m/sec)) or (Nm/(rad/sec))
     ki: [20, 20, 20, 0, 0, 0]
     i_clamp: [10, 10, 10, 0, 0, 0] # max value
+
+user_data:
+
+  mobile_io:
+    family: "Arm"
+    layout: "../layouts/ex_impedance_control_cartesian.json"
+    name: "mobileIO"
