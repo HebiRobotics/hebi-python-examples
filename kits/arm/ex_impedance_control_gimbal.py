@@ -21,7 +21,7 @@ The following example is for the "Gimbal" demo:
 
 import hebi
 from time import sleep
-from hebi.util import create_mobile_io_from_config
+from demo_util import create_demo_from_config
 import numpy as np
 from plotting import draw_plots
 
@@ -37,19 +37,11 @@ sleep(2)
 # Config file
 example_config_file = "config/examples/ex_impedance_control_gimbal.cfg.yaml"
 
-# Set up arm from config
+# Set up arm, and mobile_io from config
 example_config = hebi.config.load_config(example_config_file)
-arm = hebi.arm.create_from_config(example_config)
-
-# Set up Mobile IO from config
-print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io_from_config(lookup, example_config)
-m.set_button_mode(2, 'toggle')
-m.update()
-
-# Set up arm configuration
-example_config = hebi.config.load_config(example_config_file)
-arm = hebi.arm.create_from_config(example_config)
+arm, mobile_io, _ = create_demo_from_config(lookup, example_config)
+mobile_io.set_button_mode(2, 'toggle')
+mobile_io.update()
 
 # Clear all position control gains for all the actuators
 cmd = arm.pending_command
@@ -83,7 +75,7 @@ print('  📈 (B1) - Exits the demo, and plots graphs. May take a while.')
 controller_on = False
 
 # while button 1 is not pressed
-while not m.get_button_state(1):
+while not mobile_io.get_button_state(1):
 
     # if not arm.update():
     #     print("Failed to update arm")
@@ -92,25 +84,25 @@ while not m.get_button_state(1):
 
     arm.send()
 
-    if m.update(timeout_ms=0):
+    if mobile_io.update(timeout_ms=0):
 
         # Set and unset impedance mode when button is pressed and released, respectively
-        if (m.get_button_diff(2) == 1):
+        if (mobile_io.get_button_diff(2) == 1):
 
             controller_on = True
             arm.set_goal(goal.clear().add_waypoint(position=arm.last_feedback.position))
 
-        elif (m.get_button_diff(2) == -1):
+        elif (mobile_io.get_button_diff(2) == -1):
             
             controller_on = False
 
         # If in impedance mode set led blue
-        m.set_led_color("blue" if controller_on else "green", blocking=False)
+        mobile_io.set_led_color("blue" if controller_on else "green", blocking=False)
 
     if not controller_on:
         arm.cancel_goal()
 
-m.set_led_color("red")
+mobile_io.set_led_color("red")
 
 if enable_logging:
     hebi_log = arm.group.stop_log()

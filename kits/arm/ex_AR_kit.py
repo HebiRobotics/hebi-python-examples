@@ -4,7 +4,7 @@ import hebi
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from time import sleep
-from hebi.util import create_mobile_io_from_config
+from demo_util import create_demo_from_config
 
 lookup = hebi.Lookup()
 sleep(2)
@@ -12,15 +12,9 @@ sleep(2)
 # Config file
 example_config_file = "config/examples/ex_AR_kit.cfg.yaml"
 
-# Set up arm from config
+# Set up arm, and mobile_io from config
 example_config = hebi.config.load_config(example_config_file)
-arm = hebi.arm.create_from_config(example_config)
-
-# Set up Mobile IO from config
-print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io_from_config(lookup, example_config)
-m.set_button_mode(2, 'toggle')
-m.update()
+arm, mobile_io, _ = create_demo_from_config(lookup, example_config)
 
 # Demo Variables
 abort_flag = False
@@ -51,52 +45,52 @@ rot_phone_init = np.zeros((3, 3))
 while not abort_flag:
     arm.update()  # update the arm
 
-    if not m.update():
+    if not mobile_io.update():
         print("Failed to get feedback from MobileIO")
         continue
 
     if run_mode == "softstart":
         # End softstart when the arm reaches the home_position
         if arm.at_goal:
-            m.set_led_color("yellow")
+            mobile_io.set_led_color("yellow")
             run_mode = "waiting"
             continue
         arm.send()
         continue
 
     # B1 - Return to home position
-    if m.get_button_diff(1) == 1:  # "ToOn"
-        m.set_led_color("yellow")
+    if mobile_io.get_button_diff(1) == 1:  # "ToOn"
+        mobile_io.set_led_color("yellow")
         run_mode = "waiting"
         arm.set_goal(softstart)
 
     # B3 - Start AR Control
-    if m.get_button_diff(3) == 1 and run_mode != "ar_mode":  # "ToOn"
-        m.set_led_color("green")
+    if mobile_io.get_button_diff(3) == 1 and run_mode != "ar_mode":  # "ToOn"
+        mobile_io.set_led_color("green")
         run_mode = "ar_mode"
 
         # Store initial position and orientation as baseline
-        xyz_phone_init = m.position.copy()
-        wxyz = m.orientation
+        xyz_phone_init = mobile_io.position.copy()
+        wxyz = mobile_io.orientation
         xyzw = [*wxyz[1:], wxyz[0]]
         rot_phone_init = R.from_quat(xyzw).as_matrix()
 
     # B6 - Grav Comp Mode
-    if m.get_button_diff(6) == 1:  # "ToOn"
-        m.set_led_color("blue")
+    if mobile_io.get_button_diff(6) == 1:  # "ToOn"
+        mobile_io.set_led_color("blue")
         run_mode = "grav_comp"
         arm.cancel_goal()
 
     # B8 - Quit
-    if m.get_button_diff(8) == 1:  # "ToOn"
-        m.set_led_color("transparent")
+    if mobile_io.get_button_diff(8) == 1:  # "ToOn"
+        mobile_io.set_led_color("transparent")
         abort_flag = True
         break
 
     if run_mode == "ar_mode":
         # Get the latest mobile position and orientation
-        xyz_phone = m.position
-        wxyz = m.orientation
+        xyz_phone = mobile_io.position
+        wxyz = mobile_io.orientation
         xyzw = [*wxyz[1:], wxyz[0]]
         rot_phone = R.from_quat(xyzw).as_matrix()
 
