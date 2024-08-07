@@ -10,7 +10,7 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Config file
-example_config_file = "config/examples/ex_teach_repeat.cfg"
+example_config_file = "config/examples/ex_teach_repeat.cfg.yaml"
 
 # Set up arm from config
 example_config = hebi.config.load_config(example_config_file)

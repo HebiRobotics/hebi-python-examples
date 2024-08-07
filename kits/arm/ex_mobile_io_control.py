@@ -17,7 +17,7 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Config file
-example_config_file = "config/examples/ex_mobile_io_control.cfg"
+example_config_file = "config/examples/ex_mobile_io_control.cfg.yaml"
 
 # Set up arm from config
 example_config = hebi.config.load_config(example_config_file)

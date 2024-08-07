@@ -10,7 +10,7 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Arm setup
-example_config_file = "config/examples/ex_gravity_compensation.cfg"
+example_config_file = "config/examples/ex_gravity_compensation.cfg.yaml"
 
 # Create Arm object
 example_config = hebi.config.load_config(example_config_file)
