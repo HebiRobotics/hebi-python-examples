@@ -40,8 +40,6 @@ example_config_file = "config/examples/ex_impedance_control_damping.cfg.yaml"
 # Set up arm, and mobile_io from config
 example_config = hebi.config.load_config(example_config_file)
 arm, mobile_io, _ = create_demo_from_config(lookup, example_config)
-mobile_io.set_button_mode(2, 'toggle')
-mobile_io.update()
 
 # Retrieve the impedance control plugin to be altered later
 impedance_controller = arm.get_plugin_by_type(hebi.arm.ImpedanceController)

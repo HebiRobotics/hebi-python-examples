@@ -60,6 +60,7 @@ def create_demo_from_config(lookup, example_config):
                 if i == num_retries - 1:
                     raise RuntimeError("Failed to create Mobile IO from config.")
 
+        mobile_io.send_layout(layout_file=mobile_io_dict['layout'])
         mobile_io.update()
 
     # Add the gripper

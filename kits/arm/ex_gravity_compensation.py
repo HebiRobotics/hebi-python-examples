@@ -15,8 +15,6 @@ example_config_file = "config/examples/ex_gravity_compensation.cfg.yaml"
 # Set up arm, and mobile_io from config
 example_config = hebi.config.load_config(example_config_file)
 arm, mobile_io, _ = create_demo_from_config(lookup, example_config)
-mobile_io.set_button_mode(2, 'toggle')
-mobile_io.update()
 
 # Retrieve the gravity compensation plugin
 gravcomp = arm.get_plugin_by_type(hebi.arm.GravCompEffortPlugin)

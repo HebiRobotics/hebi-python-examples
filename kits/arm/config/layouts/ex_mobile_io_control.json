@@ -8,7 +8,7 @@
       "height": 0.15,
       "parameters": {
           "text": "1",
-          "mode": 0
+          "mode": "momentary"
       }
   },
   {
@@ -20,7 +20,7 @@
       "height": 0.15,
       "parameters": {
           "text": "2",
-          "mode": 0
+          "mode": "momentary"
       }
   },
   {
@@ -32,7 +32,7 @@
       "height": 0.15,
       "parameters": {
           "text": "3",
-          "mode": 0
+          "mode": "momentary"
       }
   },
   {
@@ -44,7 +44,7 @@
       "height": 0.15,
       "parameters": {
           "text": "🌍",
-          "mode": 0
+          "mode": "momentary"
       }
   },
   {
@@ -56,7 +56,7 @@
       "height": 0.15,
       "parameters": {
           "text": "❌",
-          "mode": 0
+          "mode": "momentary"
       }
   },
   {
