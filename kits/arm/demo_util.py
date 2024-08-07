@@ -1,6 +1,7 @@
 import hebi
 import os
 from hebi.util import create_mobile_io
+from time import sleep
 
 def create_demo_from_config(lookup, example_config):
 
@@ -40,39 +41,37 @@ def create_demo_from_config(lookup, example_config):
             raise TypeError('HEBI config "gripper" field must be a dictionary of strings and floats, not parseable as dictionary')
 
     # Set up arm from config
-    try:
-        arm = hebi.arm.create_from_config(example_config)
-    except Exception as e:
-        print(f"Failed to create arm from config: {e}")
-        arm = None
+    arm = hebi.arm.create_from_config(example_config)
+    if arm is None:
+        raise RuntimeError("Failed to create arm from config.")
 
     # Set up Mobile IO from config
     mobile_io = None
     if any(mobile_io_dict):
         print('Waiting for Mobile IO device to come online...')
-        try:
+        num_retries = 10
+
+        for i in range(num_retries):
             mobile_io = create_mobile_io(lookup, mobile_io_dict['family'], mobile_io_dict['name'])
-            if not mobile_io.send_layout(mobile_io_dict['layout']):
-                raise RuntimeError("Could not initialize layout for Mobile IO device")
-            mobile_io.update()
-        except Exception as e:
-            print(f"Failed to create Mobile IO from config: {e}")
-            mobile_io = None
+
+            if mobile_io is None:
+                print(f"Couldn't find Mobile IO :( Check name, family, or device status.")
+                sleep(1)
+                if i == num_retries - 1:
+                    raise RuntimeError("Failed to create Mobile IO from config.")
+
+        mobile_io.update()
 
     # Add the gripper
     gripper = None
     if any(gripper_dict):
-        try:
-            group = lookup.get_group_from_names([gripper_dict.get('family')], [gripper_dict.get('name')])
-            if group is None:
-                raise RuntimeError("Incorrect family or name of gripper")
+        group = lookup.get_group_from_names([gripper_dict.get('family')], [gripper_dict.get('name')])
+        if group is None:
+            raise RuntimeError("Incorrect family or name of gripper")
 
-            gripper = hebi.arm.Gripper(group, gripper_dict.get('close_effort'), gripper_dict.get('open_effort'))
-            gripper.load_gains(gripper_dict.get('gains'))
-            if arm:
-                arm.set_end_effector(gripper)
-        except Exception as e:
-            print(f"Failed to create gripper from config: {e}")
-            gripper = None
+        gripper = hebi.arm.Gripper(group, gripper_dict.get('close_effort'), gripper_dict.get('open_effort'))
+        gripper.load_gains(gripper_dict.get('gains'))
+        if not arm is None:
+            arm.set_end_effector(gripper)
 
     return arm, mobile_io, gripper
