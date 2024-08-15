@@ -21,7 +21,7 @@ The following example is for the "Cartesian" demo:
 
 import hebi
 from time import sleep
-from demo_util import create_demo_from_config
+from hebi_util import create_mobile_io_from_config
 import numpy as np
 from plotting import draw_plots
 
@@ -35,11 +35,12 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Config file
-example_config_file = "config/examples/ex_impedance_control_cartesian.cfg.yaml"
+example_config_file = "config/ex_impedance_control_cartesian.cfg.yaml"
+example_config = hebi.config.load_config(example_config_file)
 
 # Set up arm, and mobile_io from config
-example_config = hebi.config.load_config(example_config_file)
-arm, mobile_io, _ = create_demo_from_config(lookup, example_config)
+arm = hebi.arm.create_from_config(lookup, example_config)
+mobile_io = create_mobile_io_from_config(lookup, example_config, example_config_file)
 
 # Clear all position control gains for all the actuators
 cmd = arm.pending_command
@@ -65,7 +66,7 @@ if enable_logging:
     arm.group.start_log('dir', 'logs', mkdirs=True)
 
 print('Commanded gravity-compensated zero force to the arm.')
-print('  💪 (B2) - Toggles an impedance controller on/off:')
+print('  📌 (B2) - Toggles an impedance controller on/off:')
 print('            ON  - Apply controller based on current position')
 print('            OFF - Go back to gravity-compensated mode')
 print('  📈 (B1) - Exits the demo, and plots graphs. May take a while.')

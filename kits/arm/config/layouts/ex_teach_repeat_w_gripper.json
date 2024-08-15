@@ -79,7 +79,7 @@
       "width": 0.05,
       "height": 0.5,
       "parameters": {
-          "text": "Time to Waypoint",
+          "text": "⏱️",
           "steps": 10,
           "min": -1,
           "max": 1,

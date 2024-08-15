@@ -2,34 +2,35 @@
 
 import hebi
 from time import time, sleep
-from hebi import arm as arm_api
-from demo_util import create_demo_from_config
+from hebi_util import create_mobile_io_from_config
 
 # Initialize the interface for network connected modules
 lookup = hebi.Lookup()
 sleep(2)
 
 # Config file
-example_config_file = "config/examples/ex_teach_repeat.cfg.yaml"
+example_config_file = "config/ex_teach_repeat.cfg.yaml"
+example_config = hebi.config.load_config(example_config_file)
 
 # Set up arm, and mobile_io from config
-example_config = hebi.config.load_config(example_config_file)
-arm, mobile_io, _ = create_demo_from_config(lookup, example_config)
+arm = hebi.arm.create_from_config(lookup, example_config)
+mobile_io = create_mobile_io_from_config(lookup, example_config, example_config_file)
 
 # Demo Variables
 abort_flag = False
 run_mode = "training"
-goal = arm_api.Goal(arm.size)
+goal = hebi.arm.Goal(arm.size)
 base_travel_time = example_config.user_data['base_travel_time']
 min_travel_time = example_config.user_data['min_travel_time']
 
 # Print Instructions
-instructions = """B1 - Add waypoint (stop) 📌
-B2 - Add waypoint (flow) 🚏
-A3 - Up/down for longer/shorter time to waypoint ⏱️
-B3 - Toggle training/playback 🔄
-B4 - Clear waypoints 🗑️
-B8 - Quit ❌
+instructions = """
+📌 - Add waypoint (stop)
+🚏 - Add waypoint (flow)
+🔄 - Toggle training/playback
+🗑️ - Clear waypoints
+⏱️ - Up/down for longer/shorter time to waypoint
+❌ - Quit
 """
 print(instructions)
 mobile_io.clear_text()

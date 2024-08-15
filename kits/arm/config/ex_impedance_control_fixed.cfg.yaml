@@ -2,10 +2,10 @@
 version: 1.0
 families: ["Arm"]
 names: ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3"]
-hrdf: "../hrdf/A-2085-06.hrdf"
+hrdf: "hrdf/A-2085-06.hrdf"
 
 gains:
-  default: "../gains/A-2085-06.xml"
+  default: "gains/A-2085-06.xml"
 
 plugins:
 
@@ -24,20 +24,19 @@ plugins:
   # by setting 'enabled' to true. The gains are in the form of
   # [x, y, z, rx, ry, rz]. Setting gains of zero deactivates
   # the corresponding degree of translation or rotation.
-  # These gains correspond to a rotational spring emulating a gimbal
+  # These gains correspond to a controller that rigidly maintains a fixed pose
   - type: ImpedanceController
     name: impedanceController
     enabled: true
     ramp_time: 0
     gains_in_end_effector_frame: true
-    kp: [0, 0, 0, 8, 8, 1] # (N/m) or (Nm/rad)
-    kd: [0, 0, 0, 0, 0, 0] # (N/(m/sec)) or (Nm/(rad/sec))
-    ki: [0, 0, 0, 0.5, 0.5, 0.5]
-    i_clamp: [0, 0, 0, 1, 1, 1] # max value
+    kp: [300, 300, 300, 5, 5, 1] # (N/m) or (Nm/rad)
+    kd: [5, 5, 5, 0, 0, 0] # (N/(m/sec)) or (Nm/(rad/sec))
+    ki: [20, 20, 20, 0.5, 0.5, 0.5]
+    i_clamp: [10, 10, 10, 1, 1, 1] # max value
 
 user_data:
 
-  mobile_io:
-  family: "Arm"
-  layout: "../layouts/ex_impedance_control_gimbal.json"
-  name: "mobileIO"
+  mobile_io_family: "Arm"
+  mobile_io_name: "mobileIO"
+  mobile_io_layout: "layouts/ex_impedance_control_fixed.json"

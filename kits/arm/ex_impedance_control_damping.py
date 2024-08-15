@@ -21,7 +21,7 @@ The following example is for the "Damping" demo:
 
 import hebi
 from time import sleep
-from demo_util import create_demo_from_config
+from hebi_util import create_mobile_io_from_config
 import numpy as np
 from plotting import draw_plots
 
@@ -35,11 +35,12 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Config file
-example_config_file = "config/examples/ex_impedance_control_damping.cfg.yaml"
+example_config_file = "config/ex_impedance_control_damping.cfg.yaml"
+example_config = hebi.config.load_config(example_config_file)
 
 # Set up arm, and mobile_io from config
-example_config = hebi.config.load_config(example_config_file)
-arm, mobile_io, _ = create_demo_from_config(lookup, example_config)
+arm = hebi.arm.create_from_config(lookup, example_config)
+mobile_io = create_mobile_io_from_config(lookup, example_config, example_config_file)
 
 # Retrieve the impedance control plugin to be altered later
 impedance_controller = arm.get_plugin_by_type(hebi.arm.ImpedanceController)
@@ -58,12 +59,12 @@ mode = -1
 prevmode = -1
 
 # Arrange different gains in an ordered list
-damping_kp = [example_config.user_data['overdamped']['kp'], 
-              example_config.user_data['critically_damped']['kp'], 
-              example_config.user_data['underdamped']['kp']]
-damping_kd = [example_config.user_data['overdamped']['kd'], 
-              example_config.user_data['critically_damped']['kd'], 
-              example_config.user_data['underdamped']['kd']]
+damping_kp = [example_config.user_data['overdamped_kp'], 
+              example_config.user_data['critically_damped_kp'], 
+              example_config.user_data['underdamped_kp']]
+damping_kd = [example_config.user_data['overdamped_kd'], 
+              example_config.user_data['critically_damped_kd'], 
+              example_config.user_data['underdamped_kd']]
 
 # Increase feedback frequency since we're calculating velocities at the
 # high level for damping. Going faster can help reduce a little bit of

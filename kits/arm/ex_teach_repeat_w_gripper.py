@@ -3,18 +3,20 @@
 import os
 import hebi
 from time import time, sleep
-from demo_util import create_demo_from_config
+from hebi_util import create_mobile_io_from_config, create_gripper_from_config
 
 # Set up to find actuators on the network
 lookup = hebi.Lookup()
 sleep(2)
 
 # Config file
-example_config_file = "config/examples/ex_teach_repeat_w_gripper.cfg.yaml"
+example_config_file = "config/ex_teach_repeat_w_gripper.cfg.yaml"
+example_config = hebi.config.load_config(example_config_file)
 
 # Set up arm, mobile_io, and gripper from config
-example_config = hebi.config.load_config(example_config_file)
-arm, mobile_io, gripper = create_demo_from_config(lookup, example_config)
+arm = hebi.arm.create_from_config(lookup, example_config)
+mobile_io = create_mobile_io_from_config(lookup, example_config, example_config_file)
+gripper = create_gripper_from_config(lookup, example_config, example_config_file, arm)
 
 # Demo Variables
 abort_flag = False
@@ -25,13 +27,14 @@ base_travel_time = example_config.user_data['base_travel_time']
 min_travel_time = example_config.user_data['min_travel_time']
 
 # Print Instructions
-instructions = """B1 - Add waypoint (stop)
-B2 - Add waypoint (stop) and toggle the gripper
-B3 - Add waypoint (flow)
-B5 - Toggle training/playback
-B6 - Clear waypoints
-A3 - Up/down for longer/shorter time to waypoint
-B8 - Quit
+instructions = """
+📌 - Add waypoint (stop)
+🤌 - Add waypoint (stop) and toggle the gripper
+🚏 - Add waypoint (flow)
+🔄 - Toggle training/playback
+🗑️ - Clear waypoints
+⏱️ - Up/down for longer/shorter time to waypoint
+❌ - Quit
 """
 print(instructions)
 mobile_io.clear_text()

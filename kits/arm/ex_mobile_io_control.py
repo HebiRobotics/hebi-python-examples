@@ -9,28 +9,29 @@ The correct way to store waypoints is by using se3 coordinates, and converting t
 import hebi
 import numpy as np
 from time import sleep
-from demo_util import create_demo_from_config
+from hebi_util import create_mobile_io_from_config
 
 # Initialize the interface for network connected modules
 lookup = hebi.Lookup()
 sleep(2)
 
 # Config file
-example_config_file = "config/examples/ex_mobile_io_control.cfg.yaml"
+example_config_file = "config/ex_mobile_io_control.cfg.yaml"
+example_config = hebi.config.load_config(example_config_file)
 
 # Set up arm, and mobile_io from config
-example_config = hebi.config.load_config(example_config_file)
-arm, mobile_io, _ = create_demo_from_config(lookup, example_config)
+arm = hebi.arm.create_from_config(lookup, example_config)
+mobile_io = create_mobile_io_from_config(lookup, example_config, example_config_file)
 
 # Demo Variables
 abort_flag = False
 goal = hebi.arm.Goal(arm.size)
-waypoints = np.asarray(example_config.user_data['waypoints'])
+waypoints = np.array([example_config.user_data['waypoint_1'], example_config.user_data['waypoint_2'], example_config.user_data['waypoint_3']])
 
 # Print Instructions
 instructions = """B1-B3 - Waypoints 1-3
-B6 - Grav Comp Mode
-B8 - Quit
+🌍 - Grav Comp Mode
+❌ - Quit
 """
 print(instructions)
 mobile_io.clear_text()

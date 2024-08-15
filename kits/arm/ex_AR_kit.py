@@ -4,17 +4,19 @@ import hebi
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from time import sleep
-from demo_util import create_demo_from_config
+from hebi_util import create_mobile_io_from_config
 
+# Initialize the interface for network connected modules
 lookup = hebi.Lookup()
 sleep(2)
 
 # Config file
-example_config_file = "config/examples/ex_AR_kit.cfg.yaml"
+example_config_file = "config/ex_AR_kit.cfg.yaml"
+example_config = hebi.config.load_config(example_config_file)
 
 # Set up arm, and mobile_io from config
-example_config = hebi.config.load_config(example_config_file)
-arm, mobile_io, _ = create_demo_from_config(lookup, example_config)
+arm = hebi.arm.create_from_config(lookup, example_config)
+mobile_io = create_mobile_io_from_config(lookup, example_config, example_config_file)
 
 # Demo Variables
 abort_flag = False
@@ -37,6 +39,15 @@ arm.FK(example_config.user_data['home_position'], xyz_out=xyz_home, orientation_
 # Get the states for the mobile device
 xyz_phone_init = np.zeros(3)
 rot_phone_init = np.zeros((3, 3))
+
+instructions = (
+    "Mode: {}\n"
+    "🏠 - Home\n"
+    "📲 - AR Control\n"
+    "🌍 - Grav Comp\n"
+    "❌ - Quit")
+mobile_io.clear_text()
+mobile_io.add_text(instructions.format(run_mode))
 
 #######################
 ## Main Control Loop ##
