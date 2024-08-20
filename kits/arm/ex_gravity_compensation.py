@@ -27,7 +27,6 @@ if enable_logging:
 #######################
 
 print('Commanding gravity-compensated zero torques to the arm.')
-# while button 1 is not pressed
 while arm.update():
 
     # When no goal is set, the arm automatically returns to grav-comp mode
