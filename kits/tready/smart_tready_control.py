@@ -140,6 +140,10 @@ def setup_mobile_io(m: 'MobileIO'):
         elif new_state is controller.state.DISCONNECTED:
             print('Lost connection to Controller. Please reconnect.')
             controller.base.set_color('blue')
+        
+        elif new_state is controller.state.EMERGENCY_STOP:
+            controller.base.set_color('yellow')
+            set_mobile_io_instructions(m, 'Emergency Stop Activated', color="red")
 
         elif new_state is controller.state.EXIT:
             controller.base.set_color("red")

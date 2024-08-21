@@ -84,6 +84,10 @@ class TreadedBase:
         self.flipper_traj = None
 
         self.robot_model = None
+    
+    @property
+    def mstop_pressed(self):
+        return any(self.fbk.mstop_state == 0)
 
     @property
     def has_active_trajectory(self):
@@ -266,6 +270,7 @@ class TreadyControlState(Enum):
     ALIGNING = auto()
     TELEOP = auto()
     DISCONNECTED = auto()
+    EMERGENCY_STOP = auto()
     EXIT = auto()
 
 
@@ -325,8 +330,12 @@ class TreadyControl:
 
         if self.state is self.state.EXIT:
             return
+        
+        if self.base.mstop_pressed and self.state is not self.state.EMERGENCY_STOP:
+            self.transition_to(t_now, self.state.EMERGENCY_STOP)
+            return
 
-        if tready_input is None:
+        if tready_input is None and self.state is not self.state.DISCONNECTED and self.state is not self.state.EMERGENCY_STOP:
             if t_now - self.mobile_last_fbk_t > 1.0:
                 print("mobileIO timeout, disabling motion")
                 self.transition_to(t_now, self.state.DISCONNECTED)
@@ -334,8 +343,14 @@ class TreadyControl:
         
         # Reset the timeout
         self.mobile_last_fbk_t = t_now
+
+        if self.state is self.state.EMERGENCY_STOP:
+            if not self.base.mstop_pressed:
+                print("Emergency Stop Released")
+                self.transition_to(t_now, self.state.TELEOP)
+        
         # Transition to teleop if mobileIO is reconnected
-        if self.state is self.state.DISCONNECTED:
+        elif self.state is self.state.DISCONNECTED:
             self.mobile_last_fbk_t = t_now
             print('Controller reconnected, demo continued.')
             self.transition_to(t_now, self.state.TELEOP)
@@ -411,8 +426,6 @@ class TreadyControl:
 
         for handler in self._update_handlers:
             handler(self)
-        
-                    
 
     def transition_to(self, t_now: float, state: TreadyControlState):
         # self transitions are noop
@@ -432,6 +445,11 @@ class TreadyControl:
 
         elif state is self.state.DISCONNECTED:
             print("mobileIO timeout, disabling motion")
+            self.base.chassis_traj = None
+            self.base.flipper_traj = None
+        
+        elif state is self.state.EMERGENCY_STOP:
+            print("Emergency Stop Pressed, disabling motion")
             self.base.chassis_traj = None
             self.base.flipper_traj = None
 
