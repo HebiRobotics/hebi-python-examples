@@ -5,6 +5,7 @@ from time import time, sleep
 from enum import Enum, auto
 
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 import hebi
 from hebi.util import create_mobile_io
@@ -30,10 +31,16 @@ class TreadedBase:
     #         |
     #   3     |    4
 
-    WHEEL_DIAMETER = 0.105
-    WHEEL_BASE = 0.400
+    WHEEL_DIAMETER = 0.125 # m
+    WHEEL_BASE = 0.285 # m
 
     WHEEL_RADIUS = WHEEL_DIAMETER / 2
+
+    TORSO_VEL_SCALE = 1 # rad/s
+    TORSO_TORQUE_SCALE = 2.5 # Nm
+    TORQUE_MODE_MAX = 25 # Nm
+    TORQUE_ANGLE_OFFSET = np.pi/4
+    FLIPPER_HOME_POS = np.pi/2
 
     def __init__(self, group: 'Group', chassis_ramp_time: float, flipper_ramp_time: float):
         self.group = group
@@ -48,6 +55,8 @@ class TreadedBase:
         self.wheel_cmd = self.cmd.create_view([0, 1, 2, 3])
         self.flipper_cmd = self.cmd.create_view([4, 5, 6, 7])
 
+        self.flipper_sign = np.array([-1, 1, 1, -1])
+
         self.chassis_ramp_time = chassis_ramp_time
         self.flipper_ramp_time = flipper_ramp_time
 
@@ -56,10 +65,15 @@ class TreadedBase:
 
         self.t_prev: float = time()
         self._aligned_flipper_mode = False
-        self._is_aligning = False
 
         self.chassis_traj = None
         self.flipper_traj = None
+
+        self.robot_model = None
+    
+    @property
+    def mstop_pressed(self):
+        return any(self.fbk.mstop_state == 0)
 
     @property
     def has_active_trajectory(self):
@@ -68,24 +82,6 @@ class TreadedBase:
         if self.flipper_traj is not None and self.t_prev < self.flipper_traj.end_time:
             return True
         return False
-
-    @property
-    def is_aligning(self):
-        active_align = self._is_aligning and self.has_active_trajectory
-        return active_align and not self.flippers_aligned
-
-    @property
-    def aligned_flipper_mode(self):
-        return self._aligned_flipper_mode
-
-    @aligned_flipper_mode.setter
-    def aligned_flipper_mode(self, value):
-        if value == self.aligned_flipper_mode:
-            return
-        elif value:
-            self.align_flippers()
-        else:
-            self.unlock_flippers()
 
     @property
     def wheel_to_chassis_vel(self) -> 'npt.NDArray[np.float64]':
@@ -99,68 +95,100 @@ class TreadedBase:
     @property
     def chassis_to_wheel_vel(self) -> 'npt.NDArray[np.float64]':
         return np.array([
-            [1 / self.WHEEL_RADIUS, 0, self.WHEEL_BASE / (2 * self.WHEEL_RADIUS)],
-            [-1 / self.WHEEL_RADIUS, 0, self.WHEEL_BASE / (2 * self.WHEEL_RADIUS)],
-            [1 / self.WHEEL_RADIUS, 0, self.WHEEL_BASE / (2 * self.WHEEL_RADIUS)],
-            [-1 / self.WHEEL_RADIUS, 0, self.WHEEL_BASE / (2 * self.WHEEL_RADIUS)],
+            [1 / self.WHEEL_RADIUS, 0, self.WHEEL_BASE / self.WHEEL_DIAMETER],
+            [-1 / self.WHEEL_RADIUS, 0, self.WHEEL_BASE / self.WHEEL_DIAMETER],
+            [1 / self.WHEEL_RADIUS, 0, self.WHEEL_BASE / self.WHEEL_DIAMETER],
+            [-1 / self.WHEEL_RADIUS, 0, self.WHEEL_BASE / self.WHEEL_DIAMETER],
         ])
 
     @property
-    def flipper_aligned_front(self):
-        return np.abs(self.flipper_fbk.position_command[0] + self.flipper_fbk.position_command[1]) < 0.01
-
-    @property
-    def flipper_aligned_back(self):
-        return np.abs(self.flipper_fbk.position_command[2] + self.flipper_fbk.position_command[3]) < 0.01
-
-    @property
-    def flippers_aligned(self):
-        return self.flipper_aligned_front and self.flipper_aligned_back
-
-    @property
     def aligned_flipper_position(self) -> 'npt.NDArray[np.float64]':
-        front_mean = np.mean([self.flipper_fbk.position_command[0], -1 * self.flipper_fbk.position_command[1]])
-        back_mean = np.mean([self.flipper_fbk.position_command[2], -1 * self.flipper_fbk.position_command[3]])
-        return np.array([front_mean, -front_mean, back_mean, -back_mean], dtype=np.float64)
+        mean_pos = np.mean(np.abs(self.flipper_fbk.position))
+        return np.array([-mean_pos, mean_pos, mean_pos, -mean_pos], dtype=np.float64)
 
-    def update(self, t_now: float):
-        dt = t_now - self.t_prev
+    @property
+    def flipper_height(self) -> 'npt.NDArray[np.float64]':
+        x = np.cos(self.flipper_sign * self.TORQUE_ANGLE_OFFSET + self.flipper_fbk.position)
+        return (1 + self.WHEEL_BASE * np.clip(x, 0, 1) / self.WHEEL_RADIUS)
+    
+    @property
+    def pose(self) -> 'npt.NDArray[np.float64]':
+        # Use Pose estimate of a single flipper actuator in Tready to get the body Pose estimate
+        pos = self.fbk.position
+        position = []
+        for idx in range(0, 4):
+            position.append(pos[idx+4])
+            position.append(pos[idx])
+
+        frames = self.robot_model.get_forward_kinematics_mat('com', position)
+        track_rot_mat = frames[10, :3, :3]
+
+        q_track = self.fbk.orientation[1]
+        rot_mat_tready = R.from_quat(q_track, scalar_first=True).as_matrix()
+        rot_mat_tready = rot_mat_tready @ track_rot_mat.T
+
+        # convert to euler
+        rpy = R.from_matrix(rot_mat_tready).as_euler('xyz', degrees=True)
+        return rpy
+    
+    def update_feedback(self):
         self.group.get_next_feedback(reuse_fbk=self.fbk)
 
+    def update(self, t_now: float, get_feedback: bool = True):
+        if get_feedback:
+            self.group.get_next_feedback(reuse_fbk=self.fbk)
+
         if self.flipper_traj is None and self.chassis_traj is None:
-            print("No trajectories, zeroing velocity")
+            # print("No trajectories, zeroing velocity")
             self.cmd.velocity = 0.0
         else:
             if self.chassis_traj is not None:
                 # chassis update
                 t = min(t_now, self.chassis_traj.end_time)
                 [_, vel, _] = self.chassis_traj.get_state(t)
-                self.wheel_cmd.velocity = self.chassis_to_wheel_vel @ vel
-                self.wheel_cmd.position += self.wheel_cmd.velocity * dt
+
+                flipper_height = self.flipper_height
+                # Moving average setup below, in an attempt to make Tready less wobbly on tiptoes
+                gyro_z = self.flipper_fbk.gyro[:, 2]
+
+                self.wheel_cmd.position[:] = np.nan
+                self.wheel_cmd.velocity = self.chassis_to_wheel_vel @ vel + gyro_z * flipper_height
+                for i in range(len(self.wheel_cmd.effort)):
+                    if flipper_height[i] > 1 - 1e-12:
+                        self.wheel_cmd.effort[i] = np.nan
+                    else:
+                        self.wheel_cmd.effort[i] = self.flipper_sign[i] * np.tanh(-flipper_height[i] * (1 + self.WHEEL_BASE / self.WHEEL_RADIUS))
 
             if self.flipper_traj is not None:
                 # flipper update
                 t = min(t_now, self.flipper_traj.end_time)
-                [pos, vel, _] = self.flipper_traj.get_state(t)
+                [_, vel, _] = self.flipper_traj.get_state(t)
 
                 self.flipper_cmd.velocity = vel
-                if self.aligned_flipper_mode:
-                    if not self.flippers_aligned:
-                        self.flipper_cmd.position = pos
-                    else:
-                        self.flipper_cmd.position = self.aligned_flipper_position + vel * dt
-                else:
-                    self.flipper_cmd.position += vel * dt
+                self.flipper_cmd.position += vel * (t_now - self.t_prev)
 
         self.t_prev = t_now
 
     def send(self):
         self.group.send_command(self.cmd)
+    
+    def set_flipper_cmd(self, p=None, v=None, e=None):
+        if p is not None:
+            self.flipper_cmd.position = p
+        if v is not None:
+            self.flipper_cmd.velocity = v
+        if e is not None:
+            self.flipper_cmd.effort = e
+    
+    def set_chassis_cmd(self, p=None, v=None, e=None):
+        if p is not None:
+            self.wheel_cmd.position = p
+        if v is not None:
+            self.wheel_cmd.velocity = v
+        if e is not None:
+            self.wheel_cmd.effort = e
 
     def set_flipper_trajectory(self, t_now: float, ramp_time: float, p=None, v=None):
-        # This is set to true after this call, if the trajectory is an aligning one
-        # Otherwise we want it set to False, so clear it now
-        self._is_aligning = False
         times = [t_now, t_now + ramp_time]
         positions = np.empty((4, 2), dtype=np.float64)
         velocities = np.empty((4, 2), dtype=np.float64)
@@ -187,7 +215,7 @@ class TreadedBase:
         efforts = np.empty((3, 2))
 
         if self.chassis_traj is not None:
-            t = min(t_now, self.flipper_traj.end_time)
+            t = min(t_now, self.chassis_traj.end_time)
             positions[:, 0], velocities[:, 0], efforts[:, 0] = self.chassis_traj.get_state(t)
         else:
             positions[:, 0] = 0.0
@@ -200,19 +228,16 @@ class TreadedBase:
 
         self.chassis_traj = hebi.trajectory.create_trajectory(times, positions, velocities, efforts)
 
-    def align_flippers(self, t_now: 'Optional[float]'=None):
-        t_now = t_now or self.t_prev
-        print("FLIPPER ALIGNMENT ON")
-        self._aligned_flipper_mode = True
-        self.chassis_traj = None
-        if not self.flippers_aligned:
-            print("Setting aligning trajectory")
-            self.set_flipper_trajectory(t_now, 3.0, p=self.aligned_flipper_position)
-            self._is_aligning = True
+    def home(self, t_now: float):
+        flipper_home = self.flipper_sign * self.FLIPPER_HOME_POS
+        self.set_chassis_vel_trajectory(t_now, 0.25, [0, 0, 0])
+        self.set_flipper_trajectory(t_now, 3.0, p=flipper_home)
 
-    def unlock_flippers(self):
-        print("FLIPPER ALIGNMENT OFF")
-        self._aligned_flipper_mode = False
+    def align_flippers(self, t_now: float):
+        self.set_flipper_trajectory(t_now, 3.0, p=self.aligned_flipper_position)
+    
+    def set_robot_model(self, hrdf_file: str):
+        self.robot_model = hebi.robot_model.import_from_hrdf(hrdf_file)
 
     def set_color(self, color: 'hebi.Color | str'):
         color_cmd = hebi.GroupCommand(self.group.size)
@@ -228,23 +253,32 @@ class TreadedBase:
 class TreadyControlState(Enum):
     STARTUP = auto()
     HOMING = auto()
+    ALIGNING = auto()
     TELEOP = auto()
     DISCONNECTED = auto()
+    EMERGENCY_STOP = auto()
     EXIT = auto()
 
 
 class ChassisVelocity:
-    def __init__(self, x: float, rz: float):
+    def __init__(self, x: float = 0, rz: float = 0):
         self.x = x
         self.rz = rz
-
+    
+    def __repr__(self) -> str:
+        return f'ChassisVelocity(x={self.x}, z={self.z}, rz={self.rz})'
 
 class TreadyInputs:
-    def __init__(self, home: bool, base_motion: 'ChassisVelocity', flippers: 'list[float]', align_flippers: bool):
+    def __init__(self, home: bool = False, base_motion: 'ChassisVelocity' = None, flippers: 'list[float]' = None, align_flippers: bool = False, torque_mode: bool = True, torque_toggle: bool = False):
         self.home = home
         self.base_motion = base_motion
         self.flippers = flippers
         self.align_flippers = align_flippers
+        self.torque_mode = torque_mode
+        self.torque_toggle = torque_toggle
+    
+    def __repr__(self) -> str:
+        return f'TreadyInputs(home={self.home}, base_motion={self.base_motion}, flippers={self.flippers}, align_flippers={self.align_flippers}, torque_mode={self.torque_mode}, torque_toggle={self.torque_toggle})'
 
 
 class TreadyControl:
@@ -255,9 +289,13 @@ class TreadyControl:
         self.state = TreadyControlState.STARTUP
         self.base = base
 
-        self.SPEED_MAX_LIN = 0.15  # m/s
-        self.SPEED_MAX_ROT = self.SPEED_MAX_LIN / base.WHEEL_BASE  # rad/s
+        self.SPEED_MAX_LIN = 0.45  # m/s
+        self.SPEED_MAX_ROT = self.SPEED_MAX_LIN / (base.WHEEL_BASE / 2) # rad/s
         self._transition_handlers: 'list[Callable[[TreadyControl, TreadyControlState], None]]' = []
+        self._update_handlers: 'list[Callable[[TreadyControl], None]]' = []
+
+        # Variable for torque mode update handler
+        self.torque_labels = None
 
     @property
     def running(self):
@@ -270,77 +308,110 @@ class TreadyControl:
         self.base.group.stop_log()
         self.base.group.start_log("logs", mkdirs=True)
 
-    def compute_velocities(self, chassis_inputs: TreadyInputs):
-        # Flipper Control
-        [flip1, flip2, flip3, flip4] = chassis_inputs.flippers
-
-        if chassis_inputs.align_flippers:
-            f_vel1 = max(abs(flip1), abs(flip2)) * np.sign(flip1 + flip2) * self.FLIPPER_VEL_SCALE
-            f_vel2 = -f_vel1
-            f_vel3 = max(abs(flip3), abs(flip4)) * np.sign(flip3 + flip4) * self.FLIPPER_VEL_SCALE
-            f_vel4 = -f_vel3
-
-        else:
-            f_vel1 = flip1 * self.FLIPPER_VEL_SCALE
-            f_vel2 = -1 * flip2 * self.FLIPPER_VEL_SCALE
-            f_vel3 = flip3 * self.FLIPPER_VEL_SCALE
-            f_vel4 = -1 * flip4 * self.FLIPPER_VEL_SCALE
-
-        flipper_vels = [f_vel1, f_vel2, f_vel3, f_vel4]
-
-        # Mobile Base Control
-
-        vel_x = self.SPEED_MAX_LIN * chassis_inputs.base_motion.x
-        vel_y = 0
-        vel_rot = self.SPEED_MAX_ROT * chassis_inputs.base_motion.rz
-
-        chassis_vels: 'npt.NDArray[np.float64]' = np.array([vel_x, vel_y, vel_rot], dtype=np.float64)
-
-        return chassis_vels, flipper_vels
-
     def send(self):
         self.base.send()
 
     def update(self, t_now: float, tready_input: 'Optional[TreadyInputs]'=None):
-        self.base.update(t_now)
+        self.base.update_feedback()
 
         if self.state is self.state.EXIT:
             return
+        
+        if self.base.mstop_pressed and self.state is not self.state.EMERGENCY_STOP:
+            self.transition_to(t_now, self.state.EMERGENCY_STOP)
+            return
 
-        if tready_input is None:
+        if tready_input is None and self.state is not self.state.DISCONNECTED and self.state is not self.state.EMERGENCY_STOP:
             if t_now - self.mobile_last_fbk_t > 1.0:
                 print("mobileIO timeout, disabling motion")
                 self.transition_to(t_now, self.state.DISCONNECTED)
             return
-        else:
+        
+        # Reset the timeout
+        self.mobile_last_fbk_t = t_now
+
+        if self.state is self.state.EMERGENCY_STOP:
+            if not self.base.mstop_pressed:
+                print("Emergency Stop Released")
+                self.transition_to(t_now, self.state.TELEOP)
+        
+        # Transition to teleop if mobileIO is reconnected
+        elif self.state is self.state.DISCONNECTED:
             self.mobile_last_fbk_t = t_now
+            print('Controller reconnected, demo continued.')
+            self.transition_to(t_now, self.state.TELEOP)
+        
+        # After startup, transition to homing
+        elif self.state is self.state.STARTUP:
+            self.transition_to(t_now, self.state.HOMING)
 
-            if tready_input.home:
-                self.transition_to(t_now, self.state.HOMING)
-
-            elif self.state is self.state.DISCONNECTED:
-                self.mobile_last_fbk_t = t_now
+        # If homing/aligning is complete, transition to teleop
+        elif self.state is self.state.HOMING or self.state is self.state.ALIGNING:
+            if not self.base.has_active_trajectory:
                 self.transition_to(t_now, self.state.TELEOP)
 
-            elif self.state is self.state.HOMING:
-                base_complete = not self.base.has_active_trajectory
-                if base_complete:
-                    self.transition_to(t_now, self.state.TELEOP)
+        # Teleop mode
+        elif self.state is self.state.TELEOP:
+            # Check for home button
+            if tready_input.home:
+                self.transition_to(t_now, self.state.HOMING)
+            # Check for flipper alignment
+            elif tready_input.align_flippers:
+                self.transition_to(t_now, self.state.ALIGNING)
+            else:
+                if tready_input.torque_mode:
+                    torque_max = self.base.TORQUE_MODE_MAX * ((tready_input.flippers[0] + 1) / 2)
+                    torque_angle = (1 + tready_input.flippers[1]) * self.base.TORQUE_ANGLE_OFFSET
+                    roll_angle, pitch_angle, _ = self.base.pose
 
-            elif self.state is self.state.TELEOP:
-                desired_flipper_mode = tready_input.align_flippers
-                if self.base.aligned_flipper_mode != desired_flipper_mode:
-                    self.base.aligned_flipper_mode = desired_flipper_mode
-                elif self.base.is_aligning:
-                    # ignore new base commands while flippers are aligning
-                    pass
+                    roll_adjust = (tready_input.flippers[2] + 1) / 2
+                    pitch_adjust = (tready_input.flippers[3] + 1) / 2
+
+                    if roll_angle > 0:
+                        roll_torque = np.array([0, -1, 0, 1]) * roll_angle * self.base.TORSO_TORQUE_SCALE * roll_adjust
+                    else:
+                        roll_torque = np.array([-1, 0, 1, 0]) * roll_angle * self.base.TORSO_TORQUE_SCALE * roll_adjust
+                    
+                    if pitch_angle > 0:
+                        pitch_torque = np.array([1, -1, 0, 0]) * pitch_angle * self.base.TORSO_TORQUE_SCALE * pitch_adjust
+                    else:
+                        pitch_torque = np.array([0, 0, 1, -1]) * pitch_angle * self.base.TORSO_TORQUE_SCALE * pitch_adjust
+                    
+                    level_torque = roll_torque + pitch_torque
+                    flipper_efforts = -np.tanh(self.base.flipper_fbk.position - self.base.flipper_sign * torque_angle) * torque_max + level_torque
+
+                    self.base.flipper_traj = None
+                    self.base.set_flipper_cmd(p=np.ones(4) * np.nan, v = np.ones(4) * np.nan, e=flipper_efforts)
+
+                    self.torque_labels = [
+                        f"Max\nEff:\n{np.round(torque_max, 2)}",
+                        f"Torque\nAngle:\n{np.round(torque_angle, 2)}",
+                        f"Roll:\n{np.round(roll_adjust)}",
+                        f"Pitch:\n{np.round(pitch_adjust)}"
+                    ]
                 else:
-                    chassis_vels, flipper_vels = self.compute_velocities(tready_input)
-                    self.base.set_chassis_vel_trajectory(t_now, self.base.chassis_ramp_time, chassis_vels)
+                    # Flipper Control
+                    flipper_vels = - self.base.flipper_sign * tready_input.flippers * self.FLIPPER_VEL_SCALE
+
+                    if tready_input.torque_toggle:
+                        self.base.set_flipper_cmd(p=self.base.flipper_fbk.position, e=np.ones(4) * np.nan)
                     self.base.set_flipper_trajectory(t_now, self.base.flipper_ramp_time, v=flipper_vels)
 
-            elif self.state is self.state.STARTUP:
-                self.transition_to(t_now, self.state.HOMING)
+                    self.torque_labels = None
+                
+                # Mobile Base Control
+                chassis_vels: 'npt.NDArray[np.float64]' = np.array([
+                    self.SPEED_MAX_LIN * tready_input.base_motion.x,
+                    0,
+                    self.SPEED_MAX_ROT * tready_input.base_motion.rz
+                ], dtype=np.float64)
+
+                self.base.set_chassis_vel_trajectory(t_now, self.base.chassis_ramp_time, chassis_vels)
+        
+        self.base.update(t_now, get_feedback=False)
+
+        for handler in self._update_handlers:
+            handler(self)
 
     def transition_to(self, t_now: float, state: TreadyControlState):
         # self transitions are noop
@@ -349,18 +420,22 @@ class TreadyControl:
 
         if state is self.state.HOMING:
             print("TRANSITIONING TO HOMING")
-            # build trajectory
-            flipper_home = np.array([-1, 1, 1, -1]) * np.deg2rad(15 + 45)
-            self.base.set_chassis_vel_trajectory(t_now, 0.25, [0, 0, 0])
-
-            self.base.set_flipper_trajectory(t_now, 5.0, p=flipper_home)
-            #print(f'Flipper Home: {flipper_home}')
+            self.base.home(t_now)
+        
+        elif state is self.state.ALIGNING:
+            print("TRANSITIONING TO ALIGNING")
+            self.base.align_flippers(t_now)
 
         elif state is self.state.TELEOP:
             print("TRANSITIONING TO TELEOP")
 
         elif state is self.state.DISCONNECTED:
-            print("TRANSITIONING TO STOPPED")
+            print("mobileIO timeout, disabling motion")
+            self.base.chassis_traj = None
+            self.base.flipper_traj = None
+        
+        elif state is self.state.EMERGENCY_STOP:
+            print("Emergency Stop Pressed, disabling motion")
             self.base.chassis_traj = None
             self.base.flipper_traj = None
 
@@ -370,6 +445,9 @@ class TreadyControl:
         for handler in self._transition_handlers:
             handler(self, state)
         self.state = state
+    
+    def stop(self):
+        self.transition_to(time(), self.state.EXIT)
 
 
 def config_mobile_io(m: 'MobileIO'):
