@@ -18,20 +18,6 @@ if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
 
 
-def movmean(data, window):
-    """
-    Calculate the moving average of a dataset (similar to MATLAB's movmean function)
-    Generated using Claude
-    """
-    # Create a 2D array of rolling windows
-    shape = data.shape[:-1] + (data.shape[-1] - window + 1, window)
-    strides = data.strides + (data.strides[-1],)
-    rolling_windows = np.lib.stride_tricks.as_strided(data, shape=shape, strides=strides)
-    
-    # Calculate mean along the window axis, ignoring NaNs
-    return np.nanmean(rolling_windows, axis=-1)
-
-
 class TreadedBase:
     # FRAME CONVENTION:
     # ORIGIN = MID-POINT BETWEEN THE WHEELS
