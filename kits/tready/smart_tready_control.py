@@ -151,8 +151,10 @@ def setup_mobile_io(m: 'MobileIO'):
                 for i, label in enumerate(controller.torque_labels):
                     m.set_axis_label(i+3, label, blocking=False)
             else:
-                for i in range(3, 7):
-                    m.set_axis_label(i, '', blocking=False)
+                m.set_axis_label(front_left_slider, 'FL', blocking=False)
+                m.set_axis_label(front_right_slider, 'FR', blocking=False)
+                m.set_axis_label(back_left_slider, 'BL', blocking=False)
+                m.set_axis_label(back_right_slider, 'BR', blocking=False)
 
     return parse_mobile_io_feedback, update_mobile_io, update_torque_mode
 

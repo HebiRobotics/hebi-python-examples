@@ -332,7 +332,6 @@ class TreadyControl:
                 self.transition_to(t_now, self.state.DISCONNECTED)
             return
         
-
         # Reset the timeout
         self.mobile_last_fbk_t = t_now
         # Transition to teleop if mobileIO is reconnected
@@ -340,8 +339,6 @@ class TreadyControl:
             self.mobile_last_fbk_t = t_now
             print('Controller reconnected, demo continued.')
             self.transition_to(t_now, self.state.TELEOP)
-        
-
         
         # After startup, transition to homing
         elif self.state is self.state.STARTUP:
@@ -409,12 +406,9 @@ class TreadyControl:
                 ], dtype=np.float64)
 
                 self.base.set_chassis_vel_trajectory(t_now, self.base.chassis_ramp_time, chassis_vels)
-
-    
         
         self.base.update(t_now, get_feedback=False)
 
-        
         for handler in self._update_handlers:
             handler(self)
         
