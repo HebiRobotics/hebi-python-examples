@@ -105,7 +105,7 @@ def setup_arm_7dof(lookup: 'Lookup', family: str):
     return arm
 
 
-def setup_arm_6dof(lookup: 'Lookup', family: str):
+def setup_arm_6dof(lookup: 'Lookup', family: str, with_gripper: bool = True):
     root_dir, _ = os.path.split(__file__)
     # arm setup
     arm = hebi.arm.create(
@@ -116,15 +116,16 @@ def setup_arm_6dof(lookup: 'Lookup', family: str):
 
     arm.load_gains(os.path.join(root_dir, 'gains/A-2240-06.xml'))
 
-    # Add the gripper
-    gripper_group = lookup.get_group_from_names([family], ['gripperSpool'])
-    while gripper_group is None:
-        print(f'Looking for gripper module "{family}/gripperSpool"...')
-        sleep(1)
+    if with_gripper:
+        # Add the gripper
         gripper_group = lookup.get_group_from_names([family], ['gripperSpool'])
+        while gripper_group is None:
+            print(f'Looking for gripper module "{family}/gripperSpool"...')
+            sleep(1)
+            gripper_group = lookup.get_group_from_names([family], ['gripperSpool'])
 
-    gripper = hebi.arm.Gripper(gripper_group, -5, 1)
-    gripper.load_gains(os.path.join(root_dir, 'gains/gripper_spool_gains.xml'))
-    arm.set_end_effector(gripper)
+        gripper = hebi.arm.Gripper(gripper_group, -5, 1)
+        gripper.load_gains(os.path.join(root_dir, 'gains/gripper_spool_gains.xml'))
+        arm.set_end_effector(gripper)
 
     return arm

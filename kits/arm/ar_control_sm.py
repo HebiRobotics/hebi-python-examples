@@ -43,13 +43,13 @@ class ArmMobileIOControl:
         # 5 DoF home
         #self.arm_xyz_home = [0.34, 0.0, 0.23]
         # 6 DoF home
-        self.arm_xyz_home = [0.4, 0.0, 0.0]
+        self.arm_xyz_home = [0.5, 0.0, 0.0]
         self.arm_rot_home: 'npt.NDArray[np.float64]' = (R.from_euler('z', np.pi / 2) * R.from_euler('x', np.pi)).as_matrix()
 
         # 5 DoF seed
         #self.arm_seed_ik = np.array([0.25, -1.0, 0, -0.75, 0])
         # 6 DoF seed
-        self.arm_seed_ik = np.array([0, 0.5, 2, 3, -1.5, 0])
+        self.arm_seed_ik = np.array([0.3, 1.2, 2.2, 2.9, -1.57, 0])
         self.arm_home = self.arm.ik_target_xyz_so3(
             self.arm_seed_ik,
             self.arm_xyz_home,
@@ -127,9 +127,7 @@ class ArmMobileIOControl:
 
         if state is self.state.HOMING:
             print(self.namespace + "TRANSITIONING TO HOMING")
-            g = hebi.arm.Goal(self.arm.size)
-            g.add_waypoint(position=self.arm_home)
-            self.arm.set_goal(g)
+            self.home()
 
         elif state is self.state.TELEOP:
             print(self.namespace + "TRANSITIONING TO TELEOP")
@@ -162,6 +160,11 @@ class ArmMobileIOControl:
         arm_goal.add_waypoint(position=joint_target)
         return arm_goal
     
+    def home(self):
+        g = hebi.arm.Goal(self.arm.size)
+        g.add_waypoint(position=self.arm_home)
+        self.arm.set_goal(g)
+        
     def stop(self):
         self.transition_to(time(), self.state.EXIT)
 

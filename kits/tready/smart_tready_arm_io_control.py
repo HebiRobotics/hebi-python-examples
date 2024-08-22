@@ -150,33 +150,34 @@ if __name__ == "__main__":
     lookup = hebi.Lookup()
     sleep(2)
 
-    family = "Tready"
+    base_family = "Tready"
+    arm_family = "Arm"
     flipper_names = [f'T{n+1}_J1_flipper' for n in range(4)]
     wheel_names = [f'T{n+1}_J2_track' for n in range(4)]
 
     # mobileIO setup
     print('Looking for mobileIO device...')
-    m = create_mobile_io(lookup, family)
+    m = create_mobile_io(lookup, base_family)
     while m is None:
         print('Waiting for mobileIO device to come online...')
         sleep(1)
-        m = create_mobile_io(lookup, family)
+        m = create_mobile_io(lookup, base_family)
     
     print("mobileIO device found.")
     m.update()
     parse_mobile_io_feedback = setup_mobile_io(m)
 
     # Create Arm group
-    arm = setup_arm_6dof(lookup, family)
+    arm = setup_arm_6dof(lookup, arm_family, with_gripper=False)
     arm_control = ArmMobileIOControl(arm)
     arm_control.namespace = "[Arm] "
 
     # Create base group
-    base_group = lookup.get_group_from_names(family, wheel_names + flipper_names)
+    base_group = lookup.get_group_from_names(base_family, wheel_names + flipper_names)
     while base_group is None:
         print('Looking for Tready modules...')
         sleep(1)
-        base_group = lookup.get_group_from_names(family, wheel_names + flipper_names)
+        base_group = lookup.get_group_from_names(base_family, wheel_names + flipper_names)
     
     root_dir, _ = os.path.split(os.path.abspath(__file__))
     load_gains(base_group, os.path.join(root_dir, 'gains', 'smart-tready-gains.xml'))
