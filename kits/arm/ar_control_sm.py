@@ -170,36 +170,37 @@ class ArmMobileIOControl:
 
 
 def setup_mobile_io(m: 'MobileIO'):
-    m.set_button_label(1, '⟲')
-    m.set_button_label(5, 'arm')
-    m.set_button_mode(5, 1)
-    m.set_button_label(7, 'grip')
-    m.set_button_mode(7, 1)
+    m.set_button_label(1, '⟲', blocking=False)
+    m.set_button_label(5, 'lock', blocking=False)
+    m.set_button_mode(5, 1, blocking=False)
+    m.set_button_label(7, 'grip', blocking=False)
+    m.set_button_mode(7, 1, blocking=False)
+    m.set_button_label(8, '❌', blocking=False)
 
 
 def parse_mobile_feedback(m: 'MobileIO'):
     if not m.update(0.0):
         return None
+    
+    if m.get_button_state(8):
+        return True, None
 
+    if m.get_button_state(1):
+        return False, ArmMobileIOInputs(home=True)
+    
     try:
-        # reorder quaternion components
-        wxyz = m.orientation
-        xyzw = [*wxyz[1:4], wxyz[0]]
-        rotation = R.from_quat(xyzw).as_matrix()
+        rotation = R.from_quat(m.orientation, scalar_first=True).as_matrix()
     except ValueError as e:
         print(f'Error getting orientation as matrix: {e}\n{m.orientation}')
         rotation = np.eye(3)
 
-    home = m.get_button_state(1)
-
     arm_inputs = ArmMobileIOInputs(
         np.copy(m.position),
         rotation,
-        home,
         m.get_button_state(5),
         m.get_button_state(7))
 
-    return arm_inputs
+    return False, arm_inputs
 
 if __name__ == "__main__":
     lookup = hebi.Lookup()
@@ -221,13 +222,14 @@ if __name__ == "__main__":
     arm_control = ArmMobileIOControl(arm)
 
     # Setup MobileIO
-    print('Looking for Mobile IO...')
+    print('Looking for mobileIO device...')
     m = create_mobile_io(lookup, arm_family)
     while m is None:
-        print('Waiting for Mobile IO device to come online...')
+        print('Waiting for mobileIO device to come online...')
         sleep(1)
         m = create_mobile_io(lookup, arm_family)
-
+    
+    print("mobileIO device found.")
     m.update()
     setup_mobile_io(m)
 
@@ -237,7 +239,13 @@ if __name__ == "__main__":
 
     while arm_control.running:
         t = time()
-        arm_inputs = parse_mobile_feedback(m)
-        arm_control.update(t, arm_inputs)
-
-        arm_control.send()
+        try:
+            quit, arm_inputs = parse_mobile_feedback(m)
+            if quit:
+                break
+            arm_control.update(t, arm_inputs)
+            arm_control.send()
+        except KeyboardInterrupt as e:
+            break
+    
+    arm_control.stop()
