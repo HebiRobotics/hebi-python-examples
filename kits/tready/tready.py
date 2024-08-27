@@ -286,6 +286,8 @@ class TreadyControl:
     FLIPPER_VEL_SCALE = 1  # rad/sec
 
     def __init__(self, base: TreadedBase):
+        self.namespace = ''
+        
         self.state = TreadyControlState.STARTUP
         self.base = base
 
@@ -323,7 +325,7 @@ class TreadyControl:
 
         if tready_input is None and self.state is not self.state.DISCONNECTED and self.state is not self.state.EMERGENCY_STOP:
             if t_now - self.mobile_last_fbk_t > 1.0:
-                print("mobileIO timeout, disabling motion")
+                print(self.namespace + "mobileIO timeout, disabling motion")
                 self.transition_to(t_now, self.state.DISCONNECTED)
             return
         
@@ -332,13 +334,13 @@ class TreadyControl:
 
         if self.state is self.state.EMERGENCY_STOP:
             if not self.base.mstop_pressed:
-                print("Emergency Stop Released")
+                print(self.namespace + "Emergency Stop Released")
                 self.transition_to(t_now, self.state.TELEOP)
         
         # Transition to teleop if mobileIO is reconnected
         elif self.state is self.state.DISCONNECTED:
             self.mobile_last_fbk_t = t_now
-            print('Controller reconnected, demo continued.')
+            print(self.namespace + 'Controller reconnected, demo continued.')
             self.transition_to(t_now, self.state.TELEOP)
         
         # After startup, transition to homing
@@ -419,28 +421,28 @@ class TreadyControl:
             return
 
         if state is self.state.HOMING:
-            print("TRANSITIONING TO HOMING")
+            print(self.namespace + "TRANSITIONING TO HOMING")
             self.base.home(t_now)
         
         elif state is self.state.ALIGNING:
-            print("TRANSITIONING TO ALIGNING")
+            print(self.namespace + "TRANSITIONING TO ALIGNING")
             self.base.align_flippers(t_now)
 
         elif state is self.state.TELEOP:
-            print("TRANSITIONING TO TELEOP")
+            print(self.namespace + "TRANSITIONING TO TELEOP")
 
         elif state is self.state.DISCONNECTED:
-            print("mobileIO timeout, disabling motion")
+            print(self.namespace + "mobileIO timeout, disabling motion")
             self.base.chassis_traj = None
             self.base.flipper_traj = None
         
         elif state is self.state.EMERGENCY_STOP:
-            print("Emergency Stop Pressed, disabling motion")
+            print(self.namespace + "Emergency Stop Pressed, disabling motion")
             self.base.chassis_traj = None
             self.base.flipper_traj = None
 
         elif state is self.state.EXIT:
-            print("TRANSITIONING TO EXIT")
+            print(self.namespace + "TRANSITIONING TO EXIT")
 
         for handler in self._transition_handlers:
             handler(self, state)
