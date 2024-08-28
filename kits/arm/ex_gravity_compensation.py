@@ -13,7 +13,7 @@ example_config_file = "config/ex_gravity_compensation.cfg.yaml"
 example_config = hebi.config.load_config(example_config_file)
 
 # Set up arm from config
-arm = hebi.arm.create_from_config(lookup, example_config)
+arm = hebi.arm.create_from_config(example_config, lookup)
 
 arm.group.feedback_frequency = 200.0
 

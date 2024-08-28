@@ -3,9 +3,9 @@ import os
 from hebi.util import create_mobile_io
 from time import sleep
 
-def create_mobile_io_from_config(lookup, config, config_file):
+def create_mobile_io_from_config(config, lookup):
 
-    cfg_dir = os.path.dirname(os.path.abspath(config_file)) # If mobile_io becomes a unique field in config, this will no longer be required
+    cfg_dir = config.config_location 
 
     # Load Mobile IO config as a dictionary
     mobile_io_dict = {}
@@ -45,9 +45,9 @@ def create_mobile_io_from_config(lookup, config, config_file):
 
     return mobile_io
 
-def create_gripper_from_config(lookup, config, config_file, arm):
+def create_gripper_from_config(config, lookup, arm):
 
-    cfg_dir = os.path.dirname(os.path.abspath(config_file)) # If gripper becomes a unique field in config, this will no longer be required
+    cfg_dir = config.config_location
 
     # Load gripper config as a dictionary
     gripper_dict = {}

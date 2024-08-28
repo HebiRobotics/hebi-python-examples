@@ -14,9 +14,9 @@ example_config_file = "config/ex_teach_repeat_w_gripper.cfg.yaml"
 example_config = hebi.config.load_config(example_config_file)
 
 # Set up arm, mobile_io, and gripper from config
-arm = hebi.arm.create_from_config(lookup, example_config)
-mobile_io = create_mobile_io_from_config(lookup, example_config, example_config_file)
-gripper = create_gripper_from_config(lookup, example_config, example_config_file, arm)
+arm = hebi.arm.create_from_config(example_config, lookup)
+mobile_io = create_mobile_io_from_config(example_config, lookup)
+gripper = create_gripper_from_config(example_config, lookup, arm)
 
 # Demo Variables
 abort_flag = False
