@@ -61,7 +61,7 @@ def setup_mobile_io(m: 'MobileIO'):
     arm_lock = 3
     gripper_close = 4
 
-    m.set_button_label(arm_lock, 'Lock Arm', blocking=False)
+    m.set_button_label(arm_lock, 'Arm 🔒', blocking=False)
     m.set_button_label(gripper_close, 'Gripper', blocking=False)
     m.set_button_mode(arm_lock, 1)
     m.set_button_mode(gripper_close, 1)
@@ -130,11 +130,18 @@ def setup_mobile_io(m: 'MobileIO'):
             except ValueError as e:
                 print(f'Error getting orientation as matrix: {e}\n{m.orientation}')
                 rotation = np.eye(3)
-            
+
+            if m.get_button_diff(arm_lock) != 0:
+                if not m.get_button_state(arm_lock):
+                    m.set_button_label(arm_lock, 'Arm 🔒', blocking=False)
+                elif m.get_button_state(arm_lock):
+                    m.set_button_label(arm_lock, 'Arm 🔓', blocking=False)
+
             arm_inputs = ArmMobileIOInputs(
                 np.copy(m.position),
                 rotation,
-                m.get_button_state(arm_lock),
+                bool(m.get_button_diff(arm_lock) != 0),
+                not m.get_button_state(arm_lock),
                 m.get_button_state(gripper_close)
             )
             

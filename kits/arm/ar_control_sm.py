@@ -24,10 +24,11 @@ class ArmControlState(Enum):
 
 class ArmMobileIOInputs:
     def __init__(self, phone_pos: 'npt.NDArray[np.float32]' = np.array([0., 0., 0.]), phone_rot: 'npt.NDArray[np.float64]' = np.eye(3),
-                 locked: bool = False, gripper_closed: bool = False, home: bool = False):
+                 lock_toggle: bool = False, locked: bool = True, gripper_closed: bool = False, home: bool = False):
 
         self.phone_pos = phone_pos
         self.phone_rot = phone_rot
+        self.lock_toggle = lock_toggle
         self.locked = locked
         self.gripper_closed = gripper_closed
         self.home = home
@@ -55,7 +56,7 @@ class ArmMobileIOControl:
             self.arm_xyz_home,
             self.arm_rot_home)
 
-        self.locked = False
+        self.locked = True
 
     @property
     def running(self):
@@ -83,6 +84,8 @@ class ArmMobileIOControl:
         if self.state is self.state.DISCONNECTED:
             self.mobile_last_fbk_t = t_now
             print(self.namespace + 'Controller reconnected, demo continued.')
+            # Lock arm when reconnected
+            self.locked = True
             self.transition_to(t_now, self.state.TELEOP)
         
         # After startup, transition to homing
@@ -102,7 +105,8 @@ class ArmMobileIOControl:
                 self.transition_to(t_now, self.state.HOMING)
                 return
             
-            self.locked = arm_input.locked
+            if arm_input.lock_toggle:
+                self.locked = arm_input.locked
             
             if not self.locked:
                 arm_goal = self.compute_arm_goal(arm_input)
