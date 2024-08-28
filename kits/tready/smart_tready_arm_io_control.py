@@ -90,7 +90,7 @@ def setup_mobile_io(m: 'MobileIO'):
             if m.get_button_state(quit_demo_btn):
                 return True, None, None
             if m.get_button_state(reset_pose_btn):
-                return False, TreadyInputs(home=True), ArmMobileIOInputs(home=True)
+                return False, TreadyInputs(home=True, torque_mode=m.get_button_state(torque_btn), torque_toggle=abs(m.get_button_diff(torque_btn))), ArmMobileIOInputs(home=True)
             
             if m.get_button_diff(torque_btn) == 1:
                 change_to_torque_mode(m)
@@ -99,7 +99,7 @@ def setup_mobile_io(m: 'MobileIO'):
             
             tready_inputs = None
             if m.get_button_state(recenter_btn):
-                tready_inputs = TreadyInputs(align_flippers=True)
+                tready_inputs = TreadyInputs(align_flippers=True, torque_mode=m.get_button_state(torque_btn), torque_toggle=abs(m.get_button_diff(torque_btn)))
             else:
                 chassis_velocity = ChassisVelocity(
                     m.get_axis_state(forward_joy),

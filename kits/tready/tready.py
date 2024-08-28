@@ -269,7 +269,7 @@ class ChassisVelocity:
         return f'ChassisVelocity(x={self.x}, z={self.z}, rz={self.rz})'
 
 class TreadyInputs:
-    def __init__(self, home: bool = False, base_motion: 'ChassisVelocity' = None, flippers: 'list[float]' = None, align_flippers: bool = False, torque_mode: bool = True, torque_toggle: bool = False):
+    def __init__(self, home: bool = False, base_motion: 'ChassisVelocity' = None, flippers: 'list[float]' = None, align_flippers: bool = False, torque_mode: bool = False, torque_toggle: bool = False):
         self.home = home
         self.base_motion = base_motion
         self.flippers = flippers
@@ -356,9 +356,15 @@ class TreadyControl:
         elif self.state is self.state.TELEOP:
             # Check for home button
             if tready_input.home:
+                if tready_input.torque_mode:
+                    print(self.namespace + "Cannot home in torque mode")
+                    return
                 self.transition_to(t_now, self.state.HOMING)
             # Check for flipper alignment
             elif tready_input.align_flippers:
+                if tready_input.torque_mode:
+                    print(self.namespace + "Cannot align flippers in torque mode")
+                    return
                 self.transition_to(t_now, self.state.ALIGNING)
             else:
                 if tready_input.torque_mode:

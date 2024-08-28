@@ -28,6 +28,7 @@ def setup_mobile_io(m: 'MobileIO'):
 
     m.set_button_label(reset_pose_btn, '⟲', blocking=False)
     m.set_button_label(torque_btn, 'Torque', blocking=False)
+    m.set_button_label(3, ' ', blocking=False)
     m.set_button_label(4, ' ', blocking=False)
     m.set_button_label(height_up_btn, '⤾◼⤿', blocking=False)
     m.set_button_label(recenter_btn, 'Center', blocking=False)
@@ -70,13 +71,13 @@ def setup_mobile_io(m: 'MobileIO'):
             if m.get_button_state(quit_demo_btn):
                 return True, None
             if m.get_button_state(reset_pose_btn):
-                return False, TreadyInputs(home=True)
+                return False, TreadyInputs(home=True, torque_mode=m.get_button_state(torque_btn), torque_toggle=abs(m.get_button_diff(torque_btn)))
             if m.get_button_diff(torque_btn) == 1:
                 change_to_torque_mode(m)
             elif m.get_button_diff(torque_btn) == -1:
                 change_to_velocity_mode(m)
             if m.get_button_state(recenter_btn):
-                return False, TreadyInputs(align_flippers=True)
+                return False, TreadyInputs(align_flippers=True, torque_mode=m.get_button_state(torque_btn), torque_toggle=abs(m.get_button_diff(torque_btn)))
             
             chassis_velocity = ChassisVelocity(
                 m.get_axis_state(forward_joy),
