@@ -58,6 +58,7 @@ class ArmMobileIOControl:
         
         self.last_locked_xyz = self.arm_xyz_home.copy()
         self.last_locked_rot = self.arm_rot_home.copy()
+        self.last_locked_seed = self.arm_home.copy()
 
         self.locked = True
 
@@ -101,9 +102,10 @@ class ArmMobileIOControl:
                 self.phone_xyz_home = arm_input.phone_pos
                 self.phone_rot_home = arm_input.phone_rot
                 
+                self.last_locked_seed = np.array(self.arm.last_feedback.position)
                 xyz = np.zeros(3)
                 orientation = np.zeros((3,3))
-                self.arm.FK(np.array(self.arm.last_feedback.position), xyz_out=xyz, orientation_out=orientation)
+                self.arm.FK(self.arm.last_feedback.position, xyz_out=xyz, orientation_out=orientation)
 
                 self.last_locked_xyz = xyz
                 self.last_locked_rot = orientation
@@ -127,9 +129,10 @@ class ArmMobileIOControl:
                 self.phone_xyz_home = arm_input.phone_pos
                 self.phone_rot_home = arm_input.phone_rot
 
+                self.last_locked_seed = np.array(self.arm.last_feedback.position)
                 xyz = np.zeros(3)
                 orientation = np.zeros((3,3))
-                self.arm.FK(np.array(self.arm.last_feedback.position), xyz_out=xyz, orientation_out=orientation)
+                self.arm.FK(self.arm.last_feedback.position, xyz_out=xyz, orientation_out=orientation)
 
                 self.last_locked_xyz = xyz
                 self.last_locked_rot = orientation
@@ -171,7 +174,7 @@ class ArmMobileIOControl:
         arm_rot_target = rot_mat.T @ arm_input.phone_rot @ self.last_locked_rot
         
         joint_target = self.arm.ik_target_xyz_so3(
-            self.arm_seed_ik,
+            self.last_locked_seed,
             arm_xyz_target,
             arm_rot_target)
 
