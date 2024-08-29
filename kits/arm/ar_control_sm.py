@@ -55,6 +55,9 @@ class ArmMobileIOControl:
             self.arm_seed_ik,
             self.arm_xyz_home,
             self.arm_rot_home)
+        
+        self.last_locked_xyz = self.arm_xyz_home.copy()
+        self.last_locked_rot = self.arm_rot_home.copy()
 
         self.locked = True
 
@@ -97,6 +100,14 @@ class ArmMobileIOControl:
             if self.arm.at_goal:
                 self.phone_xyz_home = arm_input.phone_pos
                 self.phone_rot_home = arm_input.phone_rot
+                
+                xyz = np.zeros(3)
+                orientation = np.zeros((3,3))
+                self.arm.FK(np.array(self.arm.last_feedback.position), xyz_out=xyz, orientation_out=orientation)
+
+                self.last_locked_xyz = xyz
+                self.last_locked_rot = orientation
+
                 self.transition_to(t_now, self.state.TELEOP)
 
         # Teleop mode
@@ -115,6 +126,13 @@ class ArmMobileIOControl:
             else:
                 self.phone_xyz_home = arm_input.phone_pos
                 self.phone_rot_home = arm_input.phone_rot
+
+                xyz = np.zeros(3)
+                orientation = np.zeros((3,3))
+                self.arm.FK(np.array(self.arm.last_feedback.position), xyz_out=xyz, orientation_out=orientation)
+
+                self.last_locked_xyz = xyz
+                self.last_locked_rot = orientation
 
             gripper = self.arm.end_effector
             if gripper is not None:
@@ -144,17 +162,14 @@ class ArmMobileIOControl:
 
         self.state = state
 
-    def compute_arm_goal(self, arm_inputs: ArmMobileIOInputs):
+    def compute_arm_goal(self, arm_input: ArmMobileIOInputs):
         xyz_scale = np.array([1.0, 1.0, 1.0])
 
-        phone_xyz = arm_inputs.phone_pos
-        phone_rot = arm_inputs.phone_rot
-
-        phone_offset = phone_xyz - self.phone_xyz_home
+        phone_offset = arm_input.phone_pos - self.phone_xyz_home
         rot_mat = self.phone_rot_home
-        arm_xyz_target = self.arm_xyz_home + xyz_scale * (rot_mat.T @ phone_offset)
-        arm_rot_target = rot_mat.T @ phone_rot @ self.arm_rot_home
-
+        arm_xyz_target = self.last_locked_xyz + xyz_scale * (rot_mat.T @ phone_offset)
+        arm_rot_target = rot_mat.T @ arm_input.phone_rot @ self.last_locked_rot
+        
         joint_target = self.arm.ik_target_xyz_so3(
             self.arm_seed_ik,
             arm_xyz_target,
@@ -198,20 +213,20 @@ def parse_mobile_feedback(m: 'MobileIO'):
         print(f'Error getting orientation as matrix: {e}\n{m.orientation}')
         rotation = np.eye(3)
 
-    arm_inputs = ArmMobileIOInputs(
+    arm_input = ArmMobileIOInputs(
         np.copy(m.position),
         rotation,
         m.get_button_state(5),
         m.get_button_state(7))
 
-    return False, arm_inputs
+    return False, arm_input
 
 if __name__ == "__main__":
     lookup = hebi.Lookup()
     sleep(2)
 
     # Arm setup
-    arm_family = "Arm"
+    arm_family = "T-arm"
     module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
     hrdf_file = "hrdf/A-2085-06.hrdf"
     gains_file = "gains/A-2085-06.xml"
@@ -244,10 +259,10 @@ if __name__ == "__main__":
     while arm_control.running:
         t = time()
         try:
-            quit, arm_inputs = parse_mobile_feedback(m)
+            quit, arm_input = parse_mobile_feedback(m)
             if quit:
                 break
-            arm_control.update(t, arm_inputs)
+            arm_control.update(t, arm_input)
             arm_control.send()
         except KeyboardInterrupt as e:
             break

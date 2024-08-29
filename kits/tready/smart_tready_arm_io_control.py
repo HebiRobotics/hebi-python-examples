@@ -176,8 +176,9 @@ if __name__ == "__main__":
 
     # Create Arm group
     arm = setup_arm_6dof(lookup, arm_family, with_gripper=False)
-    arm_control = ArmMobileIOControl(arm)
-    arm_control.namespace = "[Arm] "
+    if arm is not None:
+        arm_control = ArmMobileIOControl(arm)
+        arm_control.namespace = "[Arm] "
 
     # Create base group
     base_group = lookup.get_group_from_names(base_family, wheel_names + flipper_names)
@@ -242,19 +243,22 @@ if __name__ == "__main__":
     base_control._update_handlers.append(update_torque_mode)
 
     # can enable start logging here
-    while base_control.running and arm_control.running:
+    while base_control.running and (arm is None or arm_control.running):
         t = time()
         try:
             quit, base_inputs, arm_inputs = parse_mobile_io_feedback(m)
             if quit:
                 break
             base_control.update(t, base_inputs)
-            arm_control.update(t, arm_inputs)
+            if arm is not None:
+                arm_control.update(t, arm_inputs)
             base_control.send()
-            arm_control.send()
+            if arm is not None:
+                arm_control.send()
         except KeyboardInterrupt:
             break
     
     base_control.stop()
-    arm_control.stop()
+    if arm is not None:
+        arm_control.stop()
     # stop logging here

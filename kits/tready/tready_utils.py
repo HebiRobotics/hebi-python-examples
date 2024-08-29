@@ -108,11 +108,15 @@ def setup_arm_7dof(lookup: 'Lookup', family: str):
 def setup_arm_6dof(lookup: 'Lookup', family: str, with_gripper: bool = True):
     root_dir, _ = os.path.split(__file__)
     # arm setup
-    arm = hebi.arm.create(
-        [family],
-        ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
-        hrdf_file=os.path.join(root_dir, 'hrdf/tready-arm-A2240-06G.hrdf'),
-        lookup=lookup)
+    try:
+        arm = hebi.arm.create(
+            [family],
+            ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
+            hrdf_file=os.path.join(root_dir, 'hrdf/tready-arm-A2240-06G.hrdf'),
+            lookup=lookup)
+    except Exception as e:
+        print(e)
+        return None
 
     arm.load_gains(os.path.join(root_dir, 'gains/A-2240-06.xml'))
 
