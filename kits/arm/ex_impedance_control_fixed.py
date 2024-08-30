@@ -21,7 +21,7 @@ The following example is for the "Fixed" demo:
 
 import hebi
 from time import sleep
-from hebi.util import create_mobile_io
+from hebi_util import create_mobile_io_from_config
 import numpy as np
 from plotting import draw_plots
 
@@ -34,32 +34,13 @@ from plotting import draw_plots
 lookup = hebi.Lookup()
 sleep(2)
 
-# Set up arm
-phone_family = "Arm"
-phone_name = "mobileIO"
-arm_family = "Arm"
-hrdf_file = "hrdf/A-2085-06.hrdf"
-gains_file = "gains/A-2085-06.xml"
+# Config file
+example_config_file = "config/ex_impedance_control_fixed.cfg.yaml"
+example_config = hebi.config.load_config(example_config_file)
 
-# Set up Mobile IO
-print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io(lookup, phone_family, phone_name)
-if m is None:
-    raise RuntimeError("Could not find Mobile IO device")
-m.set_button_mode(1, 'momentary')
-m.set_button_label(1, '📈')
-m.set_button_mode(2, 'toggle')
-m.set_button_label(2, '💪')
-m.update()
-
-# Setup arm components
-arm = hebi.arm.create([arm_family],
-                      names=['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
-                      lookup=lookup,
-                      hrdf_file=hrdf_file)
-arm.load_gains(gains_file)
-
-impedance_controller = hebi.arm.ImpedanceController()
+# Set up arm, and mobile_io from config
+arm = hebi.arm.create_from_config(example_config, lookup)
+mobile_io = create_mobile_io_from_config(example_config, lookup)
 
 # Clear all position control gains for all the actuators
 cmd = arm.pending_command
@@ -67,18 +48,6 @@ cmd = arm.pending_command
 cmd.position_kp = 0.0
 cmd.position_kd = 0.0
 cmd.position_ki = 0.0
-
-# Configure arm components
-arm.add_plugin(impedance_controller)
-
-# Dictate impedance controller gains in SE(3) based on the demo
-impedance_controller.set_kp(300, 300, 300, 5, 5, 1)
-impedance_controller.set_kd(5, 5, 5, 0, 0, 0)
-impedance_controller.set_ki(20, 20, 20, 0.5, 0.5, 0.5)
-impedance_controller.set_i_clamp(10, 10, 10, 1, 1, 1) # Clamp on the end-effector wrench and NOT on the integral error
-
-# Keep in end-effector frame since it is more intuitive to define rotational stiffness
-impedance_controller.gains_in_end_effector_frame = True
 
 # Increase feedback frequency since we're calculating velocities at the
 # high level for damping. Going faster can help reduce a little bit of
@@ -97,7 +66,7 @@ if enable_logging:
     arm.group.start_log('dir', 'logs', mkdirs=True)
 
 print('Commanded gravity-compensated zero force to the arm.')
-print('  💪 (B2) - Toggles an impedance controller on/off:')
+print('  🛑 (B2) - Toggles an impedance controller on/off:')
 print('            ON  - Apply controller based on current position')
 print('            OFF - Go back to gravity-compensated mode')
 print('  📈 (B1) - Exits the demo, and plots graphs. May take a while.')
@@ -105,7 +74,7 @@ print('  📈 (B1) - Exits the demo, and plots graphs. May take a while.')
 controller_on = False
 
 # while button 1 is not pressed
-while not m.get_button_state(1):
+while not mobile_io.get_button_state(1):
 
     # if not arm.update():
     #     print("Failed to update arm")
@@ -114,25 +83,25 @@ while not m.get_button_state(1):
 
     arm.send()
 
-    if m.update(timeout_ms=0):
+    if mobile_io.update(timeout_ms=0):
 
         # Set and unset impedance mode when button is pressed and released, respectively
-        if (m.get_button_diff(2) == 1):
+        if (mobile_io.get_button_diff(2) == 1):
 
             controller_on = True
             arm.set_goal(goal.clear().add_waypoint(position=arm.last_feedback.position))
 
-        elif (m.get_button_diff(2) == -1):
+        elif (mobile_io.get_button_diff(2) == -1):
             
             controller_on = False
 
         # If in impedance mode set led blue
-        m.set_led_color("blue" if controller_on else "green", blocking=False)
+        mobile_io.set_led_color("blue" if controller_on else "green", blocking=False)
 
     if not controller_on:
         arm.cancel_goal()
 
-m.set_led_color("red")
+mobile_io.set_led_color("red")
 
 if enable_logging:
     hebi_log = arm.group.stop_log()

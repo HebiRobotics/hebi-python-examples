@@ -1,0 +1,12 @@
+# X-Series Rosie with default omniwheel configuration
+version: 1.0
+families: ["Rosie"]
+names: ["W1", "W2", "W3"]
+hrdf: "../hrdf/A-2592-01.hrdf"
+
+gains:
+  omni_wheels: "../gains/A-2592-01.xml"
+
+user_data:
+  controller_family: "HEBI"
+  controller_name: "mobileIO"

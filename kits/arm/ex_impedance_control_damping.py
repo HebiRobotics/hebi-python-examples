@@ -21,7 +21,7 @@ The following example is for the "Damping" demo:
 
 import hebi
 from time import sleep
-from hebi.util import create_mobile_io
+from hebi_util import create_mobile_io_from_config
 import numpy as np
 from plotting import draw_plots
 
@@ -34,32 +34,16 @@ from plotting import draw_plots
 lookup = hebi.Lookup()
 sleep(2)
 
-# Set up arm
-phone_family = "Arm"
-phone_name = "mobileIO"
-arm_family = "Arm"
-hrdf_file = "hrdf/A-2085-06.hrdf"
-gains_file = "gains/A-2085-06.xml"
+# Config file
+example_config_file = "config/ex_impedance_control_damping.cfg.yaml"
+example_config = hebi.config.load_config(example_config_file)
 
-# Set up Mobile IO
-print('Waiting for Mobile IO device to come online...')
-m = create_mobile_io(lookup, phone_family, phone_name)
-if m is None:
-    raise RuntimeError("Could not find Mobile IO device")
-m.set_button_mode(1, 'momentary')
-m.set_button_label(1, '📈')
-m.set_button_mode(2, 'toggle')
-m.set_button_label(2, '💪')
-m.update()
+# Set up arm, and mobile_io from config
+arm = hebi.arm.create_from_config(example_config, lookup)
+mobile_io = create_mobile_io_from_config(example_config, lookup)
 
-# Setup arm components
-arm = hebi.arm.create([arm_family],
-                      names=['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3'],
-                      lookup=lookup,
-                      hrdf_file=hrdf_file)
-arm.load_gains(gains_file)
-
-impedance_controller = hebi.arm.ImpedanceController()
+# Retrieve the impedance control plugin to be altered later
+impedance_controller = arm.get_plugin_by_type(hebi.arm.ImpedanceController)
 
 # Clear all position control gains for all the actuators
 cmd = arm.pending_command
@@ -68,34 +52,19 @@ cmd.position_kp = 0.0
 cmd.position_kd = 0.0
 cmd.position_ki = 0.0
 
-# Configure arm components
-arm.add_plugin(impedance_controller)
-
-# No need to set gains initially
-
-# Keep in end-effector frame since it is more intuitive to define rotational stiffness
-impedance_controller.gains_in_end_effector_frame = False
-
 # Meters above the base for overdamped, critically damped, and underdamped cases respectively
-lower_limits = [0.0, 0.15, 0.30]
+lower_limits = example_config.user_data['lower_limits'] 
 # State variable for current mode: 0 for overdamped, 1 for crtically damped, 2 for underdamped, -1 for free
 mode = -1
 prevmode = -1
 
-# 0: Overdamped
-overdamped_kp = np.array([100, 100, 0, 5, 5, 1])
-overdamped_kd = np.array([15, 15, 0, 0, 0, 0])
-
-# 1: Critically damped
-critically_damped_kp = np.array([100, 100, 0, 5, 5, 1])
-critically_damped_kd = np.array([5, 5, 0, 0, 0, 0])
-
-# 2: Underdamped
-underdamped_kp = np.array([100, 100, 0, 5, 5, 1])
-underdamped_kd = np.array([0, 0, 0, 0, 0, 0])
-
-damping_kp = [overdamped_kp, critically_damped_kp, underdamped_kp]
-damping_kd = [overdamped_kd, critically_damped_kd, underdamped_kd]
+# Arrange different gains in an ordered list
+damping_kp = [example_config.user_data['overdamped_kp'], 
+              example_config.user_data['critically_damped_kp'], 
+              example_config.user_data['underdamped_kp']]
+damping_kd = [example_config.user_data['overdamped_kd'], 
+              example_config.user_data['critically_damped_kd'], 
+              example_config.user_data['underdamped_kd']]
 
 # Increase feedback frequency since we're calculating velocities at the
 # high level for damping. Going faster can help reduce a little bit of
@@ -122,7 +91,7 @@ print('  📈 (B1) - Exits the demo, and plots graphs. May take a while.')
 controller_on = False
 
 # while button 1 is not pressed
-while not m.get_button_state(1):
+while not mobile_io.get_button_state(1):
 
     # if not arm.update():
     #     print("Failed to update arm")
@@ -131,20 +100,20 @@ while not m.get_button_state(1):
 
     arm.send()
 
-    if m.update(timeout_ms=0):
+    if mobile_io.update(timeout_ms=0):
 
         # Set and unset impedance mode when button is pressed and released, respectively
-        if (m.get_button_diff(2) == 1):
+        if (mobile_io.get_button_diff(2) == 1):
 
             controller_on = True
             arm.set_goal(goal.clear().add_waypoint(position=arm.last_feedback.position))
 
-        elif (m.get_button_diff(2) == -1):
+        elif (mobile_io.get_button_diff(2) == -1):
             
             controller_on = False
 
         # If in impedance mode set led blue
-        m.set_led_color("blue" if controller_on else "green", blocking=False)
+        mobile_io.set_led_color("blue" if controller_on else "green", blocking=False)
 
     if not controller_on:
         arm.cancel_goal()
@@ -175,7 +144,7 @@ while not m.get_button_state(1):
 
         prevmode = mode
 
-m.set_led_color("red")
+mobile_io.set_led_color("red")
 
 if enable_logging:
     hebi_log = arm.group.stop_log()
