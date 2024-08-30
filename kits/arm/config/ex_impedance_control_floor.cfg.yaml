@@ -12,12 +12,12 @@ plugins:
   - type: GravityCompensationEffort
     name: gravComp
     enabled: true
-    ramp_time: 0
+    ramp_time: 5
 
   - type: DynamicsCompensationEffort
     name: dynamicsComp
     enabled: true
-    ramp_time: 0
+    ramp_time: 5
 
   # An impedance controller adds a virtual spring to the
   # end-effector and can improve tracking. It can be enabled
@@ -28,7 +28,7 @@ plugins:
   - type: ImpedanceController
     name: impedanceController
     enabled: true
-    ramp_time: 0
+    ramp_time: 5
     gains_in_end_effector_frame: true
     kp: [500, 500, 500, 5, 5, 1] # (N/m) or (Nm/rad)
     kd: [5, 5, 5, 0, 0, 0] # (N/(m/sec)) or (Nm/(rad/sec))
