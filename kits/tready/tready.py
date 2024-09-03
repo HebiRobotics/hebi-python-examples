@@ -246,7 +246,7 @@ class TreadedBase:
 
     def clear_color(self):
         color_cmd = hebi.GroupCommand(self.group.size)
-        color_cmd.led.clear()
+        color_cmd.led.color = hebi.Color(0, 0, 0, 0)
         self.group.send_command(color_cmd)
 
 
