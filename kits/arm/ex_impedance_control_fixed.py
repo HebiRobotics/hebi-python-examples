@@ -69,12 +69,16 @@ if enable_logging:
 instructions = """Commanded gravity-compensated zero force to the arm.
 
   🛑 (B2) - Toggles an impedance controller on/off:
-            ON  - Apply controller based on current position
+            ON  - Apply controller based on current position and orientation
             OFF - Go back to gravity-compensated mode
 
   📈 (B1) - Exits the demo, and plots graphs. May take a while."""
 
 print(instructions)
+
+#######################
+## Main Control Loop ##
+#######################
 
 controller_on = False
 

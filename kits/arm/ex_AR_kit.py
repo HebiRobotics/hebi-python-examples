@@ -40,14 +40,15 @@ arm.FK(example_config.user_data['home_position'], xyz_out=xyz_home, orientation_
 xyz_phone_init = np.zeros(3)
 rot_phone_init = np.zeros((3, 3))
 
-instructions = (
-    "Mode: {}\n"
-    "🏠 - Home\n"
-    "📲 - AR Control\n"
-    "🌍 - Grav Comp\n"
-    "❌ - Quit")
-mobile_io.clear_text()
-mobile_io.add_text(instructions.format(run_mode))
+# Print instructions
+instructions = """Mode:
+
+    🏠 - Home
+    📲 - AR Control
+    🌍 - Grav Comp
+    ❌ - Quit")"""
+
+print(instructions)
 
 #######################
 ## Main Control Loop ##

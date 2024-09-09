@@ -27,14 +27,20 @@ enable_logging = True
 if enable_logging:
     arm.group.start_log('dir', 'logs', mkdirs=True)
 
+# Print instructions
+instructions = """
+  🌍 (B2) - Toggles gravity compensation on/off:
+            ON  - Enable gravity compensation
+            OFF - Disable gravity compensation
+
+  📈 (B1) - Exits the demo, and plots graphs. May take a while."""
+
+print(instructions)
+
 #######################
 ## Main Control Loop ##
 #######################
 
-print('  🌍 (B2) - Toggles gravity compensation on/off:')
-print('            ON  - Enable gravity compensation')
-print('            OFF - Disable gravity compensation')
-print('  📈 (B1) - Exits the demo, and plots graphs. May take a while.')
 # while button 1 is not pressed
 while not mobile_io.get_button_state(1):
 

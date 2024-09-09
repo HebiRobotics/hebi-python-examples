@@ -33,8 +33,6 @@ instructions = """
 ❌ - Quit
 """
 print(instructions)
-mobile_io.clear_text()
-mobile_io.add_text(instructions)
 
 #######################
 ## Main Control Loop ##

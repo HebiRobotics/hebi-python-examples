@@ -82,11 +82,24 @@ goal = hebi.arm.Goal(arm.size)
 if enable_logging:
     arm.group.start_log('dir', 'logs', mkdirs=True)
 
-print('Commanded gravity-compensated zero force to the arm.')
-print('  💪 (B2) - Toggles an impedance controller on/off:')
-print('            ON  - Apply controller based on current position')
-print('            OFF - Go back to gravity-compensated mode')
-print('  📈 (B1) - Exits the demo, and plots graphs. May take a while.')
+# Print instructions
+instructions = f"""Commanded gravity-compensated zero force to the arm.
+
+  💪 (B2) - Toggles an impedance controller on/off:
+            ON  - Apply controller based on current height,
+                  End-effector is free to move along Z 
+                - Mode 0: Overdamped (height {lower_limits[0]}m to {lower_limits[1]}m)
+                - Critically damped (Mode 1)  (height {lower_limits[1]}m to {lower_limits[2]}m)
+                - Underdamped (Mode 2)  (height {lower_limits[2]}m and above)
+            OFF - Go back to gravity-compensated mode
+
+  📈 (B1) - Exits the demo, and plots graphs. May take a while."""
+
+print(instructions)
+
+#######################
+## Main Control Loop ##
+#######################
 
 controller_on = False
 

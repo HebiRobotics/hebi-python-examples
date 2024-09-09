@@ -45,15 +45,16 @@ rot_phone_init = np.zeros((3, 3))
 # # Target variables
 # target_joints = np.zeros(arm.size)
 
-instructions = (
-    "Mode: {}\n"
-    "🤌 - Gripper Control\n"
-    "🏠 - Home\n"
-    "📲 - AR Control\n"
-    "🌍 - Grav Comp\n"
-    "❌ - Quit")
-mobile_io.clear_text()
-mobile_io.add_text(instructions.format(run_mode))
+# Print instructions
+instructions = """Mode:
+
+    🤌 - Gripper Control
+    🏠 - Home
+    📲 - AR Control
+    🌍 - Grav Comp
+    ❌ - Quit")"""
+
+print(instructions)
 
 #######################
 ## Main Control Loop ##
