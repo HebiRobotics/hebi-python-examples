@@ -46,7 +46,7 @@ instructions = """Mode:
     🏠 - Home
     📲 - AR Control
     🌍 - Grav Comp
-    ❌ - Quit")"""
+    ❌ - Quit"""
 
 print(instructions)
 
