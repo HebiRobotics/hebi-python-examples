@@ -25,7 +25,7 @@ goal = hebi.arm.Goal(arm.size)
 
 # Command the softstart to the home position
 softstart = hebi.arm.Goal(arm.size)
-softstart.add_waypoint(t=example_config.user_data['soft_start_time'], 
+softstart.add_waypoint(t=example_config.user_data['homing_duration'], 
                        position=example_config.user_data['home_position'])
 arm.update()
 arm.set_goal(softstart)
