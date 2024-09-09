@@ -112,6 +112,10 @@ while not mobile_io.get_button_state(1):
 
 mobile_io.set_led_color("red")
 
+##########################
+## Logging and Plotting ##
+##########################
+
 if enable_logging:
     hebi_log = arm.group.stop_log()
     draw_plots(hebi_log)
