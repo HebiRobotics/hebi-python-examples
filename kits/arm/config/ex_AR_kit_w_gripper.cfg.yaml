@@ -27,6 +27,9 @@ user_data:
   # Time taken for a steady motion to the home position
   homing_duration: 4 # seconds
 
+  # Latency in tracking the AR pose. Increase this to avoid jerks
+  latency: 0.3 # seconds
+
   # Displacements of the phone are scaled by this value to give displacement of the end-effector
   xyz_scale: 0.75
 

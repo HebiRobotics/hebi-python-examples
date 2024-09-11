@@ -127,7 +127,7 @@ while not abort_flag:
 
         # Set and send new goal to the arm
         goal.clear()
-        goal.add_waypoint(position=target_joints)
+        goal.add_waypoint(position=target_joints, t=example_config.user_data['latency'])
         arm.set_goal(goal)
 
         # Set the gripper separataly to follow slider A3
