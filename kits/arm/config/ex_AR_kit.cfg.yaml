@@ -25,7 +25,10 @@ user_data:
   home_position: [0, 1.0471975511965976, 2.0943951023931953, 2.6179938779914944, -1.5707963267948966, 0] # radians
 
   # Time taken for a steady motion to the home position
-  soft_start_time: 4 # seconds
+  homing_duration: 4 # seconds
+
+  # Latency in tracking the AR pose. Increase this to avoid jerks
+  latency: 0.3 # seconds
 
   # Displacements of the phone are scaled by this value to give displacement of the end-effector
   xyz_scale: 0.75
