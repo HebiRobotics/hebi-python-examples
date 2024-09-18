@@ -73,11 +73,20 @@ goal = hebi.arm.Goal(arm.size)
 if enable_logging:
     arm.group.start_log('dir', 'logs', mkdirs=True)
 
-print('Commanded gravity-compensated zero force to the arm.')
-print('  🧱 (B2) - Toggles an impedance controller on/off:')
-print('            ON  - Apply controller based on current position')
-print('            OFF - Go back to gravity-compensated mode')
-print('  📈 (B1) - Exits the demo, and plots graphs. May take a while.')
+# Print instructions
+instructions = """Commanded gravity-compensated zero force to the arm.
+
+  🧱 (B2) - Toggles an impedance controller on/off:
+            ON  - Replace virtual floor at current height
+            OFF - Makes the floor disappear
+
+  📈 (B1) - Exits the demo, and plots graphs. May take a while."""
+
+print(instructions)
+
+#######################
+## Main Control Loop ##
+#######################
 
 controller_on = False
 
@@ -156,6 +165,10 @@ while not mobile_io.get_button_state(1):
             floor_command_flag = True
 
 mobile_io.set_led_color("red")
+
+##########################
+## Logging and Plotting ##
+##########################
 
 if enable_logging:
     hebi_log = arm.group.stop_log()

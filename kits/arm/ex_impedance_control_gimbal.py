@@ -64,12 +64,21 @@ goal = hebi.arm.Goal(arm.size)
 # Start background logging
 if enable_logging:
     arm.group.start_log('dir', 'logs', mkdirs=True)
+    
+# Print instructions
+instructions = """Commanded gravity-compensated zero force to the arm.
 
-print('Commanded gravity-compensated zero force to the arm.')
-print('  🤳 (B2) - Toggles an impedance controller on/off:')
-print('            ON  - Apply controller based on current position')
-print('            OFF - Go back to gravity-compensated mode')
-print('  📈 (B1) - Exits the demo, and plots graphs. May take a while.')
+  🤳 (B2) - Toggles an impedance controller on/off:
+            ON  - Apply controller based on current orientation
+            OFF - Go back to gravity-compensated mode
+
+  📈 (B1) - Exits the demo, and plots graphs. May take a while."""
+
+print(instructions)
+
+#######################
+## Main Control Loop ##
+#######################
 
 controller_on = False
 
@@ -102,6 +111,10 @@ while not mobile_io.get_button_state(1):
         arm.cancel_goal()
 
 mobile_io.set_led_color("red")
+
+##########################
+## Logging and Plotting ##
+##########################
 
 if enable_logging:
     hebi_log = arm.group.stop_log()

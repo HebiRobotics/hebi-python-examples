@@ -27,7 +27,7 @@ goal = hebi.arm.Goal(arm.size)
 
 # Command the softstart to the home position
 softstart = hebi.arm.Goal(arm.size)
-softstart.add_waypoint(t=example_config.user_data['soft_start_time'], 
+softstart.add_waypoint(t=example_config.user_data['homing_duration'], 
                        position=example_config.user_data['home_position'])
 arm.update()
 arm.set_goal(softstart)
@@ -45,15 +45,16 @@ rot_phone_init = np.zeros((3, 3))
 # # Target variables
 # target_joints = np.zeros(arm.size)
 
-instructions = (
-    "Mode: {}\n"
-    "🤌 - Gripper Control\n"
-    "🏠 - Home\n"
-    "📲 - AR Control\n"
-    "🌍 - Grav Comp\n"
-    "❌ - Quit")
-mobile_io.clear_text()
-mobile_io.add_text(instructions.format(run_mode))
+# Print instructions
+instructions = """Mode:
+
+    🤌 - Gripper Control
+    🏠 - Home
+    📲 - AR Control
+    🌍 - Grav Comp
+    ❌ - Quit")"""
+
+print(instructions)
 
 #######################
 ## Main Control Loop ##
@@ -126,7 +127,7 @@ while not abort_flag:
 
         # Set and send new goal to the arm
         goal.clear()
-        goal.add_waypoint(position=target_joints)
+        goal.add_waypoint(position=target_joints, t=example_config.user_data['latency'])
         arm.set_goal(goal)
 
         # Set the gripper separataly to follow slider A3

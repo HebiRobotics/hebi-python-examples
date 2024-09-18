@@ -28,14 +28,14 @@ abort_flag = False
 goal = hebi.arm.Goal(arm.size)
 waypoints = np.array([example_config.user_data['waypoint_1'], example_config.user_data['waypoint_2'], example_config.user_data['waypoint_3']])
 
-# Print Instructions
-instructions = """B1-B3 - Waypoints 1-3
+# Print instructions
+instructions = """
+B1-B3 - Waypoints 1-3
 🌍 - Grav Comp Mode
 ❌ - Quit
 """
+
 print(instructions)
-mobile_io.clear_text()
-mobile_io.add_text(instructions)
 
 #######################
 ## Main Control Loop ##
