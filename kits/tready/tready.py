@@ -40,7 +40,7 @@ class TreadedBase:
     TORSO_TORQUE_SCALE = 2.5 # Nm
     TORQUE_MODE_MAX = 25 # Nm
     TORQUE_ANGLE_OFFSET = np.pi/4
-    FLIPPER_HOME_POS = np.pi/2
+    FLIPPER_HOME_POS = np.pi/3
 
     def __init__(self, group: 'Group', chassis_ramp_time: float, flipper_ramp_time: float):
         self.group = group
@@ -76,13 +76,21 @@ class TreadedBase:
         return any(self.fbk.mstop_state == 0)
 
     @property
-    def has_active_trajectory(self):
+    def has_active_base_trajectory(self):
         if self.chassis_traj is not None and self.t_prev < self.chassis_traj.end_time:
             return True
+        return False
+    
+    @property
+    def has_active_flipper_trajectory(self):
         if self.flipper_traj is not None and self.t_prev < self.flipper_traj.end_time:
             return True
         return False
 
+    @property
+    def has_active_trajectory(self):
+        return self.has_active_base_trajectory or self.has_active_flipper_trajectory
+    
     @property
     def wheel_to_chassis_vel(self) -> 'npt.NDArray[np.float64]':
         wr = self.WHEEL_RADIUS / (self.WHEEL_BASE / 2)
@@ -123,8 +131,9 @@ class TreadedBase:
         frames = self.robot_model.get_forward_kinematics_mat('com', position)
         track_rot_mat = frames[10, :3, :3]
 
-        q_track = self.fbk.orientation[1]
-        rot_mat_tready = R.from_quat(q_track, scalar_first=True).as_matrix()
+        quat = self.fbk.orientation[1]
+        q_track = np.array([quat[1], quat[2], quat[3], quat[0]])
+        rot_mat_tready = R.from_quat(q_track).as_matrix()
         rot_mat_tready = rot_mat_tready @ track_rot_mat.T
 
         # convert to euler
@@ -269,7 +278,7 @@ class ChassisVelocity:
         return f'ChassisVelocity(x={self.x}, z={self.z}, rz={self.rz})'
 
 class TreadyInputs:
-    def __init__(self, home: bool = False, base_motion: 'ChassisVelocity' = None, flippers: 'list[float]' = None, align_flippers: bool = False, torque_mode: bool = False, torque_toggle: bool = False):
+    def __init__(self, home: bool = False, base_motion: 'ChassisVelocity' = ChassisVelocity(), flippers: 'list[float]' = [0, 0, 0, 0], align_flippers: bool = False, torque_mode: bool = False, torque_toggle: bool = False):
         self.home = home
         self.base_motion = base_motion
         self.flippers = flippers
@@ -324,13 +333,13 @@ class TreadyControl:
             return
 
         if tready_input is None and self.state is not self.state.DISCONNECTED and self.state is not self.state.EMERGENCY_STOP:
-            if t_now - self.mobile_last_fbk_t > 1.0:
+            if t_now - self.last_cmd_t > 1.0:
                 print(self.namespace + "mobileIO timeout, disabling motion")
                 self.transition_to(t_now, self.state.DISCONNECTED)
             return
         
         # Reset the timeout
-        self.mobile_last_fbk_t = t_now
+        self.last_cmd_t = t_now
 
         if self.state is self.state.EMERGENCY_STOP:
             if not self.base.mstop_pressed:
@@ -339,7 +348,7 @@ class TreadyControl:
         
         # Transition to teleop if mobileIO is reconnected
         elif self.state is self.state.DISCONNECTED:
-            self.mobile_last_fbk_t = t_now
+            self.last_cmd_t = t_now
             print(self.namespace + 'Controller reconnected, demo continued.')
             self.transition_to(t_now, self.state.TELEOP)
         
@@ -349,7 +358,7 @@ class TreadyControl:
 
         # If homing/aligning is complete, transition to teleop
         elif self.state is self.state.HOMING or self.state is self.state.ALIGNING:
-            if not self.base.has_active_trajectory:
+            if not self.base.has_active_flipper_trajectory:
                 self.transition_to(t_now, self.state.TELEOP)
 
         # Teleop mode
