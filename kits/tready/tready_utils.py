@@ -32,7 +32,7 @@ def set_mobile_io_instructions(mobile_io: 'MobileIO', message, color=None):
         mobile_io.set_led_color(color, blocking=False)
     mobile_io.clear_text(blocking=False)
     mobile_io.add_text(message, blocking=False)
-    print(message)
+    print("[mobileIO] " + message)
 
 
 def load_gains(group: 'Group', gains_file: str):
