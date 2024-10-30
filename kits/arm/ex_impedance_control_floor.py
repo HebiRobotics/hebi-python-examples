@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """
 In this example we will implement various hybrid motion-force controllers using the impedance control plugin, which can be used for a wide variety of 
 applications.
@@ -17,9 +19,9 @@ This comprises the following demos:
 
 The following example is for the "Floor" demo:
 """
-#!/usr/bin/env python3
 
 import hebi
+import os
 from hebi_util import create_mobile_io_from_config
 from time import sleep
 import numpy as np
@@ -35,8 +37,8 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Config file
-example_config_file = "config/ex_impedance_control_floor.cfg.yaml"
-example_config = hebi.config.load_config(example_config_file)
+example_config_file = "config/ex_impedance_control_floor.cfg.yaml"  # Relative to this file directory
+example_config = hebi.config.load_config(os.path.join(os.path.dirname(os.path.realpath(__file__)), example_config_file))
 
 # Set up arm, and mobile_io from config
 arm = hebi.arm.create_from_config(example_config, lookup)
@@ -66,7 +68,7 @@ arm.group.feedback_frequency = 200.0
 # Double the effort gains from their default values, to make the arm more sensitive for tracking force.
 # TODO
 
-enable_logging = True
+enable_logging = False
 goal = hebi.arm.Goal(arm.size)
 
 # Start background logging
@@ -74,15 +76,16 @@ if enable_logging:
     arm.group.start_log('dir', 'logs', mkdirs=True)
 
 # Print instructions
-instructions = """Commanded gravity-compensated zero force to the arm.
+instructions = """IMPEDANCE CONTROL FLOOR EXAMPLE
 
-  🧱 (B2) - Toggles an impedance controller on/off:
-            ON  - Replace virtual floor at current height
-            OFF - Makes the floor disappear
+(On/Off) - Toggles an impedance controller on/off:
+        ON  - Replace virtual floor at current height
+        OFF - Makes the floor disappear
 
-  📈 (B1) - Exits the demo, and plots graphs. May take a while."""
+(Quit) - Exits the demo, and plots graphs if logging is enabled."""
 
 print(instructions)
+mobile_io.add_text(instructions)
 
 #######################
 ## Main Control Loop ##
@@ -90,20 +93,17 @@ print(instructions)
 
 controller_on = False
 
-# while button 1 is not pressed
-while not mobile_io.get_button_state(1):
+switch_btn = 1
+quit_btn = 2
 
-    # if not arm.update():
-    #     print("Failed to update arm")
-    #     continue
+# while quit is not pressed
+while not mobile_io.get_button_state(quit_btn):
     arm.update()
-
-    arm.send()
 
     if mobile_io.update(timeout_ms=0):
 
         # Set and unset impedance mode when button is pressed and released, respectively
-        if (mobile_io.get_button_diff(2) == 1):
+        if (mobile_io.get_button_diff(switch_btn) == 1):
 
             controller_on = True
             arm.set_goal(goal.clear().add_waypoint(position=arm.last_feedback.position))
@@ -120,7 +120,7 @@ while not mobile_io.get_button_state(1):
             # Update flags to indicate having left the floor
             cancel_command_flag = True
 
-        elif (mobile_io.get_button_diff(2) == -1):
+        elif (mobile_io.get_button_diff(switch_btn) == -1):
             
             controller_on = False
 
@@ -163,6 +163,8 @@ while not mobile_io.get_button_state(1):
             # Update flags to indicate having left the floor
             cancel_command_flag = False
             floor_command_flag = True
+    
+    arm.send()
 
 mobile_io.set_led_color("red")
 
@@ -174,4 +176,4 @@ if enable_logging:
     hebi_log = arm.group.stop_log()
     draw_plots(hebi_log)
 
-    # Put more plotting code here
+    # Add additional plotting code here

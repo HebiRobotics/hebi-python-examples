@@ -40,6 +40,7 @@ def create_mobile_io_from_config(config, lookup):
                 if i == num_retries - 1:
                     raise RuntimeError("Failed to create Mobile IO from config.")
 
+        mobile_io.resetUI()
         mobile_io.send_layout(layout_file=mobile_io_dict['layout'])
         mobile_io.update()
 
