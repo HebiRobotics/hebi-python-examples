@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import hebi
+import os
 from time import sleep
 from plotting import draw_plots
 
@@ -9,8 +10,8 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Config file
-example_config_file = "config/ex_gravity_compensation.cfg.yaml"
-example_config = hebi.config.load_config(example_config_file)
+example_config_file = "config/ex_gravity_compensation.cfg.yaml"   # Relative to this file directory
+example_config = hebi.config.load_config(os.path.join(os.path.dirname(os.path.realpath(__file__)), example_config_file))
 
 # Set up arm from config
 arm = hebi.arm.create_from_config(example_config, lookup)
@@ -18,7 +19,7 @@ arm = hebi.arm.create_from_config(example_config, lookup)
 arm.group.feedback_frequency = 200.0
 
 # Start background logging
-enable_logging = True
+enable_logging = False
 if enable_logging:
     arm.group.start_log('dir', 'logs', mkdirs=True)
 
@@ -26,7 +27,6 @@ if enable_logging:
 ## Main Control Loop ##
 #######################
 
-print('Commanding gravity-compensated zero torques to the arm.')
 while arm.update():
 
     # When no goal is set, the arm automatically returns to grav-comp mode
@@ -46,4 +46,4 @@ if enable_logging:
     hebi_log = arm.group.stop_log()
     draw_plots(hebi_log)
 
-    # Insert additional plotting code here
+    # Add additional plotting code here

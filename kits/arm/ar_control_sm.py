@@ -2,6 +2,7 @@ from enum import Enum, auto
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from time import time, sleep
+import os
 
 import hebi
 from hebi.util import create_mobile_io
@@ -192,17 +193,17 @@ class ArmMobileIOControl:
 
 
 def setup_mobile_io(m: 'MobileIO'):
-    m.set_button_label(1, '⟲', blocking=False)
-    m.set_button_label(5, 'lock', blocking=False)
-    m.set_button_mode(5, 1, blocking=False)
-    m.set_button_label(7, 'grip', blocking=False)
-    m.set_button_mode(7, 1, blocking=False)
-    m.set_button_label(8, '❌', blocking=False)
+    m.set_button_label(1, '⟲')
+    m.set_button_label(5, 'lock')
+    m.set_button_mode(5, 1)
+    m.set_button_label(7, 'grip')
+    m.set_button_mode(7, 1)
+    m.set_button_label(8, '❌')
 
 
 def parse_mobile_feedback(m: 'MobileIO'):
     if not m.update(0.0):
-        return None
+        return False, None
     
     if m.get_button_state(8):
         return True, None
@@ -229,10 +230,10 @@ if __name__ == "__main__":
     sleep(2)
 
     # Arm setup
-    arm_family = "T-arm"
-    module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
-    hrdf_file = "hrdf/A-2085-06.hrdf"
-    gains_file = "gains/A-2085-06.xml"
+    arm_family = "Arm"
+    module_names = ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3"]
+    hrdf_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "config", "hrdf", "A-2085-06.hrdf")
+    gains_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "config", "gains", "A-2085-06.xml")
 
     # Create Arm object
     arm = hebi.arm.create([arm_family],
@@ -247,11 +248,15 @@ if __name__ == "__main__":
     print('Looking for mobileIO device...')
     m = create_mobile_io(lookup, arm_family)
     while m is None:
-        print('Waiting for mobileIO device to come online...')
-        sleep(1)
-        m = create_mobile_io(lookup, arm_family)
+        try:
+            print('Waiting for mobileIO device to come online...')
+            sleep(1)
+            m = create_mobile_io(lookup, arm_family)
+        except KeyboardInterrupt as e:
+            exit()
     
     print("mobileIO device found.")
+    m.resetUI()
     m.update()
     setup_mobile_io(m)
 
