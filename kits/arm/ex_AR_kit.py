@@ -61,6 +61,9 @@ ar_btn = 3
 gravcomp_btn = 6
 quit_btn = 8
 
+
+xyz_scale = np.array(example_config.user_data['xyz_scale'])
+
 while not abort_flag:
     arm.update()  # update the arm
 
@@ -115,7 +118,7 @@ while not abort_flag:
         rot_phone = R.from_quat(xyzw).as_matrix()
 
         # Calculate new targets
-        xyz_target = xyz_home + rot_phone_init.T @ (example_config.user_data['xyz_scale'] * (xyz_phone - xyz_phone_init))
+        xyz_target = xyz_home + rot_phone_init.T @ (xyz_scale * (xyz_phone - xyz_phone_init))
         rot_target = rot_phone_init.T @ rot_phone @ rot_home
 
         # Calculate new arm joint angles
@@ -123,7 +126,7 @@ while not abort_flag:
 
         # Set and send new goal to the arm
         goal.clear()
-        goal.add_waypoint(position=target_joints, t=example_config.user_data['latency'])
+        goal.add_waypoint(position=target_joints, t=float(example_config.user_data['delay_time']))
         arm.set_goal(goal)
 
     arm.send()
