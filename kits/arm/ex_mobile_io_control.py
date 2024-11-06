@@ -7,6 +7,7 @@ The correct way to store waypoints is by using se3 coordinates, and converting t
 """
 
 import hebi
+import os
 import numpy as np
 from time import sleep
 from hebi_util import create_mobile_io_from_config
@@ -16,8 +17,8 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Config file
-example_config_file = "config/ex_mobile_io_control.cfg.yaml"
-example_config = hebi.config.load_config(example_config_file)
+example_config_file = "config/ex_mobile_io_control.cfg.yaml"    # Relative to this file directory
+example_config = hebi.config.load_config(os.path.join(os.path.dirname(os.path.realpath(__file__)), example_config_file))
 
 # Set up arm, and mobile_io from config
 arm = hebi.arm.create_from_config(example_config, lookup)
@@ -29,13 +30,17 @@ goal = hebi.arm.Goal(arm.size)
 waypoints = np.array([example_config.user_data['waypoint_1'], example_config.user_data['waypoint_2'], example_config.user_data['waypoint_3']])
 
 # Print instructions
-instructions = """
+instructions = """MOBILE IO CONTROL EXAMPLE
+
 B1-B3 - Waypoints 1-3
+
 🌍 - Grav Comp Mode
+
 ❌ - Quit
 """
 
 print(instructions)
+mobile_io.add_text(instructions)
 
 #######################
 ## Main Control Loop ##
