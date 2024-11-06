@@ -6,6 +6,11 @@ from hebi.robot_model import endeffector_position_objective
 from util.math_utils import rotate_x, rotate_y, rotate_z
 
 
+import typing
+if typing.TYPE_CHECKING:
+    from hebi._internal.ffi._message_types import GroupCommandView
+    from hebi._internal.ffi._message_types import GroupFeedbackView
+
 class Leg:
     joint_count = 3
 
@@ -28,7 +33,7 @@ class Leg:
                  # Views into HEBI objects
                  '_command_view', '_feedback_view')
 
-    def __init__(self, index, angle, distance, parameters, leg_configuration, command_view, feedback_view):
+    def __init__(self, index, angle, distance, parameters, leg_configuration, command_view: 'GroupCommandView', feedback_view: 'GroupFeedbackView'):
         self._index = index
 
         num_joints = Leg.joint_count
@@ -87,14 +92,11 @@ class Leg:
         self._commanded_velocities = np.zeros(num_joints, dtype=float32)
         self._commanded_efforts = np.zeros(num_joints, dtype=float32)
 
-        jacobian_ee = np.zeros((6, num_joints), dtype=float64)
         com_frame_count = self._kinematics.get_frame_count('com')
-        jacobian_coms = [None] * com_frame_count
-        for i in range(com_frame_count):
-            jacobian_coms[i] = np.zeros((6, num_joints), dtype=float64)
 
-        self._jacobian_coms = jacobian_coms
-        self._jacobian_ee = jacobian_ee
+        self._jacobian_ee = np.zeros((6, num_joints), dtype=float64)
+        self._jacobian_coms = [np.zeros((6, num_joints), dtype=float64) for _ in range(com_frame_count)]
+
         self._ee_frame = np.identity(4, dtype=float64)
 
         self._command_view = command_view

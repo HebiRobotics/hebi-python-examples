@@ -16,6 +16,12 @@ step_first_legs = (0, 3, 4)
 
 is_main_thread_active = lambda: threading.main_thread().is_alive()
 
+import typing
+
+if typing.TYPE_CHECKING:
+    from hebi._internal.trajectory import Trajectory
+    from hebi._internal.graphics import Color
+
 
 def retry_on_error(func, on_error_func=None, sleep_time=0.1):
     """Call the input function until it succeeds, sleeping on failure by the
@@ -309,7 +315,7 @@ class Hexapod:
 
         # TODO: This seems strange. See if it should be increased/decreased.
         startup_seconds = 4.5
-        self._startup_trajectories = [None] * 6
+        self._startup_trajectories: 'list[Trajectory | None]' = [None] * 6
 
         while True:
             self._soft_startup(first_run, startup_seconds)
@@ -556,7 +562,7 @@ class Hexapod:
             if leg.mode == 'flight':
                 leg.update_step(t)
 
-    def get_leg(self, index):
+    def get_leg(self, index: int):
         return self._legs[index]
 
     def compute_foot_forces(self, t, foot_forces):
@@ -604,14 +610,14 @@ class Hexapod:
         cmd.led.color = 'transparent'
         self._group.send_command(cmd)
 
-    def set_leg_color(self, index, color):
-        group_size = self._group_command.size
-        colors = [None] * group_size
-        colors[index] = color
-
+    def set_leg_color(self, index, color: 'Color'):
         cmd = self._auxilary_group_command
         cmd.clear()
-        cmd.led.color = colors
+
+        for idx in self.get_leg(index)._command_view._indices:
+            cmd[idx].led.colors = color
+            #cmd[idx].led.color = colors
+
         self._group.send_command(cmd)
 
     def set_translation_velocity_x(self, value):
