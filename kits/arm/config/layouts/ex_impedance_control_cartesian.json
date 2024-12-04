@@ -1,46 +1,37 @@
 [
   {
-    "id": "disp1",
-    "type": "text display",
-    "x": 0.0,
-    "y": -0.9,
-    "width": 0.75,
-    "height": 0.3,
-    "parameters": { "text": "" }
+      "id": "b1",
+      "type": "button",
+      "x": -0.25,
+      "y":  -0.73,
+      "width": 0.15,
+      "height": 0.15,
+      "parameters": {
+          "text": "❌/📈",
+          "mode": "momentary"
+      }
   },
   {
-    "id": "b1",
-    "type": "button",
-    "x": -0.25,
-    "y": 0.0,
-    "width": 0.15,
-    "height": 0.15,
-    "parameters": {
-      "text": "On/Off",
-      "mode": "toggle"
-    }
+      "id": "b2",
+      "type": "button",
+      "x": 0.25,
+      "y":  -0.73,
+      "width": 0.15,
+      "height": 0.15,
+      "parameters": {
+          "text": "📌",
+          "mode": "toggle"
+      }
   },
   {
-    "id": "b2",
-    "type": "button",
-    "x": 0.25,
-    "y": 0.0,
-    "width": 0.15,
-    "height": 0.15,
-    "parameters": {
-      "text": "Quit",
-      "mode": "momentary"
-    }
-  },
-  {
-    "id": "led",
-    "type": "led",
-    "x": 0,
-    "y": 0.75,
-    "width": 0.2,
-    "height": 0.2,
-    "parameters": {
-      "text": "led"
-    }
+      "id": "led",
+      "type": "led",
+      "x": 0,
+      "y": 0,
+      "width": 0.2,
+      "height": 0.2,
+      "parameters": {
+          "text": "led"
+      }
   }
 ]
