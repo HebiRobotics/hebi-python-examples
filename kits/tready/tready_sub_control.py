@@ -157,7 +157,7 @@ if __name__ == "__main__":
     lookup = hebi.Lookup()
     sleep(2)
 
-    base_family = "Tready"
+    base_family = "Tready-Sub"
     arm_family = "Arm"
     flipper_names = [f'T{n+1}_J1_flipper' for n in range(4)]
     wheel_names = [f'T{n+1}_J2_track' for n in range(4)]
@@ -200,16 +200,9 @@ if __name__ == "__main__":
     try:
         print('Looking for Leader Arm...', end=' ')
         leader_arm_family = "Tready-Sub-Leader"
-        leader_module_names = [
-            "J1_base",
-            "J2_shoulder",
-            "J3_elbow",
-            "J4_wrist1",
-            "J5_wrist2",
-            "J6_wrist3",
-        ]
-        leader_hrdf_file = "../arm/config/hrdf/A-2085-06.hrdf"
-        leader_gains_file = "../arm/config/gains/A-2085-06.xml"
+        leader_module_names = ["J1_base", "J2A_shoulder1", "J3_shoulder2", "J4_elbow1", "J5_elbow2", "J6_wrist1", "J7_wrist2"]
+        leader_hrdf_file = "../arm/config/hrdf/A-2303-01.hrdf"
+        leader_gains_file = "../arm/config/gains/A-2303-01.xml"
 
         leader_hrdf_file = os.path.join(root_dir, leader_hrdf_file)
         leader_gains_file = os.path.join(root_dir, leader_gains_file)
@@ -220,6 +213,11 @@ if __name__ == "__main__":
             hrdf_file=leader_hrdf_file,
             lookup=lookup,
         )
+
+        alt_shoulder_group = lookup.get_group_from_names(leader_arm_family, ['J2B_shoulder1'])
+        double_shoulder = hebi.arm.DoubledJointMirror(index=1, group=alt_shoulder_group, name="doubleShoulder", enabled=True, ramp_time=0.0)
+        leader_arm.add_plugin(double_shoulder)
+
         leader_arm.load_gains(leader_gains_file)
         print('Leader Arm found.')
     except Exception as e:
@@ -230,16 +228,9 @@ if __name__ == "__main__":
     try:
         print('Looking for Follower Arm...', end=' ')
         follower_arm_family = "Tready-Sub-Follower"
-        follower_module_names = [
-            "J1_base",
-            "J2_shoulder",
-            "J3_elbow",
-            "J4_wrist1",
-            "J5_wrist2",
-            "J6_wrist3",
-        ]
-        follower_hrdf_file = "../arm/config/hrdf/A-2085-06.hrdf"
-        follower_gains_file = "../arm/config/gains/A-2085-06.xml"
+        follower_module_names = ["J1_base", "J2A_shoulder1", "J3_shoulder2", "J4_elbow1", "J5_elbow2", "J6_wrist1", "J7_wrist2"]
+        follower_hrdf_file = "../arm/config/hrdf/A-2303-01.hrdf"
+        follower_gains_file = "../arm/config/gains/A-2303-01.xml"
 
         follower_hrdf_file = os.path.join(root_dir, follower_hrdf_file)
         follower_gains_file = os.path.join(root_dir, follower_gains_file)
@@ -250,17 +241,31 @@ if __name__ == "__main__":
             hrdf_file=follower_hrdf_file,
             lookup=lookup,
         )
+
+        alt_shoulder_group = lookup.get_group_from_names(follower_arm_family, ['J2B_shoulder1'])
+        double_shoulder = hebi.arm.DoubledJointMirror(index=1, group=alt_shoulder_group, name="doubleShoulder", enabled=True, ramp_time=0.0)
+        follower_arm.add_plugin(double_shoulder)
+
         follower_arm.load_gains(follower_gains_file)
         print('Follower Arm found.')
 
     except Exception as e:
         print(f'Failed to create Follower Arm: {e}')
         leader_follower_control = None
+    
+    # Home leader arm
+    leader_arm.update()
+    startup_goal = hebi.arm.Goal(leader_arm.size)
+    startup_goal.add_waypoint(10, position=[1.57, -1.3, 0.0, 0.0, 1.57, 1.0, 0.0])
+    leader_arm.set_goal(startup_goal)
+    while not leader_arm.at_goal:
+        leader_arm.update()
+        leader_arm.send()
 
     # Setup LeaderFollowerControl
     if leader_arm is not None and follower_arm is not None:
         leader_follower_control = LeaderFollowerControl(
-            leader_arm, follower_arm, home_pose=[0.0, 2.09, 2.09, 0.0, 1.57, 0.0]
+            leader_arm, follower_arm, home_pose=[1.57, -1.3, 0.0, 0.0, 1.57, 1.0, 0.0], homing_time=5.0
         )
         leader_follower_control.namespace = "[Arm] "
 

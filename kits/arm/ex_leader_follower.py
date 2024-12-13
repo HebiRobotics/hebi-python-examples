@@ -122,6 +122,10 @@ class LeaderFollowerControl:
             self.follower_arm.pending_command.position = self.leader_arm.last_feedback.position
             self.follower_arm.pending_command.velocity = self.leader_arm.last_feedback.velocity
 
+            follower_double_shoulder = self.follower_arm.get_plugin_by_type(hebi.arm.DoubledJointMirror)
+            if follower_double_shoulder:
+                follower_double_shoulder.update(self.follower_arm, 0)
+ 
             if self.haptic_enabled:
                 pos_diff = self.leader_arm.last_feedback.position - self.follower_arm.last_feedback.position
                 haptic_effort = self.haptic_gains * pos_diff * np.abs(pos_diff)
@@ -153,6 +157,8 @@ class LeaderFollowerControl:
             print(self.namespace + "TRANSITIONING TO IDLE")
 
         elif state is self.state.FOLLOW:
+            self.leader_arm.cancel_goal()
+            self.leader_arm.get_plugin_by_type(hebi.arm.DoubledJointMirror)._cmd.position = np.nan 
             print(self.namespace + "TRANSITIONING TO FOLLOW")
 
         elif state is self.state.DISCONNECTED:
