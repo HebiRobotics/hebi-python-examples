@@ -1,0 +1,32 @@
+# R-Series 7-DoF Double Shoulder Arm
+version: 1.0
+families: ["Tready-Sub-Leader"]
+names: ["J1_base", "J2A_shoulder1", "J3_shoulder2", "J4_elbow1", "J5_elbow2", "J6_wrist1", "J7_wrist2"]
+hrdf: "hrdf/A-2303-01.hrdf"
+
+gains:
+  default: "gains/A-2303-01.xml"
+
+user_data:
+  # Default seed positions for doing inverse kinematics
+  ik_seed_pos: [1.57, -1.3, 0.0, 0.0, 1.57, 1.0, 0.0]
+  home_pose: [1.57, -1.3, 0.0, 0.0, 1.57, 1.0, 0.0]
+
+plugins:
+  - type: GravityCompensationEffort
+    name: gravComp
+    enabled: true
+    ramp_time: 5
+
+  - type: DynamicsCompensationEffort
+    name: dynamicsComp
+    enabled: true
+    ramp_time: 5
+
+  - name: 'DoubleShoulder'
+    type: DoubledJointMirror
+    enabled: true
+    ramp_time: 5
+    group_Family: ["Tready-Sub-Leader"]
+    group_name: ["J2B_shoulder1"]
+    index: 1

@@ -40,7 +40,8 @@ class LeaderFollowerControl:
         follower_arm: hebi.arm.Arm,
         home_pose: "Sequence[float] | npt.NDArray[np.float64]",
         homing_time: float = 3.0,
-        haptic_gains: "Optional[Sequence[float]]" = np.array([30, 25, 20, 10, 3, 2]) * 10,
+        haptic_gains: "Sequence[float]  | npt.NDArray[np.float64]" = np.array(
+            [30, 25, 20, 10, 3, 2]) * 10.0,
         haptic_limit: float = 100
     ):
         self.namespace = ""
@@ -104,7 +105,8 @@ class LeaderFollowerControl:
             arm_goal = hebi.arm.Goal(self.follower_arm.size)
             pos_curr = self.follower_arm.last_feedback.position_command
             if np.any(np.isnan(pos_curr)):
-                print(self.namespace + "No position command, falling back to feedback position")
+                print(self.namespace +
+                      "No position command, falling back to feedback position")
                 pos_curr = self.follower_arm.last_feedback.position
             arm_goal.add_waypoint(position=pos_curr)
             self.follower_arm.set_goal(arm_goal)
@@ -122,16 +124,20 @@ class LeaderFollowerControl:
             self.follower_arm.pending_command.position = self.leader_arm.last_feedback.position
             self.follower_arm.pending_command.velocity = self.leader_arm.last_feedback.velocity
 
-            follower_double_shoulder = self.follower_arm.get_plugin_by_type(hebi.arm.DoubledJointMirror)
+            follower_double_shoulder = self.follower_arm.get_plugin_by_type(
+                hebi.arm.DoubledJointMirror)
             if follower_double_shoulder:
                 follower_double_shoulder.update(self.follower_arm, 0)
- 
+
             if self.haptic_enabled:
-                pos_diff = self.leader_arm.last_feedback.position - self.follower_arm.last_feedback.position
+                pos_diff = self.leader_arm.last_feedback.position - \
+                    self.follower_arm.last_feedback.position
                 haptic_effort = self.haptic_gains * pos_diff * np.abs(pos_diff)
-                haptic_effort = np.clip(haptic_effort, -self.haptic_limit, self.haptic_limit)
+                haptic_effort = np.clip(
+                    haptic_effort, -self.haptic_limit, self.haptic_limit)
                 if np.any(np.isnan(haptic_effort)):
-                    self.leader_arm.pending_command.effort = np.zeros(self.leader_arm.size)
+                    self.leader_arm.pending_command.effort = np.zeros(
+                        self.leader_arm.size)
                 self.leader_arm.pending_command.effort = self.leader_arm.pending_command.effort - haptic_effort
 
         self.send()
@@ -145,20 +151,24 @@ class LeaderFollowerControl:
             print(self.namespace + "TRANSITIONING TO HOMING")
             g = hebi.arm.Goal(self.follower_arm.size)
             g.add_waypoint(t=self.homing_time, position=self.arm_home)
+            # Have leader and follower both drive to home pose on start/home
+            self.leader_arm.set_goal(g)
             self.follower_arm.set_goal(g)
 
         elif state is self.state.ALIGNING:
             print(self.namespace + "TRANSITIONING TO ALIGNING")
             g = hebi.arm.Goal(self.follower_arm.size)
-            g.add_waypoint(t=self.homing_time, position=self.leader_arm.last_feedback.position)
+            g.add_waypoint(t=self.homing_time,
+                           position=self.leader_arm.last_feedback.position)
             self.follower_arm.set_goal(g)
 
         elif state is self.state.IDLE:
             print(self.namespace + "TRANSITIONING TO IDLE")
 
         elif state is self.state.FOLLOW:
+            # Cancel Leader arm goal so it becomes compliant
+            # to serve as input device
             self.leader_arm.cancel_goal()
-            self.leader_arm.get_plugin_by_type(hebi.arm.DoubledJointMirror)._cmd.position = np.nan 
             print(self.namespace + "TRANSITIONING TO FOLLOW")
 
         elif state is self.state.DISCONNECTED:
@@ -169,7 +179,7 @@ class LeaderFollowerControl:
 
         self.state = state
         self.haptic_enabled = False
-    
+
     def stop(self):
         self.transition_to(time(), FollowerControlState.EXIT)
 
@@ -216,53 +226,14 @@ if __name__ == "__main__":
     lookup = hebi.Lookup()
     sleep(2)
 
+    cfg = hebi.config.load_config('config/A-2085-06.cfg.yaml')
     # Leader Arm setup
-    leader_arm_family = "Leader-Arm"
-    leader_module_names = [
-        "J1_base",
-        "J2_shoulder",
-        "J3_elbow",
-        "J4_wrist1",
-        "J5_wrist2",
-        "J6_wrist3",
-    ]
-    leader_hrdf_file = "config/hrdf/A-2085-06.hrdf"
-    leader_gains_file = "config/gains/A-2085-06.xml"
-
-    leader_hrdf_file = os.path.join(root_dir, leader_hrdf_file)
-    leader_gains_file = os.path.join(root_dir, leader_gains_file)
-
-    leader_arm = hebi.arm.create(
-        [leader_arm_family],
-        names=leader_module_names,
-        hrdf_file=leader_hrdf_file,
-        lookup=lookup,
-    )
-    leader_arm.load_gains(leader_gains_file)
+    cfg.families = ["Leader-Arm"]
+    leader_arm = hebi.arm.create_from_config(cfg, lookup)
 
     # Follower Arm setup
-    follower_arm_family = "Follower-Arm"
-    follower_module_names = [
-        "J1_base",
-        "J2_shoulder",
-        "J3_elbow",
-        "J4_wrist1",
-        "J5_wrist2",
-        "J6_wrist3",
-    ]
-    follower_hrdf_file = "config/hrdf/A-2085-06.hrdf"
-    follower_gains_file = "config/gains/A-2085-06.xml"
-
-    follower_hrdf_file = os.path.join(root_dir, follower_hrdf_file)
-    follower_gains_file = os.path.join(root_dir, follower_gains_file)
-
-    follower_arm = hebi.arm.create(
-        [follower_arm_family],
-        names=follower_module_names,
-        hrdf_file=follower_hrdf_file,
-        lookup=lookup,
-    )
-    follower_arm.load_gains(follower_gains_file)
+    cfg.families = ["Follower-Arm"]
+    follower_arm = hebi.arm.create_from_config(cfg, lookup)
 
     # Setup LeaderFollowerControl
     leader_follower_control = LeaderFollowerControl(

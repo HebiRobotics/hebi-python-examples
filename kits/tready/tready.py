@@ -1,6 +1,4 @@
 import sys
-import os
-from collections import namedtuple
 from time import time, sleep
 from enum import Enum, auto
 
