@@ -50,7 +50,7 @@ This folder contains example code for various preconfigured kits. Additional doc
 
 | Kit | Comment |
 |-----|---------|
-| [Arms](kits/arm) | A variety of arm configurations, from 4-DoF to 6-DoF. |
+| [Arms](kits/arms) | A variety of arm configurations, from 4-DoF to 6-DoF. |
 | [Igor](kits/igor2) | A 2-wheel, 2-arm, dynamic balancing mobile robot |
 
 ## Advanced Examples
