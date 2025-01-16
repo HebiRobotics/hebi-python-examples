@@ -115,7 +115,7 @@ if __name__ == "__main__":
         gripper_group = lookup.get_group_from_names(['Arm'], ['gripperSpool'])
 
     gripper = Gripper(gripper_group, -5, 1)
-    gripper.load_gains(os.path.join(os.path.dirname(__file__), '../../../kits/arm/gains/gripper_spool_gains.xml'))
+    gripper.load_gains(os.path.join(os.path.dirname(__file__), '../../../kits/arms/gains/gripper_spool_gains.xml'))
 
     input_arm.update()
     output_arm.update()
