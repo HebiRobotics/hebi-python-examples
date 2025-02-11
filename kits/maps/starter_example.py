@@ -62,6 +62,7 @@ while arm.update():
     # Send the latest loaded commands to the arm. Since the goal is already set,
     # it will send the last loaded command when arm.update() was last called
     # These are the current joint angles/positions, perhaps from a GroupFeedback object:
+    group_feedback = arm.group.get_next_feedback(reuse_fbk=group_feedback)
     positions = group_feedback.position
 
     arm.FK(positions, xyz_out=xyz, orientation_out=rot)
