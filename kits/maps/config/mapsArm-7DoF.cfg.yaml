@@ -1,0 +1,11 @@
+# MAPS 7-DoF Arm
+version: 1.0
+families: ["MAPS"]
+names: ["J1-A", "J2-A", "J2-B", "J3-A", "J3-B", "J4-A", "J4-B"]
+hrdf: "hrdf/mapsArm_7DoF_standard.hrdf"
+
+# gains:
+
+# user_data:
+
+# plugins:
