@@ -65,7 +65,7 @@
               output_rot="Rx(pi)"/>  
              
               
-  <!-- Transform for mounting of UT Thickness Probe -->            
+  <!-- Transform for mounting of End Effector / Probe -->            
   <end-effector type="Custom" 
                 mass="0.050" 
                 com_trans="0 0 0.030" 

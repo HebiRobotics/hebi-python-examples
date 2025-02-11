@@ -18,11 +18,6 @@ sleep(2)    # Wait for a few seconds to find modules
 # Config file contains the necessary information to set up the arm, such as
 # the family name, module names, path to HRDF file for the kinematics, etc.
 
-# By default, this example uses a 6-DoF arm with X-Series modules
-# You can edit the config file to match your robot's configuration
-# For example, if you have a 5-DoF T-Series arm, replace the config file
-# with "config/A-2580-05.cfg.yaml"
-
 example_config_file = "config/mapsArm-7DoF.cfg.yaml"    # Relative to this file directory
 example_config = hebi.config.load_config(os.path.join(os.path.dirname(os.path.realpath(__file__)), example_config_file))
 
@@ -49,7 +44,7 @@ xyz = np.empty(3)
 rot = np.empty((3, 3))
 
 # Start background logging
-enable_logging = False
+enable_logging = True
 if enable_logging:
     arm.group.start_log('dir', 'logs', mkdirs=True)
 
