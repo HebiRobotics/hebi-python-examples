@@ -2,9 +2,10 @@ import hebi
 from hebi.util import create_mobile_io
 from time import time, sleep
 import os
+import sys
 from .tready_utils import load_gains, set_mobile_io_instructions, setup_arm_6dof
 from .tready import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
-from kits.arm.ar_control_sm import ArmMobileIOControl, ArmMobileIOInputs
+from kits.arms.ar_control_sm import ArmMobileIOControl, ArmMobileIOInputs
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
@@ -165,7 +166,11 @@ if __name__ == "__main__":
     # mobileIO setup
     print('Looking for mobileIO device...')
     m = create_mobile_io(lookup, base_family)
+    search_start = time()
     while m is None:
+        if time() - search_start > 30.0:
+            print("Couldn't find tablet, restarting...")
+            sys.exit()
         print('Waiting for mobileIO device to come online...')
         sleep(1)
         m = create_mobile_io(lookup, base_family)
@@ -212,7 +217,7 @@ if __name__ == "__main__":
             set_mobile_io_instructions(m, msg, color="blue")
 
         elif new_state is TreadyControlState.TELEOP:
-            controller.base.clear_color()
+            controller.base.set_color('transparent')
             msg = ('Robot Ready to Control')
             set_mobile_io_instructions(m, msg, color="green")
 
@@ -243,12 +248,25 @@ if __name__ == "__main__":
     base_control._update_handlers.append(update_torque_mode)
 
     # can enable start logging here
+    voltage = np.mean(base_control.base.fbk.voltage)
     while base_control.running and (arm is None or arm_control.running):
         t = time()
         try:
             quit, base_inputs, arm_inputs = parse_mobile_io_feedback(m)
             if quit:
                 break
+            if base_control.state is TreadyControlState.TELEOP:
+                new_voltage = np.mean(base_control.base.fbk.voltage)
+                if abs(voltage - new_voltage) > 0.1:
+                    m.clear_text()
+                    if new_voltage < 31:
+                        msg = f'CHARGE NOW! {voltage:.2f}V'
+                    elif new_voltage < 32:
+                       msg = f'Low Battery: {voltage:.2f}V'
+                    else:
+                       msg = f'Battery: {voltage:.2f}V'
+                    m.add_text(msg)
+                voltage = new_voltage
             base_control.update(t, base_inputs)
             if arm is not None:
                 arm_control.update(t, arm_inputs)
