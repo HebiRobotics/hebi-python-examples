@@ -45,9 +45,10 @@ class TreadedBase:
     def __init__(self, group: 'Group', chassis_ramp_time: float, flipper_ramp_time: float):
         self.group = group
 
-        self.fbk = self.group.get_next_feedback()
-        while self.fbk == None:
-            self.fbk = self.group.get_next_feedback()
+        fbk = self.group.get_next_feedback()
+        while fbk is None:
+            fbk = self.group.get_next_feedback()
+        self.fbk = fbk
 
         self.wheel_fbk = self.fbk.create_view([0, 1, 2, 3])
         self.flipper_fbk = self.fbk.create_view([4, 5, 6, 7])
@@ -158,10 +159,14 @@ class TreadedBase:
 
                 flipper_height = self.flipper_height
                 # Moving average setup below, in an attempt to make Tready less wobbly on tiptoes
-                gyro_z = self.flipper_fbk.gyro[:, 2]
+                flipper_vels = self.flipper_fbk.velocity_command[:, 2]
+                if np.any(np.isnan(flipper_vels)):
+                    flipper_vels = self.flipper_fbk.gyro[:, 2]
+
+
 
                 self.wheel_cmd.position[:] = np.nan
-                self.wheel_cmd.velocity = self.chassis_to_wheel_vel @ vel + gyro_z * flipper_height
+                self.wheel_cmd.velocity = self.chassis_to_wheel_vel @ vel + flipper_vels * flipper_height
                 for i in range(len(self.wheel_cmd.effort)):
                     if flipper_height[i] > 1 - 1e-12:
                         self.wheel_cmd.effort[i] = np.nan
@@ -300,7 +305,7 @@ class TreadyControl:
         self.state = TreadyControlState.STARTUP
         self.base = base
 
-        self.SPEED_MAX_LIN = 0.45  # m/s
+        self.SPEED_MAX_LIN = 0.25  # m/s, for tracks driven by R8-9+
         self.SPEED_MAX_ROT = self.SPEED_MAX_LIN / (base.WHEEL_BASE / 2) # rad/s
         self._transition_handlers: 'list[Callable[[TreadyControl, TreadyControlState], None]]' = []
         self._update_handlers: 'list[Callable[[TreadyControl], None]]' = []
