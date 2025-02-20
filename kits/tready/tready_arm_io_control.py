@@ -7,7 +7,7 @@ from scipy.spatial.transform import Rotation as R
 import hebi
 from hebi.util import create_mobile_io
 
-from kits.arm.ar_control_sm import ArmMobileIOControl, ArmControlState, ArmMobileIOInputs
+from kits.arms.ar_control_sm import ArmMobileIOControl, ArmControlState, ArmMobileIOInputs
 from .tready import TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
 from .tready_utils import set_mobile_io_instructions, setup_base, setup_arm_6dof
 

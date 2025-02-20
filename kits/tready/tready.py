@@ -159,7 +159,7 @@ class TreadedBase:
 
                 flipper_height = self.flipper_height
                 # Moving average setup below, in an attempt to make Tready less wobbly on tiptoes
-                flipper_vels = self.flipper_fbk.velocity_command[:, 2]
+                flipper_vels = -1.0 * self.flipper_fbk.velocity_command
                 if np.any(np.isnan(flipper_vels)):
                     flipper_vels = self.flipper_fbk.gyro[:, 2]
 

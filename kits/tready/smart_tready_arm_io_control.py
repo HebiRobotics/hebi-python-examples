@@ -5,7 +5,7 @@ import os
 import sys
 from .tready_utils import load_gains, set_mobile_io_instructions, setup_arm_6dof
 from .tready import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
-from kits.arm.ar_control_sm import ArmMobileIOControl, ArmMobileIOInputs
+from kits.arms.ar_control_sm import ArmMobileIOControl, ArmMobileIOInputs
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
