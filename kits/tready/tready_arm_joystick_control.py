@@ -1,8 +1,10 @@
 #! /usr/bin/env python3
 
+import os
 import hebi
 import numpy as np
 from time import time, sleep
+import datetime
 from hebi.util import create_mobile_io
 
 from kits.arms.joystick_control_sm import ArmJoystickControl, ArmControlState, ArmJoystickInputs
@@ -162,6 +164,14 @@ if __name__ == "__main__":
     ## Main Control Loop ##
     #######################
 
+    logging = True
+
+    if logging:
+        tready_dir = os.path.dirname(__file__)
+        now = datetime.datetime.now()
+        arm.group.start_log(os.path.join(tready_dir, 'logs'), f'arm_{now:%Y-%m-%d-%H:%M:%S}')
+        base.group.start_log(os.path.join(tready_dir, 'logs'), f'base_{now:%Y-%m-%d-%H:%M:%S}')
+
     m.set_led_color('blue')
     while base_control.running and arm_control.running:
         t = time()
@@ -181,3 +191,7 @@ if __name__ == "__main__":
 
         base_control.send()
         arm_control.send()
+
+    if logging:
+        arm.group.stop_log()
+        base.group.stop_log()
