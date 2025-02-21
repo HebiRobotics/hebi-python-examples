@@ -1,5 +1,7 @@
 import sys
 from time import time, sleep
+import os
+import datetime
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R
@@ -168,6 +170,15 @@ if __name__ == "__main__":
     ## Main Control Loop ##
     #######################
 
+    logging = True
+
+    if logging:
+        tready_dir = os.path.dirname(__file__)
+        now = datetime.datetime.now()
+        if arm:
+            arm.group.start_log(os.path.join(tready_dir, 'logs'), f'arm_{now:%Y-%m-%d-%H:%M:%S}')
+        base.group.start_log(os.path.join(tready_dir, 'logs'), f'base_{now:%Y-%m-%d-%H:%M:%S}')
+
     m.set_led_color('blue')
     while base_control.running and arm_control.running:
         t = time()
@@ -187,5 +198,9 @@ if __name__ == "__main__":
 
         base_control.send()
         arm_control.send()
+
+    if logging:
+        arm.group.stop_log()
+        base.group.stop_log()
 
     sys.exit(0)

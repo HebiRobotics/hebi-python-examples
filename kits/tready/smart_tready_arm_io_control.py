@@ -1,6 +1,7 @@
 import hebi
 from hebi.util import create_mobile_io
 from time import time, sleep
+import datetime
 import os
 import sys
 from .tready_utils import load_gains, set_mobile_io_instructions, setup_arm_6dof
@@ -247,7 +248,15 @@ if __name__ == "__main__":
     base_control._transition_handlers.append(update_mobile_io)
     base_control._update_handlers.append(update_torque_mode)
 
-    # can enable start logging here
+    logging = True
+
+    if logging:
+        tready_dir = os.path.dirname(__file__)
+        now = datetime.datetime.now()
+        if arm:
+            arm.group.start_log(os.path.join(tready_dir, 'logs'), f'arm_{now:%Y-%m-%d-%H:%M:%S}')
+        base.group.start_log(os.path.join(tready_dir, 'logs'), f'base_{now:%Y-%m-%d-%H:%M:%S}')
+
     voltage = np.mean(base_control.base.fbk.voltage)
     while base_control.running and (arm is None or arm_control.running):
         t = time()
@@ -279,4 +288,7 @@ if __name__ == "__main__":
     base_control.stop()
     if arm is not None:
         arm_control.stop()
-    # stop logging here
+
+    if logging:
+        arm.group.stop_log()
+        base.group.stop_log()

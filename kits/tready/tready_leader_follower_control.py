@@ -165,8 +165,8 @@ if __name__ == "__main__":
     ## Main Control Loop ##
     #######################
 
-    #demo_controller.start_logging()
-    #last_log_start_time = time()
+    demo_controller.start_logging()
+    last_log_start_time = time()
     last_text_update = 0.0
     while demo_controller.running and gripper_control.running and leader_follower_control.running:
         t = time()
@@ -197,8 +197,8 @@ if __name__ == "__main__":
         if m_tready.get_button_state(8):
             demo_controller.transition_to(t, TreadyControlState.EXIT)
 
-        #if t - last_log_start_time > 3600:
-        #    demo_controller.cycle_log()
-        #    last_log_start_time = t
+        if t - last_log_start_time > 3600:
+            demo_controller.cycle_log()
+            last_log_start_time = t
 
     sys.exit(0)

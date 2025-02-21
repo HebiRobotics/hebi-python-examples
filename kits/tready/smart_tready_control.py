@@ -1,6 +1,7 @@
 import hebi
 from hebi.util import create_mobile_io
 from time import time, sleep
+import datetime
 import os
 from .tready_utils import load_gains, set_mobile_io_instructions
 from .tready import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
@@ -191,6 +192,13 @@ if __name__ == "__main__":
     base_control._update_handlers.append(update_torque_mode)
 
     # can enable start logging here
+    logging = True
+
+    if logging:
+        tready_dir = os.path.dirname(__file__)
+        now = datetime.datetime.now()
+        base.group.start_log(os.path.join(tready_dir, 'logs'), f'base_{now:%Y-%m-%d-%H:%M:%S}')
+
     while base_control.running:
         t = time()
         try:
@@ -203,4 +211,6 @@ if __name__ == "__main__":
             break
     
     base_control.stop()
-    # stop logging here
+
+    if logging:
+        base.group.stop_log()
