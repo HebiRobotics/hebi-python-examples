@@ -4,22 +4,20 @@ import hebi
 from math import pi
 from time import sleep, time
 import numpy as np
-from matplotlib import pyplot as plt
 
 
 # Add the root folder of the repository to the search path for modules
 import os
 import sys
-root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path = [root_path] + sys.path
 from util import math_utils
 
 
+# A helper function to create a group from named modules, and set specified gains on the modules in that group.
 def get_group():
-    """Helper function to create a group from named modules, and set specified
-    gains on the modules in that group."""
     families = ['Test Family']
-    names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
+    names = ["J1_base", "J2_shoulder", "J3_elbow"]
     lookup = hebi.Lookup()
     sleep(2.0)
     group = lookup.get_group_from_names(families, names)
@@ -29,7 +27,7 @@ def get_group():
     # Set gains
     gains_command = hebi.GroupCommand(group.size)
     try:
-        gains_command.read_gains("gains/A-2085-06.xml")
+        gains_command.read_gains("gains/A-2085-03.xml")
     except Exception as e:
         print('Failed to read gains: {0}'.format(e))
         return None
@@ -40,9 +38,9 @@ def get_group():
     return group
 
 
+# A helper function to actually execute the trajectory on a group of modules
 def execute_trajectory(group, model, trajectory, feedback):
-    """Helper function to actually execute the trajectory on a group of
-    modules."""
+    # Set up command object, timing variables, and other necessary variables
     num_joints = group.size
     command = hebi.GroupCommand(num_joints)
     duration = trajectory.duration
@@ -62,7 +60,8 @@ def execute_trajectory(group, model, trajectory, feedback):
         # Gravity Compensation uses knowledge of the arm's kinematics and mass to
         # compensate for the weight of the arm. Dynamic Compensation uses the
         # kinematics and mass to compensate for the commanded accelerations of the arm.
-        eff_cmd = model.get_grav_comp_efforts(feedback.position, [0, 0, 1])
+
+        eff_cmd = model.get_grav_comp_efforts(feedback.position, np.array([0, 0, 1], dtype='float'))
         # NOTE: dynamic compensation effort computation has not yet been added to the APIs
 
         # Fill in the command and send commands to the arm
@@ -80,30 +79,26 @@ if group is None:
     exit(1)
 
 try:
-    model = hebi.robot_model.import_from_hrdf("hrdf/A-2085-06.hrdf")
+    model = hebi.robot_model.import_from_hrdf("hrdf/A-2085-03.hrdf")
 except Exception as e:
     print('Could not load HRDF: {0}'.format(e))
     exit(1)
 
-# Go to the XYZ positions at four corners of the box, and create a rotation matrix
-# that has the end effector point straight forward.
+# Go to the XYZ positions at four corners of the box.
 xyz_targets = np.array([[0.20, 0.40, 0.40, 0.20], [0.30, 0.30, -0.30, -0.30], [0.10, 0.10, 0.10, 0.10]])
 xyz_cols = xyz_targets.shape[1]
-rotation_target = math_utils.rotate_y(pi / 2)
-
-# Convert these to joint angle waypoints using IK solutions for each of the xyz locations
-# as well as the desired orientation of the end effector. Copy the initial waypoint at the end so we close the square.
+# Convert these to joint angle waypoints using IK solutions for each of the xyz locations. Copy the initial waypoint
+# at the end so we close the square.
 
 # Choose an "elbow up" initial configuration for IK
-elbow_up_angles = [0, pi / 4.0, pi / 2.0, pi / 4.0, -pi, pi / 2.0]
+elbow_up_angles = [0, -pi / 4, -pi / 2]
 
 joint_targets = np.empty((group.size, xyz_cols + 1))
 for col in range(xyz_cols):
-    so3_objective = hebi.robot_model.endeffector_so3_objective(rotation_target)
     ee_position_objective = hebi.robot_model.endeffector_position_objective(xyz_targets[:, col])
-    ik_res_angles = model.solve_inverse_kinematics(elbow_up_angles, so3_objective, ee_position_objective)
+    ik_res_angles = model.solve_inverse_kinematics(elbow_up_angles, ee_position_objective)
     joint_targets[:, col] = ik_res_angles
-    elbow_up_angles = ik_res_angles  # reset seed after each loop
+
 joint_targets[:, xyz_cols] = joint_targets[:, 0]
 
 # Set up feedback object, and start logging

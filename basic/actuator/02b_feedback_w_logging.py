@@ -21,7 +21,7 @@ if group is None:
 # Live Visualization
 # Starts logging in the background. Note that logging can be enabled at any time, and that it does not negatively
 # affect the performance of your running programs.
-group.start_log('dir', 'logs', mkdirs=True)
+group.start_log('logs', 'exampleLog', mkdirs=True)
 
 print('Use Scope to command the module and make it move...')
 plt.ion()
