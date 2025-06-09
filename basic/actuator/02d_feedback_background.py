@@ -32,14 +32,18 @@ plt.grid(True)
 plt.bar([0, 1, 2], [0, 0, 0])
 plt.draw()
 
+latest_gyro = [0, 0, 0]
 
 def feedback_handler(group_feedback):
-    gyro = group_feedback.gyro[0]
-    plt.bar([0, 1, 2], gyro)
-    plt.pause(0.00001)
-
+    global latest_gyro
+    latest_gyro = group_feedback.gyro[0]
 
 group.add_feedback_handler(feedback_handler)
 
-# Wait for 10 seconds
-sleep(10.0)
+bars = plt.bar([0, 1, 2], [0, 0, 0])
+for _ in range(50):
+    temp_gyro = latest_gyro.copy()
+    for i in range(3):
+        bars[i].set_height(temp_gyro[i])
+    plt.pause(0.01)
+    sleep(0.2)

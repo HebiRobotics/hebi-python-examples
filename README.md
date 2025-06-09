@@ -25,7 +25,7 @@ Visit http://docs.hebi.us/download/python to see which specific versions are ava
 This folder contains examples that help you get started with the HEBI 
 Robotics APIs for Python. There are separate examples for each of our different products:
 
-* X-Series Actuator
+* Actuator
 * I/O Board
 * Mobile I/O
 

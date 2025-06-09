@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 # Add the root folder of the repository to the search path for modules
 import os
 import sys
-root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path = [root_path] + sys.path
 from util import math_utils
 
@@ -62,7 +62,7 @@ def execute_trajectory(group, model, trajectory, feedback):
         # Gravity Compensation uses knowledge of the arm's kinematics and mass to
         # compensate for the weight of the arm. Dynamic Compensation uses the
         # kinematics and mass to compensate for the commanded accelerations of the arm.
-        eff_cmd = model.get_grav_comp_efforts(feedback.position, [0, 0, 1])
+        eff_cmd = model.get_grav_comp_efforts(feedback.position, np.array([0, 0, 1], dtype='float'))
         # NOTE: dynamic compensation effort computation has not yet been added to the APIs
 
         # Fill in the command and send commands to the arm

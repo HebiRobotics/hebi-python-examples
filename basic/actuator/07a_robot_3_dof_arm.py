@@ -9,7 +9,7 @@ import numpy as np
 # Add the root folder of the repository to the search path for modules
 import os
 import sys
-root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path = [root_path] + sys.path
 from util import math_utils
 
