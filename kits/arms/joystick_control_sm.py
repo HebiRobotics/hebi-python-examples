@@ -3,6 +3,7 @@ from enum import Enum, auto
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from time import time, sleep
+import argparse
 
 import hebi
 from hebi.util import create_mobile_io
@@ -31,9 +32,10 @@ class ArmJoystickInputs:
 
 
 class ArmJoystickControl:
-    def __init__(self, arm: hebi.arm.Arm, home_pose: 'Sequence[float] | npt.NDArray[np.float64]', homing_time: float = 5.0, shoulder_flip_angle=-np.pi / 2, joint_limits=None):
+    def __init__(self, arm: hebi.arm.Arm, home_pose: 'Sequence[float] | npt.NDArray[np.float64]', homing_time: float = 5.0, shoulder_flip_angle=-np.pi / 2, joint_limits=None, use_gripper=False):
         self.state = ArmControlState.STARTUP
         self.arm = arm
+        self.use_gripper = use_gripper
 
         self.arm_home = home_pose
         self.homing_time = homing_time
@@ -88,11 +90,12 @@ class ArmJoystickControl:
             arm_goal = self.compute_arm_goal(demo_input)
             self.arm.set_goal(arm_goal)
 
-            gripper_closed = self.arm.end_effector.state == 1.0
-            if demo_input.gripper_closed and not gripper_closed:
-                self.arm.end_effector.close()
-            elif not demo_input.gripper_closed and gripper_closed:
-                self.arm.end_effector.open()
+            if self.use_gripper:
+                gripper_closed = self.arm.end_effector.state == 1.0
+                if demo_input.gripper_closed and not gripper_closed:
+                    self.arm.end_effector.close()
+                elif not demo_input.gripper_closed and gripper_closed:
+                    self.arm.end_effector.open()
 
         elif self.state is self.state.STARTUP:
             self.transition_to(t_now, self.state.HOMING)
@@ -220,14 +223,19 @@ def parse_mobile_feedback(m: 'MobileIO'):
 
 
 if __name__ == "__main__":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Control a HEBI arm with joystick inputs')
+    parser.add_argument('--no-gripper', action='store_true', help='Disable gripper control')
+    args = parser.parse_args()
+
     lookup = hebi.Lookup()
     sleep(2)
 
     # Arm setup
     arm_family = "Arm"
     module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
-    hrdf_file = "hrdf/A-2085-06.hrdf"
-    gains_file = "gains/A-2085-06.xml"
+    hrdf_file = "config/hrdf/A-2580-06.hrdf"
+    gains_file = "config/gains/A-2580-06.xml"
 
     root_dir = os.path.abspath(os.path.dirname(__file__))
     hrdf_file = os.path.join(root_dir, hrdf_file)
@@ -240,34 +248,37 @@ if __name__ == "__main__":
                           lookup=lookup)
     arm.load_gains(gains_file)
 
-    # Add the gripper
-    gripper_family = arm_family
-    gripper_name = 'gripperSpool'
+    # Check if the gripper is disabled
+    use_gripper = not args.no_gripper
+    if use_gripper:
+        gripper_family = arm_family
+        gripper_name = 'gripperSpool'
 
-    gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
-    while gripper_group is None:
-        print(f"Looking for gripper module {gripper_family} / {gripper_name} ...")
-        sleep(1)
         gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
+        while gripper_group is None:
+            print(f"Looking for gripper module {gripper_family} / {gripper_name} ...")
+            sleep(1)
+            gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
 
-    gripper = hebi.arm.Gripper(gripper_group, -5, 1)
-    gripper_gains = os.path.join(root_dir, "gains/gripper_spool_gains.xml")
-    gripper.load_gains(gripper_gains)
-    arm.set_end_effector(gripper)
+        gripper = hebi.arm.Gripper(gripper_group, -5, 1)
+        gripper_gains = os.path.join(root_dir, "config/gains/gripper_spool_gains.xml")
+        gripper.load_gains(gripper_gains)
+        arm.set_end_effector(gripper)
 
     joint_limits = np.empty((7, 2))
     joint_limits[:, 0] = -np.inf
     joint_limits[:, 1] = np.inf
 
     # base limits [-2, 2] (radians)
-    joint_limits[0, :] = [-2.0, 2.0]
+    # joint_limits[0, :] = [-2.0, 2.0]
     # shoulder limits [-2, inf]
-    joint_limits[1, 0] = -2.0
+    # joint_limits[1, 0] = -2.0
 
     arm_control = ArmJoystickControl(arm,
-                                     [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0],
-                                     homing_time=7.0,
-                                     joint_limits=joint_limits)
+                                     [0.0, 2.09, 2.09, 0.0, 1.57, 0.0],
+                                     homing_time=3.0,
+                                     joint_limits=joint_limits,
+                                     use_gripper=use_gripper)
 
     # Setup MobileIO
     print('Looking for Mobile IO...')
