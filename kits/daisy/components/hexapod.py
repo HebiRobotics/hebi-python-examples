@@ -19,11 +19,14 @@ is_main_thread_active = lambda: threading.main_thread().is_alive()
 import typing
 
 if typing.TYPE_CHECKING:
+    from typing import Callable
+    from hebi._internal.group import Group
     from hebi._internal.trajectory import Trajectory
     from hebi._internal.graphics import Color
+    T = typing.TypeVar('T')
 
 
-def retry_on_error(func, on_error_func=None, sleep_time=0.1):
+def retry_on_error(func: 'Callable[[], T]', on_error_func=None, sleep_time=0.1):
     """Call the input function until it succeeds, sleeping on failure by the
     specified amount."""
     if not callable(func):
@@ -615,8 +618,7 @@ class Hexapod:
         cmd.clear()
 
         for idx in self.get_leg(index)._command_view._indices:
-            cmd[idx].led.colors = color
-            #cmd[idx].led.color = colors
+            cmd[idx].led.led = color
 
         self._group.send_command(cmd)
 
