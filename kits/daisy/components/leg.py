@@ -1,15 +1,16 @@
 import numpy as np
 
-from numpy import float32, float64
 from numpy.linalg import solve, LinAlgError
 from hebi.robot_model import endeffector_position_objective
-from util.math_utils import rotate_x, rotate_y, rotate_z
+from util.math_utils import rotate_x, rotate_y, rotate_z, quat2rot
 
+import hebi
+from hebi.robot_model import FrameType
 
 import typing
 if typing.TYPE_CHECKING:
-    from hebi._internal.ffi._message_types import GroupCommandView
-    from hebi._internal.ffi._message_types import GroupFeedbackView
+    import numpy.typing as npt
+    from hebi._internal.ffi._message_types import GroupCommandView, GroupFeedbackView
 
 class Leg:
     joint_count = 3
@@ -18,37 +19,30 @@ class Leg:
                  #
                  '_on_state_computed',
                  # Cartesian coordinates state
-                 '_home_stance_xyz', '_level_home_stance_xyz', '_fbk_stance_xyz',
+                 '_home_stance_xyz', '_level_home_stance_xyz',
                  '_cmd_stance_xyz', '_stance_vel_xyz',
                  # Leg parameters
                  '_stance_radius', '_body_height',
                  # Parameters for torque control
-                 '_spring_torque', '_spring_shift', '_drag_shift',
+                 '_spring_shift', '_drag_shift',
                  # Static kinematics variables
-                 '_kinematics', '_masses',
+                 '_kinematics',
                  # Workspace variables for kinematics
                  '_ee_frame', '_jacobian_ee', '_jacobian_coms',
-                 # Pending command fields
-                 '_commanded_positions', '_commanded_velocities', '_commanded_efforts',
                  # Views into HEBI objects
                  '_command_view', '_feedback_view')
 
-    def __init__(self, index, angle, distance, parameters, leg_configuration, command_view: 'GroupCommandView', feedback_view: 'GroupFeedbackView'):
+    def __init__(self, index: int, leg_kinematics: 'hebi.robot_model.RobotModel', parameters, command_view: 'GroupCommandView', feedback_view: 'GroupFeedbackView'):
         self._index = index
 
-        num_joints = Leg.joint_count
-        from os.path import join
-        from hebi.robot_model import import_from_hrdf
-        kin = import_from_hrdf(join(parameters.resource_directory, '{0}.hrdf'.format(leg_configuration)))
-        seed_angles = np.empty(num_joints, dtype=float64)
+        num_joints = leg_kinematics.dof_count
+        seed_angles = np.array([0.2, 0.3, 1.9], dtype=np.float64)
+        spring_shift = 3.75
 
         # Leg config specific values
-        if leg_configuration == 'left':
-            spring_shift = -3.75
-            seed_angles[:] = [0.2, -0.3, -1.9]
-        else:
-            spring_shift = 3.75
-            seed_angles[:] = [0.2, 0.3, 1.9]
+        if index % 2 == 0:
+            spring_shift *= -1.0
+            seed_angles[1:] *= -1
 
         self._spring_shift = spring_shift
         self._drag_shift = 1.5
@@ -56,48 +50,26 @@ class Leg:
         self._stance_radius = parameters.stance_radius
         self._body_height = parameters.default_body_height
 
-        # Set base frame for kinematic body
-        base_frame = np.identity(4, dtype=float64)
-        base_frame[0:3, 0:3] = rotate_z(angle)
-        base_frame[0:3, 3] = base_frame[0:3, 0:3] @ [distance, 0.0, 0.0]
-        kin.base_frame = base_frame
+        frames = leg_kinematics.get_forward_kinematics(FrameType.Output, seed_angles)
+        base_frame = frames[0]
 
         # Calculate stance in cartesian coordinates
-        home_stance_xyz = np.empty(3, dtype=float64)
-        level_home_stance_xyz = np.empty(3, dtype=float64)
-        fbk_stance_xyz = np.empty(3, dtype=float64)
-        cmd_stance_xyz = np.empty(3, dtype=float64)
-
-        home_stance_xyz[:] = (base_frame[0:3, 0:3] @ [self._stance_radius, 0.0, -self._body_height])[0:3]
-        np.copyto(level_home_stance_xyz, home_stance_xyz)
-
-        fbk_stance_xyz[:] = kin.get_end_effector(feedback_view.position)[0:3, 3]
-        cmd_stance_xyz[:] = kin.get_end_effector(seed_angles)[0:3, 3]
-
-        from .step import Step
 
         self._seed_angles = seed_angles
-        self._step = Step(0.0, cmd_stance_xyz.copy())
-        self._mode = 'stance'
-        self._home_stance_xyz = home_stance_xyz
-        self._level_home_stance_xyz = level_home_stance_xyz
-        self._fbk_stance_xyz = fbk_stance_xyz
-        self._cmd_stance_xyz = cmd_stance_xyz
-        self._stance_vel_xyz = np.zeros(3, dtype=float64)
-        self._kinematics = kin
-        self._masses = kin.masses
-        self._spring_torque = np.zeros(num_joints, dtype=float64)
+        self._home_stance_xyz = (base_frame[0:3, 0:3] @ [self._stance_radius, 0.0, -self._body_height])[0:3]
+        self._level_home_stance_xyz = self.home_stance_xyz.copy()
+        self._ee_frame = leg_kinematics.get_end_effector(feedback_view.position)
+        self._cmd_stance_xyz = leg_kinematics.get_end_effector(seed_angles)[0:3, 3]
+        self._stance_vel_xyz = np.zeros(3, dtype=np.float64)
+        self._kinematics = leg_kinematics
 
-        self._commanded_positions = np.zeros(num_joints, dtype=float64)
-        self._commanded_velocities = np.zeros(num_joints, dtype=float32)
-        self._commanded_efforts = np.zeros(num_joints, dtype=float32)
+        from .step import Step
+        self._step = Step(self.cmd_stance_xyz.copy())
 
-        com_frame_count = self._kinematics.get_frame_count('com')
+        com_frame_count = self.kinematics.get_frame_count(FrameType.CenterOfMass)
 
-        self._jacobian_ee = np.zeros((6, num_joints), dtype=float64)
-        self._jacobian_coms = [np.zeros((6, num_joints), dtype=float64) for _ in range(com_frame_count)]
-
-        self._ee_frame = np.identity(4, dtype=float64)
+        self._jacobian_ee = np.zeros((6, num_joints), dtype=np.float64)
+        self._jacobian_coms = np.empty((6, num_joints, com_frame_count), np.float64)
 
         self._command_view = command_view
         self._feedback_view = feedback_view
@@ -108,105 +80,77 @@ class Leg:
         """Follows the provided trajectory, while additionally compensating for
         gravity and ground forces."""
         angles, vel, a = trajectory.get_state(t)
-        self._commanded_positions[:] = angles
-        self._commanded_velocities[:] = vel
+        self._command_view.position[:] = angles
+        self._command_view.velocity[:] = vel
 
-        kin = self._kinematics
         # Compute jacobians
-        kin.get_jacobian_end_effector(angles, self._jacobian_ee)
-        kin.get_jacobians('com', angles, self._jacobian_coms)
+        self.kinematics.get_jacobian_end_effector(angles, output=self._jacobian_ee)
+        self.kinematics.get_jacobians_mat(FrameType.CenterOfMass, angles, output=self._jacobian_coms)
 
-        self.compute_torques(gravity, foot_force)
-        self.set_command()
+        self.compute_torques(gravity, foot_force, a)
 
     def get_state_at_time(self, t):
         """Used to determine calculated positions and velocities without
         sending them to the modules."""
-        kin = self._kinematics
-
         velocities = None
-        angles = self._feedback_view.position
 
-        stance_mode = self._mode == 'stance'
-
-        if stance_mode:
-            kin.solve_inverse_kinematics(self._seed_angles, endeffector_position_objective(self._cmd_stance_xyz), output=angles)
+        if self._step.active:
+            positions, velocities, _ = self._step.compute_state(t)
         else:
-            self._step.compute_state(t, angles, self._commanded_velocities, None)
-
-        if stance_mode:
+            positions = self.kinematics.solve_inverse_kinematics(self._seed_angles, endeffector_position_objective(self._cmd_stance_xyz))
             # For stance mode, also compute velocities
-            jacobian_ee = self._jacobian_ee
-            kin.get_jacobian_end_effector(angles, jacobian_ee)
+            jacobian_ee = self.kinematics.get_jacobian_end_effector(positions)
 
             try:
                 # Note: C++ uses column pivoted householder QR to solve here. Not sure if the additional precision is necessary
-                velocities = np.array(solve(jacobian_ee[0:3, :], self._stance_vel_xyz), dtype=float32)
+                velocities = np.array(solve(jacobian_ee[0:3, :], self.stance_vel_xyz), dtype=np.float32)
             except LinAlgError as lin:
-                velocities = np.zeros(Leg.joint_count, dtype=float32)
+                velocities = np.zeros(self.kinematics.dof_count, dtype=np.float32)
 
-        return angles, velocities
+        return positions, velocities
 
-    def compute_torques(self, gravity, foot_force):
+    def compute_torques(self, gravity, foot_force, joint_accelerations):
         """
         TODO: Document
         """
-        self._spring_torque[1] = self._spring_shift
-        self._spring_torque[1] += self._drag_shift * self._commanded_velocities[1]
+        view = self._command_view
+        self.kinematics.get_grav_comp_efforts(self._feedback_view.position, gravity, self._jacobian_coms, output=view.effort.astype(np.float64))
+        view.effort += self._jacobian_ee[0:3, :].T @ -foot_force
+        view.effort[1] += self._spring_shift + self._drag_shift * view.velocity[1]
+        if self._step._trajectory is not None:
+            self._step._trajectory.get_state
+            view.effort += self.kinematics.get_dynamic_comp_efforts(view.position, view.position, view.velocity.astype(np.float64), joint_accelerations)
 
-        jacobian_ee = self._jacobian_ee
-        jacobian_coms = self._jacobian_coms
-        jacobian_part = jacobian_ee[0:3, :]
-        stance = jacobian_part.T @ -foot_force
-
-        masses = self._masses
-
-        num_bodies = len(masses)
-        num_joints = Leg.joint_count
-        grav_comp = np.zeros(num_joints, dtype=float64)
-
-        for i in range(num_bodies):
-            frame = jacobian_coms[i]
-            grav_comp -= frame[0:3, :].T @ gravity * masses[i]
-
-        self._commanded_efforts[:] = grav_comp
-        self._commanded_efforts += stance
-        self._commanded_efforts += self._spring_torque
-
-    def compute_state(self, t):
+    def compute_state(self, t, gravity, foot_force):
         """
         TODO: Document
         """
+        view = self._command_view
 
-        kin = self._kinematics
-        angles = self._feedback_view.position
+        if self._step.active:
+            self.track_trajectory(t, self._step._trajectory, gravity, foot_force)
+            self._on_state_computed(view.position, view.velocity, view.effort, self)
+            return
 
-        stance_mode = self._mode == 'stance'
-
-        if stance_mode:
-            kin.solve_inverse_kinematics(self._seed_angles, endeffector_position_objective(self._cmd_stance_xyz), output=angles)
-        else:
-            self._step.compute_state(t, angles, self._commanded_velocities, None)
+        self.kinematics.solve_inverse_kinematics(self._seed_angles, endeffector_position_objective(self.cmd_stance_xyz), output=view.position)
+        self.kinematics.get_jacobians_mat('com', view.position, output=self._jacobian_coms)
 
         # Compute jacobians
         jacobian_ee = self._jacobian_ee
-        jacobian_coms = self._jacobian_coms
-        kin.get_jacobian_end_effector(angles, jacobian_ee)
-        kin.get_jacobians('com', angles, jacobian_coms)
+        self.kinematics.get_jacobian_end_effector(view.position, output=jacobian_ee)
 
-        self._commanded_positions[:] = angles
+        # For stance mode, also compute velocities
+        try:
+            # Note: C++ uses column pivoted householder QR to solve here. Not sure if the additional precision is necessary
+            view.velocity[:] = solve(jacobian_ee[0:3, :], self.stance_vel_xyz)
+        except LinAlgError as lin:
+            view.velocity.fill(0.0)
 
-        if stance_mode:
-            # For stance mode, also compute velocities
-            try:
-                # Note: C++ uses column pivoted householder QR to solve here. Not sure if the additional precision is necessary
-                self._commanded_velocities[:] = solve(jacobian_ee[0:3, :], self._stance_vel_xyz)
-            except LinAlgError as lin:
-                self._commanded_velocities.fill(0.0)
+        self.compute_torques(gravity, foot_force, np.zeros(self.joint_count))
 
-        self._on_state_computed(angles, self._commanded_velocities, self._commanded_efforts, self)
+        self._on_state_computed(view.position, view.velocity, view.effort, self)
 
-    def update_stance(self, translation_vel, rotate_vel, dt):
+    def update_stance(self, translation_vel: 'npt.NDArray[np.float64]', rotate_vel: 'npt.NDArray[np.float64]', dt):
         """
         TODO: Document
         """
@@ -218,8 +162,7 @@ class Leg:
         self._cmd_stance_xyz += translation_vel * dt
         self._cmd_stance_xyz[:] = rotate_z(rotate_vel[2] * dt) @ rotate_y(rotate_vel[1] * dt) @ rotate_x(rotate_vel[0] * dt) @ self._cmd_stance_xyz
 
-        self._kinematics.get_end_effector(self._feedback_view.position, self._ee_frame)
-        np.copyto(self._fbk_stance_xyz, self._ee_frame[0:3, 3])
+        self.kinematics.get_end_effector(self._feedback_view.position, output=self._ee_frame)
 
         # Update home stance to match the current z height
         self._level_home_stance_xyz[2] += translation_vel[2] * dt
@@ -227,27 +170,38 @@ class Leg:
 
     def start_step(self, t):
         self._step.reset(t, self)
-        self._mode = 'flight'
 
     def update_step(self, t):
-        if self._mode != 'flight':
+        if not self._step.active:
             return
         if self._step.update(t, self):
-            np.copyto(self._cmd_stance_xyz, self._step.touch_down)
             # Transition to stance mode
-            self._mode = 'stance'
+            np.copyto(self._cmd_stance_xyz, self._step.touch_down)
 
-    def get_step_time(self, t):
-        return t - self._step.start_time
+    def get_local_gravity(self):
+        orientation = self._feedback_view.orientation[0]
+        rot_matrix = quat2rot(orientation)
+        return self.kinematics.base_frame[0:3, 0:3] @ rot_matrix.T @ np.array([0, 0, -1], dtype=np.float64)
 
-    def set_command(self, position=True, velocity=True, effort=True):
-        """
-        NOTE: Pass booleans, not arrays
-        """
-        view = self._command_view
-        view.position = self._commanded_positions if position else None
-        view.velocity = self._commanded_velocities if velocity else None
-        view.effort = self._commanded_efforts if effort else None
+    def get_foot_contact_factor(self, t):
+        if self._step._trajectory is None:
+            return 1.0
+
+        switch_time = 0.1
+        current_step_time = t - self._step._trajectory.start_time
+        step_period = self.step_period
+
+        if current_step_time < switch_time:
+            return (switch_time - current_step_time) / switch_time
+        elif (step_period - current_step_time) < switch_time:
+            return (current_step_time - (step_period - switch_time)) / switch_time
+        return 0.0
+
+    def get_stance_radius(self, t, gravity_dir):
+        stance = self.cmd_stance_xyz
+        dot_product = -gravity_dir.dot(stance)
+        foot_stance_radius = np.linalg.norm(-gravity_dir * dot_product - stance)
+        return foot_stance_radius
 
     @property
     def level_home_stance_xyz(self):
@@ -263,7 +217,7 @@ class Leg:
 
     @property
     def fbk_stance_xyz(self):
-        return self._fbk_stance_xyz
+        return self._ee_frame[0:3, 3]
 
     @property
     def stance_vel_xyz(self):
@@ -279,7 +233,7 @@ class Leg:
 
     @property
     def mode(self):
-        return self._mode
+        return 'flight' if self._step.active else 'stance'
 
     @property
     def step_period(self):

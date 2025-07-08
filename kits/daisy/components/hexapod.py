@@ -1,15 +1,15 @@
+import os
 import numpy as np
 import threading
 
 from hebi.trajectory import create_trajectory
-from math import atan2, pi, sin
+from math import atan2
 from numpy import float32, float64, nan, sign
 from numpy.linalg import det, norm, svd
 from time import sleep, time
-from util.math_utils import quat2rot
 
 import hebi
-from .joystick_interface import register_hexapod_event_handlers
+from .joystick_interface import _add_event_handlers
 from .leg import Leg
 
 step_first_legs = (0, 3, 4)
@@ -20,9 +20,10 @@ import typing
 
 if typing.TYPE_CHECKING:
     from typing import Callable
-    from hebi._internal.group import Group
+    import numpy.typing as npt
     from hebi._internal.trajectory import Trajectory
     from hebi._internal.graphics import Color
+    from .configuration import HexapodConfig, Parameters
     T = typing.TypeVar('T')
 
 
@@ -41,7 +42,7 @@ def retry_on_error(func: 'Callable[[], T]', on_error_func=None, sleep_time=0.1):
             sleep(sleep_time)
 
 
-def create_group(config):
+def create_group(config: 'HexapodConfig'):
     """Used by :class:`Hexapod` to create the group to interface with modules.
 
     :param config:     The runtime configuration
@@ -64,6 +65,9 @@ def create_group(config):
                 raise RuntimeError()
             elif group.size != len(names):
                 raise RuntimeError()
+
+            group.feedback_frequency = config.robot_feedback_frequency
+            group.command_lifetime = config.robot_command_lifetime
             return group
 
         # Let the lookup object discover modules, before trying to connect
@@ -117,17 +121,17 @@ class Hexapod:
         # Fields whjch pertain to controlling demo
         '_mobile_io', '_rotation_velocity', '_translation_velocity',
         # High level kinematic state of the entire robot
-        '_foot_forces', '_gravity', '_vel_xyz',
+        '_foot_forces', '_gravity_dir', '_vel_xyz',
         # Timestamps
         '_last_feedback_time', '_last_time', '_start_time', '_stop_time',
         # Fields which compose the robot
         # Leg state
         '_legs', '_active_flight_legs',
         # Misc
-        '_mode', '_startup_trajectories', '_weight'
+        '_mode', '_chassis_mass'
     )
 
-    def __init__(self, config, params):
+    def __init__(self, config: 'HexapodConfig', params: 'Parameters'):
         self._config = config
         self._params = params
         self._started = False
@@ -138,7 +142,7 @@ class Hexapod:
         self._active_flight_legs = 1
 
         self._foot_forces = np.zeros((3, 6), dtype=float64)
-        self._gravity = np.array([0.0, 0.0, -1.0], dtype=float64)
+        self._gravity_dir = np.array([0.0, 0.0, -1.0], dtype=float64)
         self._translation_velocity = np.zeros(3, dtype=float64)
         self._rotation_velocity = np.zeros(3, dtype=float64)
         self._last_feedback_time = 0.0  # TODO: Is this still needed?
@@ -155,21 +159,14 @@ class Hexapod:
         self._group.get_next_feedback(reuse_fbk=self._group_feedback)
 
         # compute gravity vector
-        down = np.array([0.0, 0.0, -1.0], dtype=float32)
         avg_gravity = np.zeros(3, dtype=float32)
 
-        rot_matrix = np.identity(3, dtype=float64)
-
         for leg in self._legs:
-            orientation = leg._feedback_view.orientation[0]
-
-            local_gravity = leg.kinematics.base_frame[0:3, 0:3] @ quat2rot(orientation, rot_matrix).T @ down
-
+            local_gravity = leg.get_local_gravity()
             if np.isfinite(local_gravity).all():
                 avg_gravity += local_gravity
 
-        avg_gravity /= norm(avg_gravity)
-        self._gravity[:] = avg_gravity
+        self._gravity_dir[:] = avg_gravity / norm(avg_gravity)
 
     def _should_continue(self):
         """
@@ -183,9 +180,9 @@ class Hexapod:
         for entry in self._on_stop_callbacks:
             entry()
 
-    def _on_startup(self, first_run):
+    def _on_startup(self):
         for entry in self._on_startup_callbacks:
-            entry(first_run)
+            entry()
 
     def _stop(self):
         """Stop running.
@@ -197,8 +194,8 @@ class Hexapod:
         duration = self._stop_time - self._start_time
         tics = float(self._num_spins)
         avg_frequency = tics / duration
-        print('Ran for: {0} seconds.'.format(duration))
-        print('Average processing frequency: {0} Hz'.format(avg_frequency))
+        print(f'Ran for: {duration} seconds.')
+        print(f'Average processing frequency: {avg_frequency} Hz')
 
         # Set the LED color strategy back to the default
         self._group_command.clear()
@@ -208,8 +205,6 @@ class Hexapod:
         self._on_stop()
 
     def _create_startup_trajectories(self, startup_seconds):
-        startup_trajectories = self._startup_trajectories
-
         # Note: It is very unclear what the C++ code is doing in the `first_run` block here.
         # It appears that the intention is that `startup_trajectory` uses the initial state of the trajectory from the leg's `step` variable
         #start_time = time()
@@ -217,6 +212,8 @@ class Hexapod:
 
         num_joints = Leg.joint_count
         times = [0.0, startup_seconds * 0.25, startup_seconds * 0.5, startup_seconds * 0.75, startup_seconds]
+
+        trajectories: 'list[Trajectory]' = []
 
         positions = np.empty((num_joints, 5))
         velocities = np.zeros((num_joints, 5))
@@ -244,52 +241,39 @@ class Hexapod:
             accelerations[:, 1] = nan
             accelerations[:, 3] = nan
 
-            startup_trajectories[i] = create_trajectory(times, positions, velocities, accelerations)
+            trajectories.append(create_trajectory(times, positions, velocities, accelerations))
+        return trajectories
 
     def _soft_startup(self, first_run, startup_seconds):
-        group = self._group
-        group_feedback = self._group_feedback
-        group_command = self._group_command
 
-        startup_trajectories = self._startup_trajectories
-
-        group.send_feedback_request()
+        self._group.send_feedback_request()
         self._wait_for_feedback()
 
-        self._create_startup_trajectories(startup_seconds)
+        startup_trajectories = self._create_startup_trajectories(startup_seconds)
 
         foot_forces = self._foot_forces
 
         # User callbacks invoked here
-        self._on_startup(first_run)
-
-        legs = self._legs
+        if first_run: self._on_startup()
 
         start_time = time()
         get_relative_time = lambda: time() - start_time
+        t = get_relative_time()
 
-        while True:
+        while t < startup_seconds:
             self._wait_for_feedback()
-            gravity = self._gravity * 9.8
             t = get_relative_time()
             # Track the trajectories generated
             for i in range(6):
-                legs[i].track_trajectory(t, startup_trajectories[i], gravity, foot_forces[:, i])
+                self._legs[i].track_trajectory(t, startup_trajectories[i], self._gravity_dir * 9.8, foot_forces[:, i])
 
             self.send_command()
-            if not t < startup_seconds:
-                break
 
     def _spin_once(self):
-        group = self._group
-        group_feedback = self._group_feedback
-        group_command = self._group_command
-
-        start_time = self._start_time
         self._wait_for_feedback()
 
         foot_forces = self._foot_forces
-        gravity = self._gravity * 9.8
+        gravity = self._gravity_dir * 9.8
 
         current_time = time()
         self.update_stance(current_time - self._last_time)
@@ -301,10 +285,7 @@ class Hexapod:
         self.compute_foot_forces(current_time, foot_forces)
 
         for i, leg in enumerate(self._legs):
-            leg.compute_state(current_time)
-            leg.compute_torques(gravity, foot_forces[:, i])
-            # Make sure to send position, velocity and effort
-            leg.set_command()
+            leg.compute_state(current_time, gravity, foot_forces[:, i])
 
         self.send_command()
         self._last_time = current_time
@@ -318,7 +299,6 @@ class Hexapod:
 
         # TODO: This seems strange. See if it should be increased/decreased.
         startup_seconds = 4.5
-        self._startup_trajectories: 'list[Trajectory | None]' = [None] * 6
 
         while True:
             self._soft_startup(first_run, startup_seconds)
@@ -329,7 +309,7 @@ class Hexapod:
             # all of the joystick event handlers registered
             if first_run:
                 try:
-                    register_hexapod_event_handlers(self)
+                    _add_event_handlers(self, self.mobile_io, self.config.controller_mapping)
                 except Exception as e:
                     print('Caught exception while registering event handlers:\n{0}'.format(e))
                 self._start_time = time()
@@ -374,10 +354,7 @@ class Hexapod:
             if self._started:
                 return
 
-            config = self._config
-            group = create_group(config)
-            group.feedback_frequency = config.robot_feedback_frequency
-            group.command_lifetime = config.robot_command_lifetime
+            group = create_group(self._config)
 
             num_modules = group.size
             self._group = group
@@ -387,28 +364,27 @@ class Hexapod:
             self._group_info = hebi.GroupInfo(num_modules)
 
             # Construction of legs
-            from math import radians
-            leg_angles = [radians(entry) for entry in [30.0, -30.0, 90.0, -90.0, 150.0, -150.0]]
-            leg_distances = [0.2375, 0.2375, 0.1875, 0.1875, 0.2375, 0.2375]
-            leg_configs = ['left', 'right'] * 3
-            num_joints_in_leg = Leg.joint_count
-            parameters = self._params
-
-            # HACK: The mass is hardcoded as 21Kg. This hardcodes the weight to be the force here (which will be accurate as long as we are on Earth).
-            weight = 21.0 * 9.8
 
             # The legs need to start with valid feedback, so we must wait for a feedback here
             self._group.get_next_feedback(reuse_fbk=self._group_feedback)
 
+            kin = hebi.robot_model.import_from_hrdf(os.path.join(self._params.resource_directory, 'daisy.hrdf'))
+
             legs: 'list[Leg]' = list()
-            for i, angle, distance, leg_configuration in zip(range(num_modules), leg_angles, leg_distances, leg_configs):
-                start_idx = num_joints_in_leg * i
+            for i in range(6):
+                leg_kinematics = kin.get_subtree_with_root(tag=f'leg{i+1}')
+                if leg_kinematics is None:
+                    raise RuntimeError(f'Could not find Leg #{i} in daisy.hrdf')
+                start_idx = leg_kinematics.dof_count * i
                 indices = [start_idx, start_idx + 1, start_idx + 2]
-                leg = Leg(i, angle, distance, parameters, leg_configuration, self._group_command.create_view(indices), self._group_feedback.create_view(indices))
+                leg = Leg(i, leg_kinematics, self._params, self._group_command.create_view(indices), self._group_feedback.create_view(indices))
                 legs.append(leg)
 
+            # HACK: The mass is hardcoded as 21Kg.
+            mass = 21.0
+
             self._legs = legs
-            self._weight = weight
+            self._chassis_mass = mass
 
             setup_controller = self._config.setup_controller
 
@@ -505,8 +481,8 @@ class Hexapod:
         base_xyz_com = base_xyz.mean(axis=1)  # rowwise
 
         for i in range(6):
-            feet_xyz[0:3, i] -= feet_xyz_com
-            base_xyz[0:3, i] -= base_xyz_com
+            feet_xyz[:, i] -= feet_xyz_com
+            base_xyz[:, i] -= base_xyz_com
 
         # SVD of weighted correlation matrix
         xyz_correlation = base_xyz @ feet_xyz.T
@@ -517,8 +493,8 @@ class Hexapod:
         s[2, 2] = sign(product_det)
 
         ret = np.identity(4)
-        ret[0:3, 0:3] = vh.T @ s @ u.T
-        ret[0:3, 3] = feet_xyz_com - base_xyz_com
+        ret[:3, :3] = vh.T @ s @ u.T
+        ret[:3, 3] = feet_xyz_com - base_xyz_com
 
         return ret
 
@@ -527,7 +503,7 @@ class Hexapod:
             return False
 
         shift_pose = self.get_body_pose_from_feet()
-        stance_shift = shift_pose[0:3, -1:]  # top right corner
+        stance_shift = shift_pose[:3, -1:]  # top right corner
 
         # Rotated too much
         yaw = abs(atan2(shift_pose[1, 0], shift_pose[0, 0]))
@@ -535,8 +511,8 @@ class Hexapod:
             return True
 
         # Shifted too much in translation
-        position_norm = norm(stance_shift[0:2])
-        velocity_norm = norm(self._vel_xyz[0:2])
+        position_norm = norm(stance_shift[:2])
+        velocity_norm = norm(self._vel_xyz[:2])
         shift = position_norm + velocity_norm * 0.7
         # HACK: `period` is an instance method of `Step`. It's hardcoded there to be 0.7
         if shift > self._params.step_threshold_shift:
@@ -562,51 +538,28 @@ class Hexapod:
 
     def update_steps(self, t):
         for leg in self._legs:
-            if leg.mode == 'flight':
-                leg.update_step(t)
+            leg.update_step(t)
 
     def get_leg(self, index: int):
         return self._legs[index]
 
     def compute_foot_forces(self, t, foot_forces):
-        factors = np.zeros(6, dtype=float64)
-        blend_factors = np.zeros(6, dtype=float64)
-        gravity = -self._gravity
-
+        foot_stance_radius = np.zeros(6, dtype=float64)
         legs = self._legs
 
+        def normalize(x: 'npt.NDArray[np.float64]'): return x / x.sum()
+
+        contact_factors = np.empty(6, dtype=float64)
+        stance_radii = np.empty(6, dtype=float64)
         for i in range(6):
-            stance = legs[i].cmd_stance_xyz
-            dot_product = gravity.dot(stance)
-            factors[i] = norm(gravity * dot_product - stance)
+            contact_factors[i] = legs[i].get_foot_contact_factor(t)
+            stance_radii[i] = legs[i].get_stance_radius(t, self._gravity_dir)
 
-        factors_sum = factors.sum()
-
-        for i in range(6):
-            factors[i] = factors_sum / factors[i]
-            leg = legs[i]
-
-            # Redistribute weight to just modules in stance
-            if leg.mode == 'flight':
-                switch_time = 0.1
-                current_step_time = leg.get_step_time(t)
-                step_period = leg.step_period
-                if current_step_time < switch_time:
-                    blend_factors[i] = (switch_time - current_step_time) / switch_time
-                elif (step_period - current_step_time) < switch_time:
-                    blend_factors[i] = (current_step_time - (step_period - switch_time)) / switch_time
-
-                factors[i] *= blend_factors[i]
-            else:
-                blend_factors[i] = 1.0
-
-        factors /= factors.sum()
-        weight = self._weight
-
-        for i in range(6):
-            factor = factors[i] * (1.0 + 0.33 * sin(pi * blend_factors[i]))
-            foot_forces[0:3, i] = factors[i] * weight * gravity
-
+        # Redistribute weight to just modules in stance
+        chassis_accel = 3.3 * np.sin(np.pi * np.mean(contact_factors[contact_factors < 1]))
+        robot_mass = self._chassis_mass + legs_in_air_mass
+        chassis_force =  robot_mass * (-9.8 * self._gravity_dir + chassis_accel)
+        foot_forces[0:3, :] = normalize(contact_factors / stance_radii) * chassis_force 
     def clear_leg_colors(self):
         cmd = self._auxilary_group_command
         cmd.clear()
@@ -622,17 +575,11 @@ class Hexapod:
 
         self._group.send_command(cmd)
 
-    def set_translation_velocity_x(self, value):
+    def set_translation_velocity(self, x, y, z):
         with self._input_lock:
-            self._translation_velocity[0] = value
-
-    def set_translation_velocity_y(self, value):
-        with self._input_lock:
-            self._translation_velocity[1] = value
-
-    def set_translation_velocity_z(self, value):
-        with self._input_lock:
-            self._translation_velocity[2] = value
+            self._translation_velocity[0] = x
+            self._translation_velocity[1] = y
+            self._translation_velocity[2] = z
 
     def set_rotation_velocity_y(self, value):
         with self._input_lock:

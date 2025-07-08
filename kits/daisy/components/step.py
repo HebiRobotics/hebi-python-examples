@@ -23,7 +23,7 @@ nan = float('nan')
 
 
 class Step:
-    __slots__ = ('_start_time', '_time', '_lift_off_vel',
+    __slots__ = ('_time', '_lift_off_vel',
                  '_lift_up', '_mid_step_1',
                  '_touch_down', '_trajectory',
                  # Workspace for trajectory generation
@@ -36,10 +36,9 @@ class Step:
                  '_end_pos', '_end_vel', '_end_jacobian_ee'
                  )
 
-    def __init__(self, start_time, lift_up):
+    def __init__(self, lift_up):
         num_joints = Leg.joint_count
 
-        self._start_time = start_time
         self._time = reference_time.copy()
         self._lift_off_vel = np.zeros(3, dtype=float64)
         self._lift_up = np.array(lift_up, dtype=float64).reshape((3, ))
@@ -69,7 +68,7 @@ class Step:
         """
         jacobian_part = self._end_jacobian_ee
 
-        time_vector = self._time
+        time_vector = self._time + self._trajectory.start_time
         waypoint_pos = self._waypoint_pos
         waypoint_vel = self._waypoint_vel
         waypoint_acc = self._waypoint_acc
@@ -79,12 +78,11 @@ class Step:
 
         self._trajectory = create_trajectory(time_vector, waypoint_pos, waypoint_vel, waypoint_acc)
 
-    def reset(self, start_time, leg):
+    def reset(self, start_time, leg: 'Leg'):
         """Reset the state of this step.
 
         Use this as opposed to reinstantiating this class.
         """
-        self._start_time = start_time
         self._lift_off_vel[:] = leg.stance_vel_xyz
 
         # Starting point
@@ -98,7 +96,7 @@ class Step:
         # Set z position
         self._mid_step_1[2] += height
 
-        time_vector = self._time
+        time_vector = self._time + start_time
         waypoint_pos = self._waypoint_pos
         waypoint_vel = self._waypoint_vel
         waypoint_acc = self._waypoint_acc
@@ -117,14 +115,12 @@ class Step:
         waypoint_pos[:, 0] = self._start_pos
         waypoint_vel[:, 0] = self._start_vel
         waypoint_acc[:, 0].fill(0.0)
-        time_vector[0] = reference_time[0]
 
         # Mid waypoint
         kin.solve_inverse_kinematics(leg.seed_angles, endeffector_position_objective(self._mid_step_1), output=self._mid_pos)
         waypoint_pos[:, 1] = self._mid_pos
         waypoint_vel[:, 1].fill(nan)
         waypoint_acc[:, 1].fill(nan)
-        time_vector[1] = reference_time[1]
 
         # End waypoint
         kin.solve_inverse_kinematics(leg.seed_angles, endeffector_position_objective(self._touch_down), output=self._end_pos)
@@ -143,14 +139,16 @@ class Step:
         waypoint_pos[:, 2] = self._end_pos
         waypoint_vel[:, 2] = self._end_vel
         waypoint_acc[:, 2].fill(0.0)
-        time_vector[2] = reference_time[2]
 
         self._trajectory = create_trajectory(time_vector, waypoint_pos, waypoint_vel, waypoint_acc)
 
     def update(self, t, leg):
-        elapsed = t - self._start_time
+        if self._trajectory is None:
+            raise RuntimeError('Cannot update Step if not Stepping!')
+        elapsed = t - self._trajectory.start_time
 
         if elapsed > period:
+            self._trajectory = None
             return True
         elif (period - elapsed) < ignore_waypoint_threshold:
             # Close enough to the end. Do not replan.
@@ -164,19 +162,17 @@ class Step:
 
         return False
 
-    def compute_state(self, t, angles, vels, accels):
-        num_joints = Leg.joint_count
+    def compute_state(self, t):
+        if self._trajectory is None:
+            raise RuntimeError('Step not active, cannot compute state')
 
-        p, v, a = self._trajectory.get_state(t - self._start_time)
+        p, v, a = self._trajectory.get_state(t)
+        return p, v, a
         np.copyto(angles, p)
         np.copyto(vels, v)
 
         # Note: `accels` is not used in C++ code, so we don't use it here for now.
         #np.copyto(accels, a)
-
-    @property
-    def start_time(self):
-        return self._start_time
 
     @property
     def touch_down(self):
@@ -185,3 +181,8 @@ class Step:
     @property
     def period(self):
         return period
+
+    @property
+    def active(self):
+        return self._trajectory is not None
+

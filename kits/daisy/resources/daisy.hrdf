@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot version="1.6.0" description="Daisy">
+    <rigid-body mass="0">
+        <output rot="Rz(pi/6)"> <!-- leg 1 -->
+            <rigid-body mass="0" output_trans="0.2375 0 0" tag="L1"/>
+            <include path="left.hrdf"/>
+        </output>
+        <output rot="Rz(-pi/6)"> <!-- leg 2 -->
+            <rigid-body mass="0" output_trans="0.2375 0 0" tag="L2"/>
+            <include path="right.hrdf"/>
+        </output>
+        <output rot="Rz(pi/2)"> <!-- leg 3 -->
+            <rigid-body mass="0" output_trans="0.1875 0 0" tag="L3"/>
+            <include path="left.hrdf"/>
+        </output>
+        <output rot="Rz(-pi/2)"> <!-- leg 4 -->
+            <rigid-body mass="0" output_trans="0.1875 0 0" tag="L4"/>
+            <include path="right.hrdf"/>
+        </output>
+        <output rot="Rz(5*pi/6)"> <!-- leg 5 -->
+            <rigid-body mass="0" output_trans="0.2375 0 0" tag="L5"/>
+            <include path="left.hrdf"/>
+        </output>
+        <output rot="Rz(5*-pi/6)"> <!-- leg 6 -->
+            <rigid-body mass="0" output_trans="0.2375 0 0" tag="L6"/>
+            <include path="right.hrdf"/>
+        </output>
+        <output> <!-- chassis -->
+            <end-effector/>
+        </output>
+    </rigid-body>
+</robot>
