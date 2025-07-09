@@ -102,7 +102,7 @@ def setup_arm_7dof(lookup: 'Lookup', family: str):
     gripper.load_gains(os.path.join(root_dir, 'gains/gripper_spool_gains.xml'))
     arm.set_end_effector(gripper)
 
-    return arm
+    return arm, gripper
 
 
 def setup_arm_6dof(lookup: 'Lookup', family: str, with_gripper: bool = True):
@@ -116,10 +116,11 @@ def setup_arm_6dof(lookup: 'Lookup', family: str, with_gripper: bool = True):
             lookup=lookup)
     except Exception as e:
         print(e)
-        return None
+        return None, None
 
     arm.load_gains(os.path.join(root_dir, 'gains/A-2240-06.xml'))
 
+    gripper = None
     if with_gripper:
         # Add the gripper
         gripper_group = lookup.get_group_from_names([family], ['gripperSpool'])
@@ -132,4 +133,4 @@ def setup_arm_6dof(lookup: 'Lookup', family: str, with_gripper: bool = True):
         gripper.load_gains(os.path.join(root_dir, 'gains/gripper_spool_gains.xml'))
         arm.set_end_effector(gripper)
 
-    return arm
+    return arm, gripper
