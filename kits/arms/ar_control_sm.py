@@ -1,6 +1,6 @@
 
 from enum import Enum, auto
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import time, sleep
 import os
 import numpy as np
@@ -27,8 +27,8 @@ class ArmControlState(Enum):
 
 @dataclass(kw_only=True)
 class ArmMobileIOInputs:
-    phone_pos: 'npt.NDArray[np.float32]' = np.array([0., 0., 0.])
-    phone_rot: 'npt.NDArray[np.float64]' = np.eye(3)
+    phone_pos: 'npt.NDArray[np.float32]' = field(default_factory=lambda: np.array([0., 0., 0.]))
+    phone_rot: 'npt.NDArray[np.float64]' = field(default_factory=lambda: np.eye(3))
     ar_scaling: float = 1.0
     lock_toggle: bool = False
     locked: bool = True
@@ -236,7 +236,9 @@ def parse_mobile_feedback(m: 'MobileIO'):
         return False, ArmMobileIOInputs(home=True)
 
     try:
-        rotation = R.from_quat(m.orientation, scalar_first=True).as_matrix()
+        wxyz = m.orientation
+        xyzw = [*wxyz[1:], wxyz[0]]
+        rotation = R.from_quat(xyzw).as_matrix()
     except ValueError as e:
         print(f'Error getting orientation as matrix: {e}\n{m.orientation}')
         rotation = np.eye(3)
