@@ -18,6 +18,16 @@ plugins:
     enabled: true
     ramp_time: 5
 
+  # Kits with a gas spring need to add a shoulder compensation torque.
+  # It should be around -7 Nm for most kits, but it may need to be tuned
+  # for your specific setup.
+  - name: 'gasSpringCompensation'
+    type: EffortOffset
+    enabled: false
+    ramp_time: 5
+    offset: [0, -7, 0, 0, 0, 0]
+
+
 user_data:
   # Three waypoints for Buttons - B1, B2, B3
   waypoint_1: [0, 0, 0, 0, 0, 0]

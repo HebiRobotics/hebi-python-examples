@@ -1,6 +1,6 @@
 import sys
 from time import time, sleep
-import os
+from os.path import join, dirname
 import datetime
 
 import numpy as np
@@ -82,21 +82,19 @@ def setup_mobile_io(m: 'MobileIO'):
 
         try:
             # reorder quaternion components
-            wxyz = m.orientation
-            xyzw = [*wxyz[1:4], wxyz[0]]
-            rotation = R.from_quat(xyzw).as_matrix()
+            rotation = R.from_quat(m.orientation, scalar_first=True).as_matrix()
         except ValueError as e:
             print(f'Error getting orientation as matrix: {e}\n{m.orientation}')
             rotation = np.eye(3)
 
         arm_inputs = ArmMobileIOInputs(
-            np.copy(m.position),
-            rotation,
-            m.get_button_state(arm_lock),
-            m.get_button_state(arm_enable),
-            m.get_button_state(gripper_close))
+            phone_pos=np.copy(m.position),
+            phone_rot=rotation,
+            lock_toggle=m.get_button_state(arm_lock),
+            locked=m.get_button_state(arm_enable),
+            gripper_closed=m.get_button_state(gripper_close))
 
-        #return DemoInputs(should_exit, should_reset, tready_inputs, arm_inputs)
+        # return DemoInputs(should_exit, should_reset, tready_inputs, arm_inputs)
         return tready_inputs, arm_inputs
 
     return parse_mobile_io_feedback
@@ -109,8 +107,8 @@ if __name__ == "__main__":
 
     family = "Tready"
 
-    arm = setup_arm_6dof(lookup, family)
-    arm_control = ArmMobileIOControl(arm)
+    arm, gripper = setup_arm_6dof(lookup, family)
+    arm_control = ArmMobileIOControl(arm, gripper)
 
     # Base setup
     base = setup_base(lookup, family)
@@ -129,42 +127,44 @@ if __name__ == "__main__":
     print("mobileIO device found.")
     parse_mobile_feedback = setup_mobile_io(m)
 
-    def update_mobile_io(controller: TreadyControl, new_state: TreadyControlState):
-        if controller.state == new_state:
-            return
+    def update_mobile_io_cb(m: 'MobileIO'):
+        def cb(controller: TreadyControl, new_state: TreadyControlState):
+            if controller.state == new_state:
+                return
 
-        if new_state is TreadyControlState.HOMING:
-            controller.base.set_color('magenta')
-            msg = ('Robot Homing Sequence\n'
-                   'Please wait...')
-            set_mobile_io_instructions(m, msg)
+            if new_state is TreadyControlState.HOMING:
+                controller.base.set_color('magenta')
+                msg = ('Robot Homing Sequence\n'
+                       'Please wait...')
+                set_mobile_io_instructions(m, msg)
 
-        elif new_state is TreadyControlState.TELEOP:
-            controller.base.clear_color()
-            # Print Instructions
-            instructions = ('Robot Ready to Control\n'
-                            'B1: Reset\n'
-                            'B2: Arm Motion Enable\n'
-                            'B4: Arm Lock\n'
-                            'B5: Close Gripper\n'
-                            'B6: Joined Flipper\n'
-                            'B8 - Quit')
-            set_mobile_io_instructions(m, instructions, color='green')
+            elif new_state is TreadyControlState.TELEOP:
+                controller.base.clear_color()
+                # Print Instructions
+                instructions = ('Robot Ready to Control\n'
+                                'B1: Reset\n'
+                                'B2: Arm Motion Enable\n'
+                                'B4: Arm Lock\n'
+                                'B5: Close Gripper\n'
+                                'B6: Joined Flipper\n'
+                                'B8 - Quit')
+                set_mobile_io_instructions(m, instructions, color='green')
 
-        elif new_state is TreadyControlState.DISCONNECTED:
-            controller.base.set_color('blue')
+            elif new_state is TreadyControlState.DISCONNECTED:
+                controller.base.set_color('blue')
 
-        elif new_state is TreadyControlState.EXIT:
-            print("TRANSITIONING TO EXIT")
-            controller.base.set_color("red")
+            elif new_state is TreadyControlState.EXIT:
+                print("TRANSITIONING TO EXIT")
+                controller.base.set_color("red")
 
-            # unset mobileIO control config
-            m.set_button_mode(6, 0)
-            m.set_button_output(1, 0)
-            m.set_button_output(8, 0)
-            set_mobile_io_instructions(m, 'Demo Stopped.', color='red')
+                # unset mobileIO control config
+                m.set_button_mode(6, 0)
+                m.set_button_output(1, 0)
+                m.set_button_output(8, 0)
+                set_mobile_io_instructions(m, 'Demo Stopped.', color='red')
+        return cb
 
-    base_control._transition_handlers.append(update_mobile_io)
+    base_control._transition_handlers.append(update_mobile_io_cb(m))
 
     #######################
     ## Main Control Loop ##
@@ -173,11 +173,11 @@ if __name__ == "__main__":
     logging = True
 
     if logging:
-        tready_dir = os.path.dirname(__file__)
+        tready_log_dir = join(dirname(__file__), 'logs')
         now = datetime.datetime.now()
         if arm:
-            arm.group.start_log(os.path.join(tready_dir, 'logs'), f'arm_{now:%Y-%m-%d-%H:%M:%S}')
-        base.group.start_log(os.path.join(tready_dir, 'logs'), f'base_{now:%Y-%m-%d-%H:%M:%S}')
+            arm.group.start_log(tready_log_dir, f'arm_{now:%Y-%m-%d-%H:%M:%S}')
+        base.group.start_log(tready_log_dir, f'base_{now:%Y-%m-%d-%H:%M:%S}')
 
     m.set_led_color('blue')
     while base_control.running and arm_control.running:
@@ -200,7 +200,8 @@ if __name__ == "__main__":
         arm_control.send()
 
     if logging:
-        arm.group.stop_log()
+        if arm:
+            arm.group.stop_log()
         base.group.stop_log()
 
     sys.exit(0)

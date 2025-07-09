@@ -20,6 +20,9 @@ mobile_io = create_mobile_io_from_config(example_config, lookup)
 
 # Retrieve the gravity compensation plugin
 gravcomp = arm.get_plugin_by_type(hebi.arm.GravCompEffortPlugin)
+if not gravcomp:
+    print('Config does not have grav comp plugin, use a different config for this demo')
+    exit()
 
 arm.group.feedback_frequency = 200.0
 
