@@ -12,6 +12,9 @@ sleep(2)
 example_config_file = "config/ex_teach_repeat.cfg.yaml"
 example_config = hebi.config.load_config(example_config_file)
 
+if example_config.user_data is None:
+    raise RuntimeError('This example requires user_data section of config to be populated. The loaded config does not have user_data.')
+
 # Set up arm, and mobile_io from config
 arm = hebi.arm.create_from_config(example_config, lookup)
 mobile_io = create_mobile_io_from_config(example_config, lookup)

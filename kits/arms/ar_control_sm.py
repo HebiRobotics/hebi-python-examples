@@ -71,6 +71,7 @@ class ArmMobileIOControl:
         self.locked = True
         self._transition_handlers: 'list[Callable[[ArmMobileIOControl, ArmControlState], None]]' = [
         ]
+        self.mobile_last_fbk_t = time()
 
     @property
     def running(self):

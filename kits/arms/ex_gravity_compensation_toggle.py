@@ -16,9 +16,7 @@ example_config = hebi.config.load_config(os.path.join(os.path.dirname(os.path.re
 
 # Set up arm, and mobile_io from config
 arm = hebi.arm.create_from_config(example_config, lookup)
-while not (mobile_io := create_mobile_io_from_config(example_config, lookup)):
-    print('Looking for mobileIO device')
-    sleep(1)
+mobile_io = create_mobile_io_from_config(example_config, lookup)
 
 # Retrieve the gravity compensation plugin
 gravcomp = arm.get_plugin_by_type(hebi.arm.GravCompEffortPlugin)
