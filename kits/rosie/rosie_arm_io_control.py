@@ -136,8 +136,9 @@ def setup_mobile_io(m: 'MobileIO'):
             )
 
             try:
-                rotation = R.from_quat(
-                    m.orientation, scalar_first=True).as_matrix()
+                wxyz = m.orientation
+                xyzw = [*wxyz[1:], wxyz[0]]
+                rotation = R.from_quat(xyzw).as_matrix()
             except ValueError as e:
                 print(
                     f'Error getting orientation as matrix: {e}\n{m.orientation}')
