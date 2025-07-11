@@ -28,7 +28,7 @@ def _get_pin_number_from_name(name):
 
 
 def _set_mobile_io_gui_state(hexapod, controller_mapping):
-    body_height_pin = _get_pin_number_from_name(controller_mapping.body_height_velocity)
+    body_height_pin = _get_pin_number_from_name(controller_mapping.translate_z_velocity)
     toggle_mode_pin = _get_pin_number_from_name(controller_mapping.mode_selection)
     quit_pin = _get_pin_number_from_name(controller_mapping.quit)
 
@@ -75,7 +75,9 @@ def _add_event_handlers(hexapod: 'Hexapod', controller: 'MobileIO', controller_m
             rot_vel_z = rotation_vel_calc(fbk[0].io.a.get_float(int(controller_mapping.rotation_velocity[-1])))
 
             hexapod.set_translation_velocity_x(vel_x)
-            hexapod.set_translation_velocity_y(vel_y)
+            # Y is flipped because the joystick XY frame is left handed
+            # if Z is up (which is what's intuitive)
+            hexapod.set_translation_velocity_y(-vel_y)
             hexapod.set_translation_velocity_z(vel_z)
 
             #hexapod.set_rotation_velocity_y(rot_vel_y)

@@ -177,10 +177,9 @@ class Leg:
         """
 
         kin = self._kinematics
-        angles = self._feedback_view.position
-
         stance_mode = self._mode == 'stance'
 
+        angles = np.zeros(kin.dof_count)
         if stance_mode:
             kin.solve_inverse_kinematics(self._seed_angles, endeffector_position_objective(self._cmd_stance_xyz), output=angles)
         else:
@@ -189,8 +188,8 @@ class Leg:
         # Compute jacobians
         jacobian_ee = self._jacobian_ee
         jacobian_coms = self._jacobian_coms
-        kin.get_jacobian_end_effector(angles, jacobian_ee)
-        kin.get_jacobians('com', angles, jacobian_coms)
+        kin.get_jacobian_end_effector(self._feedback_view.position, jacobian_ee)
+        kin.get_jacobians('com', self._feedback_view.position, jacobian_coms)
 
         self._commanded_positions[:] = angles
 

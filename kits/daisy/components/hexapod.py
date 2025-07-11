@@ -442,7 +442,8 @@ class Hexapod:
 
     def update_stance(self, dt):
         with self._input_lock:
-            translation_vel = self._translation_velocity.copy()
+            # foot translation is negative of body translation
+            translation_vel = -self._translation_velocity.copy()
             rotation_vel = self._rotation_velocity.copy()
 
         current_z = self._legs[0].level_home_stance_xyz[2]

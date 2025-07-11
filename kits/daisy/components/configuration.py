@@ -77,7 +77,7 @@ class HexapodControllerMapping(object):
 
 _default_mobile_io_mapping = HexapodControllerMapping(body_height='a3', pitch='a2',
                                                       rotate='a1', translate_x='a8',
-                                                      translate_y='a7', translate_z='a6',
+                                                      translate_y='a7', translate_z='a4',
                                                       quit='b8', mode_selection='b1')
 
 
