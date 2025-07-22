@@ -229,7 +229,7 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_axis_value(4, 0.0)
     m.set_axis_value(5, 0.0)
 
-def parse_mobile_feedback(m: 'MobileIO'):
+def parse_mobile_io_feedback(m: 'MobileIO'):
     if not m.update(0.0):
         return False, None
 
@@ -275,9 +275,9 @@ if __name__ == "__main__":
 
     # Arm setup
     root_dir = os.path.abspath(os.path.dirname(__file__))
-    cfg_file_path = os.path.join(root_dir, "config/A-2580-06G.cfg.yaml")
-    cfg = hebi.config.load_config(cfg_file_path)
-    arm_family = cfg.families[0]
+    cfg_file = os.path.join(root_dir, "config", "A-2580-06G.cfg.yaml")
+    cfg = hebi.config.load_config(cfg_file)
+    family = cfg.families[0]
 
     # Create Arm object
     arm = hebi.arm.create_from_config(cfg, lookup)
@@ -290,7 +290,7 @@ if __name__ == "__main__":
     use_gripper = cfg.user_data.get('has_gripper', False)
     gripper = None
     if use_gripper:
-        gripper_family = arm_family
+        gripper_family = family
         gripper_name = 'gripperSpool'
 
         gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
@@ -321,12 +321,12 @@ if __name__ == "__main__":
 
     # Setup MobileIO
     print('Looking for mobileIO device...')
-    m = create_mobile_io(lookup, arm_family)
+    m = create_mobile_io(lookup, family)
     while m is None:
         try:
             print('Waiting for mobileIO device to come online...')
             sleep(1)
-            m = create_mobile_io(lookup, arm_family)
+            m = create_mobile_io(lookup, family)
         except KeyboardInterrupt as e:
             exit()
 
@@ -341,7 +341,7 @@ if __name__ == "__main__":
     while arm_control.running:
         t = time()
         try:
-            quit, arm_input = parse_mobile_feedback(m)
+            quit, arm_input = parse_mobile_io_feedback(m)
             if quit:
                 break
             arm_control.update(t, arm_input)

@@ -59,6 +59,7 @@ class ArmMobileIOControl:
             self.arm_xyz_home,
             self.arm_rot_home)
 
+        self.xyz_scale_init = xyz_scale
         self.xyz_scale = xyz_scale
 
         self.last_locked_xyz = self.arm_xyz_home.copy()
@@ -146,6 +147,8 @@ class ArmMobileIOControl:
             if not self.locked:
                 arm_goal = self.compute_arm_goal(arm_input)
                 self.arm.set_goal(arm_goal)
+            else:
+                self.xyz_scale = self.xyz_scale_init * arm_input.xyz_scaling
 
             if self.gripper:
                 gripper_closed = self.gripper.state == 1.0
@@ -180,8 +183,8 @@ class ArmMobileIOControl:
 
     def compute_arm_goal(self, arm_input: ArmMobileIOInputs):
         phone_offset = arm_input.phone_pos - self.phone_xyz_init
-        arm_xyz_target = self.last_locked_xyz + arm_input.xyz_scaling * \
-            self.xyz_scale * (self.phone_rot_init.T @ phone_offset)
+        arm_xyz_target = self.last_locked_xyz + self.xyz_scale * \
+            (self.phone_rot_init.T @ phone_offset)
         arm_rot_target = (arm_input.phone_rot @ self.phone_rot_init.T) @ self.last_locked_rot
 
         # if ar scaling is 0, move the home AR pose to current pose
@@ -214,10 +217,10 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_button_label(2, '', blocking=False)
     m.set_button_label(3, '', blocking=False)
     m.set_button_label(4, '', blocking=False)
-    m.set_button_label(5, 'lock', blocking=False)
+    m.set_button_label(5, 'Lock', blocking=False)
     m.set_button_mode(5, 1)
     m.set_button_label(6, '', blocking=False)
-    m.set_button_label(7, 'grip', blocking=False)
+    m.set_button_label(7, 'Gripper', blocking=False)
     m.set_button_mode(7, 1)
     m.set_button_label(8, '❌', blocking=False)
 
@@ -231,9 +234,11 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_axis_label(8, '', blocking=False)
 
     m.set_snap(4, np.nan)
-    m.set_axis_value(4, 1.0)
+    global xyz_scaling
+    xyz_scaling = 1.0
+    m.set_axis_value(4, xyz_scaling)
 
-def parse_mobile_feedback(m: 'MobileIO'):
+def parse_mobile_io_feedback(m: 'MobileIO', locked: bool):
     if not m.update(0.0):
         return False, None
 
@@ -250,6 +255,13 @@ def parse_mobile_feedback(m: 'MobileIO'):
     except ValueError as e:
         print(f'Error getting orientation as matrix: {e}\n{m.orientation}')
         rotation = np.eye(3)
+
+    global xyz_scaling
+    # Disable xyz scaling if the arm is unlocked
+    if locked:
+        xyz_scaling = (m.get_axis_state(4) + 1.0) / 2.0
+    if not locked:
+        m.set_axis_value(4, (2 * xyz_scaling) - 1.0)
 
     arm_input = ArmMobileIOInputs(
         phone_pos=np.copy(m.position),
@@ -274,9 +286,9 @@ if __name__ == "__main__":
 
     # Arm setup
     root_dir = os.path.abspath(os.path.dirname(__file__))
-    cfg_file_path = os.path.join(root_dir, "config/A-2580-06G.cfg.yaml")
-    cfg = hebi.config.load_config(cfg_file_path)
-    arm_family = cfg.families[0]
+    cfg_file = os.path.join(root_dir, "config", "A-2580-06G.cfg.yaml")
+    cfg = hebi.config.load_config(cfg_file)
+    family = cfg.families[0]
 
     # Create Arm object
     arm = hebi.arm.create_from_config(cfg, lookup)
@@ -289,7 +301,7 @@ if __name__ == "__main__":
     use_gripper = cfg.user_data.get('has_gripper', False)
     gripper = None
     if use_gripper:
-        gripper_family = arm_family
+        gripper_family = family
         gripper_name = 'gripperSpool'
 
         gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
@@ -310,12 +322,12 @@ if __name__ == "__main__":
 
     # Setup MobileIO
     print('Looking for mobileIO device...')
-    m = create_mobile_io(lookup, arm_family)
+    m = create_mobile_io(lookup, family)
     while m is None:
         try:
             print('Waiting for mobileIO device to come online...')
             sleep(1)
-            m = create_mobile_io(lookup, arm_family)
+            m = create_mobile_io(lookup, family)
         except KeyboardInterrupt as e:
             exit()
 
@@ -330,7 +342,7 @@ if __name__ == "__main__":
     while arm_control.running:
         t = time()
         try:
-            quit, arm_input = parse_mobile_feedback(m)
+            quit, arm_input = parse_mobile_io_feedback(m, arm_control.locked)
             if quit:
                 break
             arm_control.update(t, arm_input)
