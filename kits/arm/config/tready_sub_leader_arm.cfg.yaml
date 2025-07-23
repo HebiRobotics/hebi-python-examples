@@ -27,6 +27,6 @@ plugins:
     type: DoubledJointMirror
     enabled: true
     ramp_time: 5
-    group_Family: ["Tready-Sub-Leader"]
+    group_family: ["Tready-Sub-Leader"]
     group_name: ["J2B_shoulder1"]
     index: 1

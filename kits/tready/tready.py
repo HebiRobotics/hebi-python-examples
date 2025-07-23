@@ -273,7 +273,7 @@ class ChassisVelocity:
         self.rz = rz
     
     def __repr__(self) -> str:
-        return f'ChassisVelocity(x={self.x}, z={self.z}, rz={self.rz})'
+        return f'ChassisVelocity(x={self.x}, rz={self.rz})'
 
 class TreadyInputs:
     def __init__(self, home: bool = False, base_motion: 'ChassisVelocity' = ChassisVelocity(), flippers: 'list[float]' = [0, 0, 0, 0], align_flippers: bool = False, torque_mode: bool = False, torque_toggle: bool = False):

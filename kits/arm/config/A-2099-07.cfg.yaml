@@ -25,6 +25,6 @@ plugins:
   - name: 'DoubleShoulder'
     type: DoubledJointMirror
     enabled: true
-    group_Family: ["Arm"]
+    group_family: ["Arm"]
     group_name: ["J2_shoulder1B"]
     index: 2

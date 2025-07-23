@@ -2,8 +2,8 @@
 <robot version="1.3.0" description="Tready Track">
     <include path="R8-16_reverse.hrdf"/>
     <rigid-body mass="1.5" output_rot="Ry(pi)" output_trans="-0.275 0 0.037"
-                mesh_path="../meshes/A-2364-01_Export.obj" mesh_trans="-0.136 0 -0.023" mesh_rot="Rx(pi)"/>
+                mesh_path="https://files.hebi.us/meshes/tready/A-2364-01.obj" mesh_trans="-0.136 0 -0.023" mesh_rot="Rx(pi)"/>
     <actuator type="R8-9"/>
-    <rigid-body mass="0.1" mesh_path="../meshes/Drive-Sprocket_Export.obj"/>
+    <rigid-body mass="0.1" mesh_path="https://files.hebi.us/meshes/tready/Drive-Sprocket.obj"/>
     <end-effector/>
 </robot>
