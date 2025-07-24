@@ -134,13 +134,11 @@ class MastControl:
 
     def send(self):
         self.mast.send()
-        if self.camera:
-            self.camera.send()
+        self.camera.send()
 
     def update(self, t_now: float, inputs: 'Optional[MastInputs]'):
         self.mast.update(t_now)
-        if self.camera:
-            self.camera.update()
+        self.camera.update()
         if not inputs:
             if t_now - self.last_input_time > 1.0 and self.state is not self.state.DISCONNECTED:
                 print(self.namespace + "Warning, lost signal to Mobile IO, going into safety state!")
@@ -151,10 +149,9 @@ class MastControl:
         if self.state is self.state.DISCONNECTED:
             self.transition_to(t_now, self.state.TELEOP)
 
-        if self.camera:
-            self.camera.zoom_level = inputs.zoom
-            self.camera.flood_light = inputs.flood_light
-            self.camera.spot_light = inputs.spot_light
+        self.camera.zoom_level = inputs.zoom
+        self.camera.flood_light = inputs.flood_light
+        self.camera.spot_light = inputs.spot_light
 
         if self.state is self.state.STARTUP:
             self.transition_to(t_now, self.state.HOMING)
@@ -229,7 +226,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
         spot_light = light
 
     pan  = -1.0 * m.get_axis_state(1)
-    tilt = -1.0 * m.get_axis_state(2)
+    tilt = m.get_axis_state(2)
 
     return MastInputs([pan, tilt], m.get_button_state(1))
 

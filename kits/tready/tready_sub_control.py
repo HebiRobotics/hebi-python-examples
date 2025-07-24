@@ -204,7 +204,7 @@ if __name__ == "__main__":
     # Leader Arm setup
     try:
         print('Looking for Leader Arm...', end=' ')
-        leader_cfg = hebi.config.load_config(os.path.join(root_dir, '../arm/config/tready_sub_leader_arm.cfg.yaml'))
+        leader_cfg = hebi.config.load_config(os.path.join(root_dir, 'config/tready_sub_leader_arm.cfg.yaml'))
         leader_arm = hebi.arm.create_from_config(leader_cfg, lookup)
         print('Leader Arm found.')
     except Exception as e:
@@ -214,7 +214,7 @@ if __name__ == "__main__":
     # Follower Arm setup
     try:
         print('Looking for Follower Arm...', end=' ')
-        follower_cfg = hebi.config.load_config(os.path.join(root_dir, '../arm/config/tready_sub_follower_arm.cfg.yaml'))
+        follower_cfg = hebi.config.load_config(os.path.join(root_dir, 'config/tready_sub_follower_arm.cfg.yaml'))
         follower_arm = hebi.arm.create_from_config(follower_cfg, lookup)
         print('Follower Arm found.')
 
