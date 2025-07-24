@@ -104,7 +104,7 @@ class MastInputs:
     flood_light: float
     spot_light: float
 
-    def __init__(self, sliders: 'list[float]', home: bool, zoom: float, flood: float, spot: float):
+    def __init__(self, sliders: 'list[float]' = [0, 0], home: bool = False, zoom: float = 0.0, flood: float = 0.0, spot: float = 0.0):
         self.pan = sliders[0]
         self.tilt = sliders[1]
         self.home = home
@@ -117,7 +117,9 @@ class MastControl:
     PAN_SCALING = 0.5
     TILT_SCALING = 0.5
 
-    def __init__(self, camera_mast: HebiCameraMast, zoom_camera: HebiCamera):
+    def __init__(self, camera_mast: HebiCameraMast, zoom_camera: HebiCamera = None):
+        self.namespace = ""
+
         self.state = MastControlState.STARTUP
         self.mast = camera_mast
         self.camera = zoom_camera
@@ -139,7 +141,7 @@ class MastControl:
         self.camera.update()
         if not inputs:
             if t_now - self.last_input_time > 1.0 and self.state is not self.state.DISCONNECTED:
-                print("Warning, lost signal to Mobile IO, going into safety state!")
+                print(self.namespace + "Warning, lost signal to Mobile IO, going into safety state!")
                 self.transition_to(t_now, self.state.DISCONNECTED)
             return
 
@@ -173,21 +175,24 @@ class MastControl:
             return
 
         if new_state is self.state.DISCONNECTED:
-            print("Transitioning to Disconnected")
+            print(self.namespace + "Transitioning to Disconnected")
             self.mast.trajectory = None
             self.mast.cmd.velocity = None
 
         elif new_state is self.state.HOMING:
-            print("Transitioning to Homing")
+            print(self.namespace + "Transitioning to Homing")
             self.mast.set_position(t_now, 3.0, self.home_pose)
 
         elif new_state is self.state.TELEOP:
-            print("Transitioning to Manual Control")
+            print(self.namespace + "Transitioning to Manual Control")
 
         elif new_state is self.state.EXIT:
-            print("Transitioning to Exit")
+            print(self.namespace + "Transitioning to Exit")
 
         self.state = new_state
+    
+    def stop(self):
+        self.transition_to(time(), MastControlState.EXIT)
 
 
 def setup_mobile_io(m: 'MobileIO'):
@@ -223,7 +228,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
     pan  = -1.0 * m.get_axis_state(1)
     tilt = m.get_axis_state(2)
 
-    return MastInputs([pan, tilt], m.get_button_state(1), zoom, flood_light, spot_light)
+    return MastInputs([pan, tilt], m.get_button_state(1))
 
 
 if __name__ == "__main__":
@@ -260,9 +265,12 @@ if __name__ == "__main__":
     print('Looking for Mobile IO...')
     m = create_mobile_io(lookup, family)
     while m is None:
-        print('Waiting for Mobile IO device to come online...')
-        sleep(1)
-        m = create_mobile_io(lookup, family)
+        try:
+            print('Waiting for Mobile IO device to come online...')
+            sleep(1)
+            m = create_mobile_io(lookup, family)
+        except KeyboardInterrupt:
+            exit(0)
 
     m.update()
     setup_mobile_io(m)
