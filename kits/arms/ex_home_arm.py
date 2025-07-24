@@ -34,8 +34,7 @@ arm.group.feedback_frequency = 200.0
 ###########################
 
 goal = hebi.arm.Goal(arm.size)
-home_position = [0.0, 2.09, 2.09, 0.0, 1.57, 0.0]
-goal.add_waypoint(t=3.0, position=home_position[:arm.size])
+goal.add_waypoint(t=5.0, position=example_config.user_data["home_position"])
 arm.update()
 arm.set_goal(goal)
 arm.send()
