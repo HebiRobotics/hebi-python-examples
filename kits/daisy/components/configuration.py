@@ -27,14 +27,15 @@ def _controller_by_mobile_io_selector(family, name, feedback_frequency):
 
 
 class HexapodControllerMapping(object):
-    __slots__ = ('_body_height', '_pitch', '_rotate', '_translate_x', '_translate_y', '_quit', '_mode_selection')
+    __slots__ = ('_body_height', '_pitch', '_rotate', '_translate_x', '_translate_y', '_translate_z', '_quit', '_mode_selection')
 
-    def __init__(self, body_height, pitch, rotate, translate_x, translate_y, quit, mode_selection):
+    def __init__(self, body_height, pitch, rotate, translate_x, translate_y, translate_z, quit, mode_selection):
         self._body_height = body_height
         self._pitch = pitch
         self._rotate = rotate
         self._translate_x = translate_x
         self._translate_y = translate_y
+        self._translate_z = translate_z
         self._quit = quit
         self._mode_selection = mode_selection
 
@@ -61,6 +62,11 @@ class HexapodControllerMapping(object):
         return self._translate_y
 
     @property
+    def translate_z_velocity(self):
+        """Vertical from driver's perspective."""
+        return self._translate_z
+
+    @property
     def quit(self):
         return self._quit
 
@@ -71,8 +77,8 @@ class HexapodControllerMapping(object):
 
 _default_mobile_io_mapping = HexapodControllerMapping(body_height='a3', pitch='a2',
                                                       rotate='a1', translate_x='a8',
-                                                      translate_y='a7', quit='b8',
-                                                      mode_selection='b1')
+                                                      translate_y='a7', translate_z='a4',
+                                                      quit='b8', mode_selection='b1')
 
 
 # ------------------------------------------------------------------------------

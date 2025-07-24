@@ -1,6 +1,7 @@
 import hebi
 from hebi.util import create_mobile_io
 from time import time, sleep
+import datetime
 import os
 from .tready_utils import load_gains, set_mobile_io_instructions
 from .tready import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
@@ -49,7 +50,7 @@ def setup_mobile_io(m: 'MobileIO'):
     
     m.set_led_color('yellow')
 
-    def parse_mobile_io_feedback(m: 'MobileIO') -> TreadyInputs:
+    def parse_mobile_io_feedback(m: 'MobileIO'):
         def change_to_torque_mode(m: 'MobileIO'):
             axis_vals = [0, -0.5, 1, 1]
             for i in range(3, 7):
@@ -71,13 +72,13 @@ def setup_mobile_io(m: 'MobileIO'):
             if m.get_button_state(quit_demo_btn):
                 return True, None
             if m.get_button_state(reset_pose_btn):
-                return False, TreadyInputs(home=True, torque_mode=m.get_button_state(torque_btn), torque_toggle=abs(m.get_button_diff(torque_btn)))
+                return False, TreadyInputs(home=True, torque_mode=m.get_button_state(torque_btn), torque_toggle=(m.get_button_diff(torque_btn) != 0.0))
             if m.get_button_diff(torque_btn) == 1:
                 change_to_torque_mode(m)
             elif m.get_button_diff(torque_btn) == -1:
                 change_to_velocity_mode(m)
             if m.get_button_state(recenter_btn):
-                return False, TreadyInputs(align_flippers=True, torque_mode=m.get_button_state(torque_btn), torque_toggle=abs(m.get_button_diff(torque_btn)))
+                return False, TreadyInputs(align_flippers=True, torque_mode=m.get_button_state(torque_btn), torque_toggle=(m.get_button_diff(torque_btn) != 0.0))
             
             chassis_velocity = ChassisVelocity(
                 m.get_axis_state(forward_joy),
@@ -100,7 +101,7 @@ def setup_mobile_io(m: 'MobileIO'):
                 base_motion=chassis_velocity,
                 flippers=flippers,
                 torque_mode=m.get_button_state(torque_btn),
-                torque_toggle=abs(m.get_button_diff(torque_btn))
+                torque_toggle=(m.get_button_diff(torque_btn) != 0.0)
             )
 
         else:
@@ -191,6 +192,13 @@ if __name__ == "__main__":
     base_control._update_handlers.append(update_torque_mode)
 
     # can enable start logging here
+    logging = True
+
+    if logging:
+        tready_dir = os.path.dirname(__file__)
+        now = datetime.datetime.now()
+        base.group.start_log(os.path.join(tready_dir, 'logs'), f'base_{now:%Y-%m-%d-%H:%M:%S}')
+
     while base_control.running:
         t = time()
         try:
@@ -203,4 +211,6 @@ if __name__ == "__main__":
             break
     
     base_control.stop()
-    # stop logging here
+
+    if logging:
+        base.group.stop_log()

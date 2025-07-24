@@ -3,8 +3,8 @@ from .leg import Leg
 
 from hebi.robot_model import endeffector_position_objective
 from hebi.trajectory import create_trajectory
-from numpy import float32, float64
-from numpy.linalg import norm, solve, LinAlgError
+from numpy import float64
+from numpy.linalg import norm, solve
 
 # TODO: Parameterize
 period = 0.7

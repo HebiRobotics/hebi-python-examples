@@ -1,10 +1,12 @@
 import hebi
 from hebi.util import create_mobile_io
 from time import time, sleep
-import os
+import datetime
+from os.path import join, dirname
+import sys
 from .tready_utils import load_gains, set_mobile_io_instructions, setup_arm_6dof
 from .tready import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
-from kits.arm.ar_control_sm import ArmMobileIOControl, ArmMobileIOInputs
+from kits.arms.ar_control_sm import ArmMobileIOControl, ArmMobileIOInputs
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
@@ -29,8 +31,8 @@ def setup_mobile_io(m: 'MobileIO'):
     height_down_btn = 7
     quit_demo_btn = 8
 
-    turn_joy = 1 # Left Pad Left/Right
-    forward_joy = 2 # Left Pad Up/Down
+    turn_joy = 1  # Left Pad Left/Right
+    forward_joy = 2  # Left Pad Up/Down
     front_left_slider = 3
     front_right_slider = 4
     back_left_slider = 5
@@ -54,7 +56,7 @@ def setup_mobile_io(m: 'MobileIO'):
 
     for i in range(1, 9):
         m.set_snap(i, 0)
-    
+
     m.set_led_color('yellow')
 
     # Arm
@@ -76,7 +78,7 @@ def setup_mobile_io(m: 'MobileIO'):
                     print(f'Failed to set snap for axis {i}')
                 if not m.set_axis_value(i, axis_vals[i-3]):
                     print(f'Failed to set axis value for axis {i}')
-        
+
         def change_to_velocity_mode(m: 'MobileIO'):
             for i in range(3, 7):
                 if not m.set_snap(i, 0):
@@ -85,21 +87,27 @@ def setup_mobile_io(m: 'MobileIO'):
             m.set_axis_label(front_right_slider, 'FR', blocking=False)
             m.set_axis_label(back_left_slider, 'BL', blocking=False)
             m.set_axis_label(back_right_slider, 'BR', blocking=False)
-        
+
         if m.update(0.0):
             if m.get_button_state(quit_demo_btn):
                 return True, None, None
             if m.get_button_state(reset_pose_btn):
-                return False, TreadyInputs(home=True, torque_mode=m.get_button_state(torque_btn), torque_toggle=abs(m.get_button_diff(torque_btn))), ArmMobileIOInputs(home=True)
-            
+                return (False,
+                        TreadyInputs(home=True,
+                                     torque_mode=m.get_button_state(torque_btn),
+                                     torque_toggle=(m.get_button_diff(torque_btn)) != 0.0),
+                        ArmMobileIOInputs(home=True))
+
             if m.get_button_diff(torque_btn) == 1:
                 change_to_torque_mode(m)
             elif m.get_button_diff(torque_btn) == -1:
                 change_to_velocity_mode(m)
-            
+
             tready_inputs = None
             if m.get_button_state(recenter_btn):
-                tready_inputs = TreadyInputs(align_flippers=True, torque_mode=m.get_button_state(torque_btn), torque_toggle=abs(m.get_button_diff(torque_btn)))
+                tready_inputs = TreadyInputs(align_flippers=True,
+                                             torque_mode=m.get_button_state(torque_btn),
+                                             torque_toggle=(m.get_button_diff(torque_btn) != 0.0))
             else:
                 chassis_velocity = ChassisVelocity(
                     m.get_axis_state(forward_joy),
@@ -122,7 +130,7 @@ def setup_mobile_io(m: 'MobileIO'):
                     base_motion=chassis_velocity,
                     flippers=flippers,
                     torque_mode=m.get_button_state(torque_btn),
-                    torque_toggle=abs(m.get_button_diff(torque_btn))
+                    torque_toggle=(m.get_button_diff(torque_btn) != 0.0)
                 )
 
             try:
@@ -138,13 +146,13 @@ def setup_mobile_io(m: 'MobileIO'):
                     m.set_button_label(arm_lock, 'Arm 🔓', blocking=False)
 
             arm_inputs = ArmMobileIOInputs(
-                np.copy(m.position),
-                rotation,
-                bool(m.get_button_diff(arm_lock) != 0),
-                not m.get_button_state(arm_lock),
-                m.get_button_state(gripper_close)
+                phone_pos=np.copy(m.position),
+                phone_rot=rotation,
+                lock_toggle=bool(m.get_button_diff(arm_lock) != 0),
+                locked=(not m.get_button_state(arm_lock)),
+                gripper_closed=m.get_button_state(gripper_close)
             )
-            
+
             return False, tready_inputs, arm_inputs
 
         else:
@@ -165,19 +173,23 @@ if __name__ == "__main__":
     # mobileIO setup
     print('Looking for mobileIO device...')
     m = create_mobile_io(lookup, base_family)
+    search_start = time()
     while m is None:
+        if time() - search_start > 30.0:
+            print("Couldn't find tablet, restarting...")
+            sys.exit()
         print('Waiting for mobileIO device to come online...')
         sleep(1)
         m = create_mobile_io(lookup, base_family)
-    
+
     print("mobileIO device found.")
     m.update()
     parse_mobile_io_feedback = setup_mobile_io(m)
 
     # Create Arm group
-    arm = setup_arm_6dof(lookup, arm_family, with_gripper=False)
+    arm, gripper = setup_arm_6dof(lookup, arm_family, with_gripper=False)
     if arm is not None:
-        arm_control = ArmMobileIOControl(arm)
+        arm_control = ArmMobileIOControl(arm, gripper)
         arm_control.namespace = "[Arm] "
 
     # Create base group
@@ -186,79 +198,109 @@ if __name__ == "__main__":
         print('Looking for Tready modules...')
         sleep(1)
         base_group = lookup.get_group_from_names(base_family, wheel_names + flipper_names)
-    
-    root_dir, _ = os.path.split(os.path.abspath(__file__))
-    load_gains(base_group, os.path.join(root_dir, 'gains', 'smart-tready-gains.xml'))
 
-    base = TreadedBase(base_group, chassis_ramp_time=0.33, flipper_ramp_time=0.1)
-    base.set_robot_model(os.path.join(root_dir, 'hrdf', 'Tready.hrdf'))
+    root_dir = dirname(__file__)
+    load_gains(base_group, join(root_dir, 'gains', 'smart-tready-gains.xml'))
+
+    base = TreadedBase(base_group, chassis_ramp_time=0.33,
+                       flipper_ramp_time=0.1)
+    base.set_robot_model(join(root_dir, 'hrdf', 'Tready.hrdf'))
     base_control = TreadyControl(base)
     base_control.namespace = "[Base] "
 
-    def update_mobile_io(controller: TreadyControl, new_state: TreadyControlState):
-        if controller.state == new_state:
-            return
+    def update_mobile_io_cb(m: 'MobileIO'):
+        def cb(controller: TreadyControl, new_state: TreadyControlState):
+            if controller.state == new_state:
+                return
 
-        if new_state is TreadyControlState.HOMING:
-            controller.base.set_color('magenta')
-            msg = ('Robot Homing Sequence\n'
-                   'Please wait...')
-            set_mobile_io_instructions(m, msg, color="blue")
+            if new_state is TreadyControlState.HOMING:
+                controller.base.set_color('magenta')
+                msg = ('Robot Homing Sequence\n'
+                       'Please wait...')
+                set_mobile_io_instructions(m, msg, color="blue")
 
-        elif new_state is TreadyControlState.ALIGNING:
-            controller.base.set_color('magenta')
-            msg = ('Robot Flippers Centering\n'
-                   'Please wait...')
-            set_mobile_io_instructions(m, msg, color="blue")
+            elif new_state is TreadyControlState.ALIGNING:
+                controller.base.set_color('magenta')
+                msg = ('Robot Flippers Centering\n'
+                       'Please wait...')
+                set_mobile_io_instructions(m, msg, color="blue")
 
-        elif new_state is TreadyControlState.TELEOP:
-            controller.base.clear_color()
-            msg = ('Robot Ready to Control')
-            set_mobile_io_instructions(m, msg, color="green")
+            elif new_state is TreadyControlState.TELEOP:
+                controller.base.set_color('transparent')
+                msg = ('Robot Ready to Control')
+                set_mobile_io_instructions(m, msg, color="green")
 
-        elif new_state is TreadyControlState.DISCONNECTED:
-            print('Lost connection to Controller. Please reconnect.')
-            controller.base.set_color('blue')
-        
-        elif new_state is TreadyControlState.EMERGENCY_STOP:
-            controller.base.set_color('yellow')
-            set_mobile_io_instructions(m, 'Emergency Stop Activated', color="red")
+            elif new_state is TreadyControlState.DISCONNECTED:
+                print('Lost connection to Controller. Please reconnect.')
+                controller.base.set_color('blue')
 
-        elif new_state is TreadyControlState.EXIT:
-            controller.base.set_color("red")
-            set_mobile_io_instructions(m, 'Demo Stopped', color="red")
-    
-    def update_torque_mode(controller: TreadyControl):
-        if controller.state is TreadyControlState.TELEOP:
-            if controller.torque_labels is not None:
-                for i, label in enumerate(controller.torque_labels):
-                    m.set_axis_label(i+3, label, blocking=False)
-            else:
-                m.set_axis_label(3, 'FL', blocking=False)
-                m.set_axis_label(4, 'FR', blocking=False)
-                m.set_axis_label(5, 'BL', blocking=False)
-                m.set_axis_label(6, 'BR', blocking=False)
-    
-    base_control._transition_handlers.append(update_mobile_io)
-    base_control._update_handlers.append(update_torque_mode)
+            elif new_state is TreadyControlState.EMERGENCY_STOP:
+                controller.base.set_color('yellow')
+                set_mobile_io_instructions(m, 'Emergency Stop Activated', color="red")
 
-    # can enable start logging here
+            elif new_state is TreadyControlState.EXIT:
+                controller.base.set_color("red")
+                set_mobile_io_instructions(m, 'Demo Stopped', color="red")
+        return cb
+
+    def update_torque_mode_cb(m: 'MobileIO'):
+        def cb(controller: TreadyControl):
+            if controller.state is TreadyControlState.TELEOP:
+                if controller.torque_labels is not None:
+                    for i, label in enumerate(controller.torque_labels):
+                        m.set_axis_label(i+3, label, blocking=False)
+                else:
+                    m.set_axis_label(3, 'FL', blocking=False)
+                    m.set_axis_label(4, 'FR', blocking=False)
+                    m.set_axis_label(5, 'BL', blocking=False)
+                    m.set_axis_label(6, 'BR', blocking=False)
+        return cb
+
+    base_control._transition_handlers.append(update_mobile_io_cb(m))
+    base_control._update_handlers.append(update_torque_mode_cb(m))
+
+    logging = True
+
+    if logging:
+        tready_log_dir = join(dirname(__file__), 'logs')
+        now = datetime.datetime.now()
+        if arm:
+            arm.group.start_log(tready_log_dir, f'arm_{now:%Y-%m-%d-%H:%M:%S}')
+        base.group.start_log(tready_log_dir, f'base_{now:%Y-%m-%d-%H:%M:%S}')
+
+    voltage = np.mean(base_control.base.fbk.voltage)
     while base_control.running and (arm is None or arm_control.running):
         t = time()
         try:
             quit, base_inputs, arm_inputs = parse_mobile_io_feedback(m)
             if quit:
                 break
+            if base_control.state is TreadyControlState.TELEOP:
+                new_voltage = np.mean(base_control.base.fbk.voltage)
+                if abs(voltage - new_voltage) > 0.1:
+                    m.clear_text()
+                    if new_voltage < 31:
+                        msg = f'CHARGE NOW! {voltage:.2f}V'
+                    elif new_voltage < 32:
+                        msg = f'Low Battery: {voltage:.2f}V'
+                    else:
+                        msg = f'Battery: {voltage:.2f}V'
+                    m.add_text(msg)
+                voltage = new_voltage
             base_control.update(t, base_inputs)
-            if arm is not None:
+            if arm:
                 arm_control.update(t, arm_inputs)
             base_control.send()
-            if arm is not None:
+            if arm:
                 arm_control.send()
         except KeyboardInterrupt:
             break
-    
+
     base_control.stop()
-    if arm is not None:
+    if arm:
         arm_control.stop()
-    # stop logging here
+
+    if logging:
+        if arm:
+            arm.group.stop_log()
+        base.group.stop_log()

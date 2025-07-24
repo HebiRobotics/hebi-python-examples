@@ -25,7 +25,7 @@ Visit http://docs.hebi.us/download/python to see which specific versions are ava
 This folder contains examples that help you get started with the HEBI 
 Robotics APIs for Python. There are separate examples for each of our different products:
 
-* X-Series Actuator
+* Actuator
 * I/O Board
 * Mobile I/O
 
@@ -50,7 +50,7 @@ This folder contains example code for various preconfigured kits. Additional doc
 
 | Kit | Comment |
 |-----|---------|
-| [Arms](kits/arm) | A variety of arm configurations, from 4-DoF to 6-DoF. |
+| [Arms](kits/arms) | A variety of arm configurations, from 4-DoF to 6-DoF. |
 | [Igor](kits/igor2) | A 2-wheel, 2-arm, dynamic balancing mobile robot |
 
 ## Advanced Examples
