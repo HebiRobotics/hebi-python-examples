@@ -19,5 +19,3 @@ __pycache__/
 
 # Ignore Mac added files
 .DS_Store
-.vs/
-hebi_env/
