@@ -8,7 +8,7 @@ import hebi
 from hebi.util import create_mobile_io
 from .tready_utils import load_gains, set_mobile_io_instructions
 from .tready import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
-from kits.arm.ex_leader_follower import LeaderFollowerControl, LeaderFollowerInputs
+from kits.arms.ex_leader_follower import LeaderFollowerControl, LeaderFollowerInputs
 from kits.camera.pan_tilt_mast import MastControl, MastInputs, HebiCameraMast
 
 import typing
