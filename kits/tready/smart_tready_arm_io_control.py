@@ -275,24 +275,29 @@ if __name__ == "__main__":
             quit, base_inputs, arm_inputs = parse_mobile_io_feedback(m)
             if quit:
                 break
-            if base_control.state is TreadyControlState.TELEOP:
-                new_voltage = np.mean(base_control.base.fbk.voltage)
-                if abs(voltage - new_voltage) > 0.1:
-                    m.clear_text()
-                    if new_voltage < 31:
-                        msg = f'CHARGE NOW! {voltage:.2f}V'
-                    elif new_voltage < 32:
-                        msg = f'Low Battery: {voltage:.2f}V'
-                    else:
-                        msg = f'Battery: {voltage:.2f}V'
-                    m.add_text(msg)
-                voltage = new_voltage
             base_control.update(t, base_inputs)
             if arm:
                 arm_control.update(t, arm_inputs)
             base_control.send()
             if arm:
                 arm_control.send()
+            # Update battery indicator text
+            if base_control.state is TreadyControlState.TELEOP:
+                new_voltage = np.mean(base_control.base.fbk.voltage)
+                if abs(voltage - new_voltage) > 0.1:
+                    if new_voltage < 31:
+                        msg = f'CHARGE NOW! {voltage:.2f}V'
+                    elif new_voltage < 32:
+                        msg = f'Low Battery: {voltage:.2f}V'
+                    else:
+                        msg = f'Battery: {voltage:.2f}V'
+
+                    # Important to use non-blocking here, otherwise
+                    # robot will hang if tablet has disconnected for < 1 second
+                    # and the state machines have not entered the disconnected state
+                    m.clear_text(blocking=False)
+                    m.add_text(msg, blocking=False)
+                    voltage = new_voltage
         except KeyboardInterrupt:
             break
 

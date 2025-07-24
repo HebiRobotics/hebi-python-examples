@@ -71,7 +71,7 @@ class ArmMobileIOControl:
         self.locked = True
         self._transition_handlers: 'list[Callable[[ArmMobileIOControl, ArmControlState], None]]' = [
         ]
-        self.mobile_last_fbk_t = time()
+        self.last_cmd_t = time()
 
     @property
     def running(self):
@@ -89,17 +89,17 @@ class ArmMobileIOControl:
             return
 
         if arm_input is None:
-            if self.state is not self.state.DISCONNECTED and t_now - self.mobile_last_fbk_t > 1.0:
+            if self.state is not self.state.DISCONNECTED and t_now - self.last_cmd_t > 1.0:
                 print(self.namespace + "mobileIO timeout, disabling motion")
                 self.transition_to(t_now, self.state.DISCONNECTED)
             return
 
         # Reset the timeout
-        self.mobile_last_fbk_t = t_now
+        self.last_cmd_t = t_now
         # Transition to teleop if mobileIO is reconnected
         last_pos = self.arm.last_feedback.position
         if self.state is self.state.DISCONNECTED:
-            self.mobile_last_fbk_t = t_now
+            self.last_cmd_t = t_now
             print(self.namespace + 'Controller reconnected, demo continued.')
             # Lock arm when reconnected
             self.locked = True

@@ -271,6 +271,10 @@ class TreadyControlState(Enum):
     EMERGENCY_STOP = auto()
     EXIT = auto()
 
+    @property
+    def is_error_state(self):
+        return self in [TreadyControlState.DISCONNECTED, TreadyControlState.EMERGENCY_STOP]
+
 
 class ChassisVelocity:
     def __init__(self, x: float = 0, rz: float = 0):
@@ -335,8 +339,8 @@ class TreadyControl:
             self.transition_to(t_now, self.state.EMERGENCY_STOP)
             return
 
-        if tready_input is None and self.state is not self.state.DISCONNECTED and self.state is not self.state.EMERGENCY_STOP:
-            if t_now - self.last_cmd_t > 1.0:
+        if tready_input is None:
+            if not self.state.is_error_state and (t_now - self.last_cmd_t) > 1.0:
                 print(self.namespace + "mobileIO timeout, disabling motion")
                 self.transition_to(t_now, self.state.DISCONNECTED)
             return
