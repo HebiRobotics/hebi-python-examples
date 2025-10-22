@@ -4,16 +4,10 @@ import os
 # Controller selectors
 # ------------------------------------------------------------------------------
 
-
-def _joystick_first_available_selector():
-  return None
-
-
 def _controller_by_mobile_io_selector(family, name, feedback_frequency):
   import hebi
   from time import sleep
   lookup = hebi.Lookup()
-  sleep(2)
   mio = hebi.util.create_mobile_io(lookup, family, name)
   while mio is None:
     msg = f'Could not find mobileIO on network with\nfamily: {family}\nname: {name}'
@@ -135,7 +129,6 @@ class IgorControllerMapping(object):
     return self._i_term_adjust
 
 
-_default_joystick_mapping =  IgorControllerMapping('LEFT_STICK_Y', 'LEFT_STICK_X', ('L2', 'R2'), ('DPAD_DOWN', 'DPAD_UP'), 'RIGHT_STICK_X', 'RIGHT_STICK_Y', 'L3', 'SHARE', 'TOUCHPAD', 'OPTIONS', 'L1', 'R1', 'TRIGGERS', 'BUTTONS', None)
 _default_mobile_io_mapping = IgorControllerMapping(          'a2',           'a1',         'a3',                     'a6',            'a7',            'a8', 'b3',    'b1',       'b2',      'b4', 'b8', 'b6',   'SLIDER',  'SLIDER', 'a5')
 
 
@@ -167,28 +160,6 @@ class Igor2Config(object):
     self.__imitation = imitation
     self.__find_joystick_strategy = None
     self.__controller_mapping = None
-    self.select_first_available_joystick()
-
-  def select_joystick_by_name(self, name):
-    """
-    Set the joystick selection strategy to select a joystick by name
-    """
-    self.__find_joystick_strategy = lambda: _joystick_by_name_selector(name)
-    self.__controller_mapping = _default_joystick_mapping
-
-  def select_joystick_by_index(self, index):
-    """
-    Set the joystick selection strategy to select a joystick by index
-    """
-    self.__find_joystick_strategy = lambda: _joystick_by_index_selector(arg)
-    self.__controller_mapping = _default_joystick_mapping
-
-  def select_first_available_joystick(self):
-    """
-    Set the joystick selection strategy to select the first available joystick
-    """
-    self.__find_joystick_strategy = _joystick_first_available_selector
-    self.__controller_mapping = _default_joystick_mapping
 
   def select_controller_by_mobile_io(self, family, name, feedback_frequency=200):
     """

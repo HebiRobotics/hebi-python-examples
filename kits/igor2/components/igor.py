@@ -313,11 +313,14 @@ class Igor(object):
         from time import sleep
 
         mio = self._mobile_io
-        mio.set_snap(3, 0)
-        mio.set_snap(6, 0)
+
+        layout_dir = os.path.join(os.path.dirname(__file__), '..', 'layout')
+        success = not mio.send_layout(layout_file=os.path.join(layout_dir, 'idle.json'))
+        if not success:
+            print("Error sending layout to Mobile IO!")
+
         mio.set_button_output(3, 1)
         mio.set_button_output(4, 0)
-        mio.set_axis_value(5, -1)
         mio.set_led_color('blue')
 
         if self._num_spins > 0:
@@ -349,6 +352,10 @@ class Igor(object):
         group.send_command(group_command)
 
         mio = self._mobile_io
+        success = not mio.send_layout(layout_file=os.path.join(layout_dir, 'run.json'))
+        if not success:
+            print("Error sending layout to Mobile IO!")
+
         mio.set_button_output(3, 0)
         mio.set_button_output(4, 1)
         mio.set_axis_value(5, -1)
@@ -791,7 +798,7 @@ class Igor(object):
                         raise RuntimeError
                     self._mobile_io = mio
                     break
-                except:
+                except RuntimeError:
                     pass
 
             def idle_to_running(fbk: 'GroupFeedback'):
