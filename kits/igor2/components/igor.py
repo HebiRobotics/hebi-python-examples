@@ -50,10 +50,6 @@ def retry_on_error(func, on_error_func=None, sleep_time=0.1):
 def load_gains(igor: 'Igor'):
     group = igor._group
 
-    # Bail out if group is imitation
-    if igor._config.is_imitation:
-        return
-
     gains_command = hebi.GroupCommand(group.size)
     sleep(0.1)
 
@@ -80,36 +76,25 @@ def create_group(config, has_camera):
     :param has_camera:
     :type has_camera:  bool
     """
-    imitation = config.is_imitation
-
-    if imitation:
-        if has_camera:
-            num_modules = len(config.module_names)
-        else:
-            num_modules = len(config.module_names_no_cam)
-
-        from hebi.util import create_imitation_group
-        return create_imitation_group(num_modules)
+    if has_camera:
+        names = config.module_names
     else:
-        if has_camera:
-            names = config.module_names
-        else:
-            names = config.module_names_no_cam
-        families = [config.family]
-        lookup = hebi.Lookup()
+        names = config.module_names_no_cam
+    families = [config.family]
+    lookup = hebi.Lookup()
 
-        def connect():
-            group = lookup.get_group_from_names(families, names)
-            if group is None:
-                print('Cannot find igor on network...')
-                raise RuntimeError()
-            elif group.size != len(names):
-                raise RuntimeError()
-            return group
+    def connect():
+        group = lookup.get_group_from_names(families, names)
+        if group is None:
+            print('Cannot find igor on network...')
+            raise RuntimeError()
+        elif group.size != len(names):
+            raise RuntimeError()
+        return group
 
-        # Let the lookup object discover modules, before trying to connect
-        sleep(2.0)
-        return retry_on_error(connect)
+    # Let the lookup object discover modules, before trying to connect
+    sleep(2.0)
+    return retry_on_error(connect)
 
 
 # ------------------------------------------------------------------------------
@@ -442,23 +427,14 @@ class Igor(object):
         soft_start = min(rel_time, 1.0)
         rx_time = self._group_feedback.receive_time
 
-        if self._config.is_imitation:
-            dt = 0.01
-        else:
-            np.subtract(rx_time, self._time_last, out=self._diff_time)
-            dt = np.mean(self._diff_time)
+        np.subtract(rx_time, self._time_last, out=self._diff_time)
+        dt = np.mean(self._diff_time)
 
         np.copyto(self._time_last, rx_time)
 
         # TODO: cache these too
         gyro = self._group_feedback.gyro
         orientation = self._group_feedback.orientation
-
-        if self._config.is_imitation:
-            gyro[:, :] = 0.33
-            orientation[:, 0] = 0.25
-            orientation[:, 1] = 1.0
-            orientation[:, 2:4] = 0.0
 
         self._update_com()
         self._update_pose_estimate(gyro, orientation)

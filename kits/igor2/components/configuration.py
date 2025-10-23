@@ -1,4 +1,4 @@
-import os
+import os, yaml
 
 # ------------------------------------------------------------------------------
 # Controller selectors
@@ -140,24 +140,15 @@ _default_mobile_io_mapping = IgorControllerMapping(          'a2',           'a1
 class Igor2Config(object):
   """
   Used when starting up Igor II.
-
-  By default, the configuration selects the first available joystick.
-  To select a different joystick selection strategy, you must call
-  one of the select_joystick_by_* methods.
   """
-
-  def __init__(self, imitation=False):
-    self.__module_names = ['L1_J3_wheel', 'L2_J3_wheel',
-                           'L1_J1_hip', 'L1_J2_knee',
-                           'L2_J1_hip', 'L2_J2_knee',
-                           'A1_J1_base', 'A1_J2_shoulder', 'A1_J3_elbow', 'A1_J4_wrist',
-                           'A2_J1_base', 'A2_J2_shoulder', 'A2_J3_elbow', 'A2_J4_wrist',
-                           'camTilt']
+  def __init__(self, filename='resources/config.yml'):
+    with open(filename) as config_file:
+        config = yaml.safe_load(config_file)
+        self.__module_names = config['names']
     self.__family = 'T-gor'
     resource_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'resources'))
     self.__default_gains = os.path.join(resource_path, 'igorGains.xml')
     self.__default_gains_no_cam = os.path.join(resource_path, 'igorGains_noCamera.xml')
-    self.__imitation = imitation
     self.__find_joystick_strategy = None
     self.__controller_mapping = None
 
@@ -187,10 +178,6 @@ class Igor2Config(object):
   @property
   def gains_no_camera_xml(self):
     return self.__default_gains_no_cam
-
-  @property
-  def is_imitation(self):
-    return self.__imitation
 
   @property
   def setup_controller(self):

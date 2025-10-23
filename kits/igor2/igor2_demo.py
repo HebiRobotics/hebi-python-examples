@@ -13,8 +13,6 @@ sys.path = [root_path] + sys.path
 
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('--imitation', action='store_true', default=False, dest='imitation',
-                    help='Use the imitation group API to not connect to physical modules on the network.')
 parser.add_argument('--mobile-io', action='store_true', default=True, dest='mobile_io', help='(ignored)')
 parser.add_argument('--mobile-io-frequency', default=200.0, dest='mobile_io_freq',
                     help='Feedback frequency of Mobile IO group. Ignored if not controlling Igor using a Mobile IO device.')
@@ -39,7 +37,7 @@ if not has_io_name:
   io_name = 'mobileIO'
 
 from components.configuration import Igor2Config
-igor_config = Igor2Config(args.imitation)
+igor_config = Igor2Config()
 
 from math import isfinite
 if args.mobile_io_freq < 1.0 or not isfinite(args.mobile_io_freq):
