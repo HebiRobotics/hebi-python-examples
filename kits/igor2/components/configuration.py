@@ -128,6 +128,9 @@ class Igor2Config(object):
             self.__mobile_io_name = config['mobile_io_name']
             self.__mobile_io_family = config['mobile_io_family']
             self.__mobile_io_frequency = config['mobile_io_frequency']
+            self.__command_lifetime = config['command_lifetime']
+            self.__feedback_frequency = config['feedback_frequency']
+
         self.__controller_mapping = _default_mobile_io_mapping
 
     def get_mobile_io(self):
@@ -162,3 +165,10 @@ class Igor2Config(object):
     def controller_mapping(self):
         return self.__controller_mapping
   
+    @property
+    def command_lifetime(self):
+        return self.__command_lifetime
+
+    @property
+    def feedback_frequency(self):
+        return self.__feedback_frequency

@@ -82,6 +82,9 @@ def create_group(config):
             raise RuntimeError()
         elif group.size != len(names):
             raise RuntimeError()
+
+        group.command_lifetime = config.command_lifetime
+        group.feedback_frequency = config.feedback_frequency
         return group
 
     return retry_on_error(connect)
@@ -738,8 +741,6 @@ class Igor(object):
                 return
 
             group = create_group(self._config)
-            group.command_lifetime = 500
-            group.feedback_frequency = 200.0
 
             self._group = group
             self._group_command = hebi.GroupCommand(group.size)
