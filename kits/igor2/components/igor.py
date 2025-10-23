@@ -315,7 +315,7 @@ class Igor(object):
         mio = self._mobile_io
 
         layout_dir = os.path.join(os.path.dirname(__file__), '..', 'layout')
-        success = not mio.send_layout(layout_file=os.path.join(layout_dir, 'idle.json'))
+        success = mio.send_layout(layout_file=os.path.join(layout_dir, 'idle.json'))
         if not success:
             print("Error sending layout to Mobile IO!")
 
@@ -352,7 +352,7 @@ class Igor(object):
         group.send_command(group_command)
 
         mio = self._mobile_io
-        success = not mio.send_layout(layout_file=os.path.join(layout_dir, 'run.json'))
+        success = mio.send_layout(layout_file=os.path.join(layout_dir, 'run.json'))
         if not success:
             print("Error sending layout to Mobile IO!")
 
