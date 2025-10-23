@@ -777,7 +777,7 @@ class Igor(object):
 
             group = create_group(self._config, self._has_camera)
             group.command_lifetime = 500
-            group.feedback_frequency = 100.0
+            group.feedback_frequency = 200.0
 
             self._group = group
             self._group_command = hebi.GroupCommand(group.size)
