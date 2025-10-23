@@ -1,6 +1,6 @@
 names: ['L1_J3_wheel', 'L2_J3_wheel', 'L1_J1_hip', 'L1_J2_knee', 'L2_J1_hip', 'L2_J2_knee', 'A1_J1_base', 'A1_J2_shoulder', 'A1_J3_elbow', 'A1_J4_wrist', 'A2_J1_base', 'A2_J2_shoulder', 'A2_J3_elbow', 'A2_J4_wrist', 'camTilt']
 families: 'T-gor'
-gains: 'igorGains.xml'
+gains: 'gains_with_camera.xml'
 command_lifetime: 500
 feedback_frequency: 200
 
@@ -17,3 +17,5 @@ velocity_i: 3.0
 velocity_d: 0.5
 
 max_wheel_velocity: 10.0
+
+do_logging: False
