@@ -1,4 +1,5 @@
 import os, yaml
+import numpy as np
 
 # ------------------------------------------------------------------------------
 # Controller Mappings
@@ -46,7 +47,11 @@ class IgorControllerWrapper(object):
         return fbk[0].io.b.get_int(6)
 
     def i_term_adjust(self, fbk):
-        return fbk[0].io.a.get_float(5)
+        tmp = fbk[0].io.a.get_float(5)
+        # If this is called without the relevant slider on the screen, use the -1 value indicating no I term
+        if np.isnan(tmp):
+            return -1
+        return tmp
 
 # ------------------------------------------------------------------------------
 # Configuration

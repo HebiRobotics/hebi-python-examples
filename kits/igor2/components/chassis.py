@@ -146,8 +146,12 @@ class Chassis(BaseBody):
     fbk_chassis_vel = wheel_radius*(l_wheel_vel-r_wheel_vel)*0.5+(height_com*fbk_lean_angle_vel)
     cmd_chassis_vel = self._velocities[0, 0]
     chassis_vel_error = cmd_chassis_vel-fbk_chassis_vel
-    chassis_vel_error_cumulative = self._velocity_error_cumulative+(chassis_vel_error*dt)
-    chassis_vel_error_cumulative = np.clip(chassis_vel_error_cumulative, -50.0, 50.0)
+    # If I term is turned off, reset error so we don't wind up!
+    if velI < 0.01:
+      chassis_vel_error_cumulative = 0
+    else:
+      chassis_vel_error_cumulative = self._velocity_error_cumulative+(chassis_vel_error*dt)
+      chassis_vel_error_cumulative = np.clip(chassis_vel_error_cumulative, -50.0, 50.0)
 
     cmd_chassis_accel = (cmd_chassis_vel-self._cmd_chassis_vel_last)*inv_dt
     self._cmd_chassis_vel_last = cmd_chassis_vel
