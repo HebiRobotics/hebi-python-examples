@@ -4,7 +4,7 @@ from numpy import matlib
 from .arm import Arm
 from .chassis import Chassis
 from .leg import Leg
-from .joystick_interface import register_igor_event_handlers, label_to_pin_map
+from .joystick_interface import register_igor_event_handlers
 from .configuration import Igor2Config
 
 from math import atan2, degrees, radians
