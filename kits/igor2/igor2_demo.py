@@ -12,7 +12,9 @@ sys.path = [root_path] + sys.path
 # ------------------------------------------------------------------------------
 
 from components.configuration import Igor2Config
-igor_config = Igor2Config('resources/config.yml')
+# Get absolute filename
+config_filename = os.path.join(os.path.dirname(__file__), 'resources/config.yml')
+igor_config = Igor2Config(config_filename)
 
 # ------------------------------------------------------------------------------
 # Running
