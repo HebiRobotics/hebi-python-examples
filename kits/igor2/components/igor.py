@@ -505,6 +505,9 @@ class Igor(object):
         # Value Critical section end
 
         self._group.send_command(self._group_command)
+        # Add debugging for the balance controller
+        if self._config.enable_logging:
+            self._group.log_user_state(self._feedback_lean_angle_velocity, self._feedback_lean_angle, self._chassis.lean_angle_error, self._chassis.lean_angle_error_cumulative, self._feedback_lean_angle_velocity, self._chassis._cmd_lean_angle, self._chassis._lean_ff)
 
 # ------------------------------------------------
 # Lifecycle functions
@@ -531,6 +534,9 @@ class Igor(object):
         self._group_command.clear()
         self._group_command.led.color = 'transparent'
         self._group.send_command_with_acknowledgement(self._group_command)
+
+        if self._config.enable_logging:
+            self._group.stop_log()
 
         self._on_stop()
 
@@ -737,6 +743,8 @@ class Igor(object):
                 return
 
             group = create_group(self._config)
+            if self._config.enable_logging:
+                group.start_log("logs")
 
             self._group = group
             self._group_command = hebi.GroupCommand(group.size)

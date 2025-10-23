@@ -139,6 +139,8 @@ class Igor2Config(object):
             self.velocity_p = config['velocity_p']
             self.velocity_i = config['velocity_i']
             self.velocity_d = config['velocity_d']
+
+            self.enable_logging = config['enable_logging']
     
         self.controller_mapping = _default_mobile_io_mapping
 
