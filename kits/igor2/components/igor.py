@@ -760,9 +760,7 @@ class Igor(object):
             self._mobile_io = self._config.get_controller()
 
             def idle_to_running(fbk: 'GroupFeedback'):
-                data_getter = label_to_pin_map[self._config.controller_mapping.exit_idle_mode]
- 
-                if data_getter(fbk) == 1:
+                if self._config.controller_mapping.exit_idle_mode(fbk) == 1:
                     self._leave_idle_flag = True
 
             self._mobile_io._group.add_feedback_handler(idle_to_running)
