@@ -1,28 +1,8 @@
 import os, yaml
 
 # ------------------------------------------------------------------------------
-# Controller selectors
-# ------------------------------------------------------------------------------
-
-def _controller_by_mobile_io_selector(family, name, feedback_frequency):
-  import hebi
-  from time import sleep
-  lookup = hebi.Lookup()
-  mio = hebi.util.create_mobile_io(lookup, family, name)
-  while mio is None:
-    msg = f'Could not find mobileIO on network with\nfamily: {family}\nname: {name}'
-    print(msg)
-    sleep(1)
-    mio = hebi.util.create_mobile_io(lookup, family, name)
-
-  mio._group.feedback_frequency = feedback_frequency
-  return mio
-
-
-# ------------------------------------------------------------------------------
 # Controller Mappings
 # ------------------------------------------------------------------------------
-
 
 class IgorControllerMapping(object):
   __slots__ = ('_arm_vel_x', '_arm_vel_y', '_stance_height', '_wrist_vel',
@@ -128,62 +108,57 @@ class IgorControllerMapping(object):
   def i_term_adjust(self):
     return self._i_term_adjust
 
-
 _default_mobile_io_mapping = IgorControllerMapping(          'a2',           'a1',         'a3',                     'a6',            'a7',            'a8', 'b3',    'b1',       'b2',      'b4', 'b8', 'b6',   'SLIDER',  'SLIDER', 'a5')
-
 
 # ------------------------------------------------------------------------------
 # Configuration
 # ------------------------------------------------------------------------------
 
-
 class Igor2Config(object):
-  """
-  Used when starting up Igor II.
-  """
-  def __init__(self, filename='resources/config.yml'):
-    with open(filename) as config_file:
-        config = yaml.safe_load(config_file)
-        self.__module_names = config['names']
-    self.__family = 'T-gor'
-    resource_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'resources'))
-    self.__default_gains = os.path.join(resource_path, 'igorGains.xml')
-    self.__default_gains_no_cam = os.path.join(resource_path, 'igorGains_noCamera.xml')
-    self.__find_joystick_strategy = None
-    self.__controller_mapping = None
-
-  def select_controller_by_mobile_io(self, family, name, feedback_frequency=200):
     """
-    Set the joystick selection strategy to select a mobile IO module with the provided family and name
+    Used when starting up Igor II.
     """
-    self.__find_joystick_strategy = lambda: _controller_by_mobile_io_selector(family, name, feedback_frequency)
-    self.__controller_mapping = _default_mobile_io_mapping
+    def __init__(self, filename):
+        resource_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'resources'))
+        with open(filename) as config_file:
+            config = yaml.safe_load(config_file)
+            self.__module_names = config['names']
+            self.__family = config['family']
+            self.__default_gains = os.path.join(resource_path, config['gains'])
+            self.__mobile_io_name = config['mobile_io_name']
+            self.__mobile_io_family = config['mobile_io_family']
+            self.__mobile_io_frequency = config['mobile_io_frequency']
+        self.__controller_mapping = _default_mobile_io_mapping
 
-  @property
-  def module_names(self):
-    return self.__module_names
+    def get_mobile_io(self):
+        import hebi
+        from time import sleep
+        lookup = hebi.Lookup()
+        mio = hebi.util.create_mobile_io(lookup, self.__mobile_io_family, self.__mobile_io_name)
+        while mio is None:
+            print(f'Could not find mobileIO on network with\nfamily: {self.__mobile_io_family}\nname: {self.__mobile_io_name}')
+            sleep(1)
+            mio = hebi.util.create_mobile_io(lookup, self.__mobile_io_family, self.__mobile_io_name)
+        mio._group.feedback_frequency = self.__mobile_io_frequency
+        return mio
 
-  @property
-  def module_names_no_cam(self):
-    return self.__module_names[0:-1]
+    @property
+    def module_names(self):
+        return self.__module_names
 
-  @property
-  def family(self):
-    return self.__family
+    @property
+    def family(self):
+        return self.__family
 
-  @property
-  def gains_xml(self):
-    return self.__default_gains
+    @property
+    def gains_xml(self):
+        return self.__default_gains
 
-  @property
-  def gains_no_camera_xml(self):
-    return self.__default_gains_no_cam
+    @property
+    def setup_controller(self):
+        return lambda: self.get_mobile_io()
 
-  @property
-  def setup_controller(self):
-    return self.__find_joystick_strategy
-
-  @property
-  def controller_mapping(self):
-    return self.__controller_mapping
+    @property
+    def controller_mapping(self):
+        return self.__controller_mapping
   

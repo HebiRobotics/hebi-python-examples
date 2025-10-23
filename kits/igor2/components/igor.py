@@ -54,10 +54,7 @@ def load_gains(igor: 'Igor'):
     sleep(0.1)
 
     try:
-        if igor._has_camera:
-            gains_command.read_gains(igor._config.gains_xml)
-        else:
-            gains_command.read_gains(igor._config.gains_no_camera_xml)
+        gains_command.read_gains(igor._config.gains_xml)
     except Exception as e:
         print(f'Warning - Could not load gains: {e}')
         return
@@ -68,18 +65,13 @@ def load_gains(igor: 'Igor'):
         sleep(0.1)
 
 
-def create_group(config, has_camera):
+def create_group(config):
     """Used by :class:`Igor` to create the group to interface with modules.
 
     :param config:     The runtime configuration
     :type config:      .configuration.Igor2Config
-    :param has_camera:
-    :type has_camera:  bool
     """
-    if has_camera:
-        names = config.module_names
-    else:
-        names = config.module_names_no_cam
+    names = config.module_names
     families = [config.family]
     lookup = hebi.Lookup()
 
@@ -92,8 +84,6 @@ def create_group(config, has_camera):
             raise RuntimeError()
         return group
 
-    # Let the lookup object discover modules, before trying to connect
-    sleep(2.0)
     return retry_on_error(connect)
 
 
@@ -591,7 +581,7 @@ class Igor(object):
 # Initialization functions
 # ------------------------------------------------
 
-    def __init__(self, has_camera=False, config: Igor2Config = None):
+    def __init__(self, config: Igor2Config = None):
         if config is None:
             self._config = Igor2Config()
         elif type(config) is not Igor2Config:
@@ -599,10 +589,7 @@ class Igor(object):
         else:
             self._config = config
 
-        if has_camera:
-            num_dofs = 15
-        else:
-            num_dofs = 14
+        num_dofs = len(config.module_names)
 
         # The joystick interface
         self._mobile_io = None
@@ -622,7 +609,6 @@ class Igor(object):
 
         # ----------------
         # Parameter fields
-        self._has_camera = has_camera
         self._joy_dead_zone = 0.06
         self._wheel_radius = 0.100
         self._wheel_base = 0.43
@@ -751,7 +737,7 @@ class Igor(object):
                 self._state_lock.release()
                 return
 
-            group = create_group(self._config, self._has_camera)
+            group = create_group(self._config)
             group.command_lifetime = 500
             group.feedback_frequency = 200.0
 
@@ -765,11 +751,9 @@ class Igor(object):
             self._left_arm.set_message_views(self._group_command, self._group_feedback)
             self._right_arm.set_message_views(self._group_command, self._group_feedback)
 
-            setup_controller = self._config.setup_controller
-
             while True:
                 try:
-                    mio = setup_controller()
+                    mio = self._config.setup_controller()
                     if mio is None:
                         raise RuntimeError
                     self._mobile_io = mio
