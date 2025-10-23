@@ -122,53 +122,35 @@ class Igor2Config(object):
         resource_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'resources'))
         with open(filename) as config_file:
             config = yaml.safe_load(config_file)
-            self.__module_names = config['names']
-            self.__family = config['family']
-            self.__default_gains = os.path.join(resource_path, config['gains'])
-            self.__mobile_io_name = config['mobile_io_name']
-            self.__mobile_io_family = config['mobile_io_family']
-            self.__mobile_io_frequency = config['mobile_io_frequency']
-            self.__command_lifetime = config['command_lifetime']
-            self.__feedback_frequency = config['feedback_frequency']
+            self.module_names = config['names']
+            self.family = config['families']
+            self.gains_xml = os.path.join(resource_path, config['gains'])
+            self.command_lifetime = config['command_lifetime']
+            self.feedback_frequency = config['feedback_frequency']
+            
+            self._mobile_io_name = config['mobile_io_name']
+            self._mobile_io_family = config['mobile_io_family']
+            self._mobile_io_frequency = config['mobile_io_frequency']
 
-        self.__controller_mapping = _default_mobile_io_mapping
+            self.lean_p = config['lean_p']
+            self.lean_i = config['lean_i']
+            self.lean_d = config['lean_d']
+            self.max_wheel_velocity = config['max_wheel_velocity']
+            self.velocity_p = config['velocity_p']
+            self.velocity_i = config['velocity_i']
+            self.velocity_d = config['velocity_d']
+    
+        self.controller_mapping = _default_mobile_io_mapping
 
-    def get_mobile_io(self):
+    # Return a mobile IO object (blocking until it is found)
+    def get_controller(self):
         import hebi
         from time import sleep
         lookup = hebi.Lookup()
-        mio = hebi.util.create_mobile_io(lookup, self.__mobile_io_family, self.__mobile_io_name)
+        mio = hebi.util.create_mobile_io(lookup, self._mobile_io_family, self._mobile_io_name)
         while mio is None:
-            print(f'Could not find mobileIO on network with\nfamily: {self.__mobile_io_family}\nname: {self.__mobile_io_name}')
+            print(f'Could not find mobileIO on network with\nfamily: {self._mobile_io_family}\nname: {self._mobile_io_name}')
             sleep(1)
-            mio = hebi.util.create_mobile_io(lookup, self.__mobile_io_family, self.__mobile_io_name)
-        mio._group.feedback_frequency = self.__mobile_io_frequency
+            mio = hebi.util.create_mobile_io(lookup, self._mobile_io_family, self._mobile_io_name)
+        mio._group.feedback_frequency = self._mobile_io_frequency
         return mio
-
-    @property
-    def module_names(self):
-        return self.__module_names
-
-    @property
-    def family(self):
-        return self.__family
-
-    @property
-    def gains_xml(self):
-        return self.__default_gains
-
-    @property
-    def setup_controller(self):
-        return lambda: self.get_mobile_io()
-
-    @property
-    def controller_mapping(self):
-        return self.__controller_mapping
-  
-    @property
-    def command_lifetime(self):
-        return self.__command_lifetime
-
-    @property
-    def feedback_frequency(self):
-        return self.__feedback_frequency

@@ -27,15 +27,8 @@ def stop_running_callback(*args):
   global keep_running
   keep_running = False
 
-
 igor.add_on_stop_callback(stop_running_callback)
 igor.start()
-
-# Mobile IO has been initialized once `igor.start()` returns
-mio = igor.mobile_io
-if mio is None:
-  igor.request_stop()
-  raise RuntimeError('Could not initialize controller for Igor.')
 
 from time import sleep
 while keep_running:

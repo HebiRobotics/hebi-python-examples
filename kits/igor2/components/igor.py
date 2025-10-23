@@ -97,10 +97,6 @@ def create_group(config):
 
 class Igor(object):
 
-    Lean_P = 1.0
-    Lean_I = 0.0
-    Lean_D = 10.0
-
 # ------------------------------------------------
 # Helper functions
 # ------------------------------------------------
@@ -463,9 +459,9 @@ class Igor(object):
 
             #bc = False
             if bc:  # bc
-                leanP = Igor.Lean_P
-                leanI = Igor.Lean_I
-                leanD = Igor.Lean_D
+                leanP = self._config.lean_p
+                leanI = self._config.lean_i
+                leanD = self._config.lean_d
 
                 l_wheel = self._group_command[0]
                 r_wheel = self._group_command[1]
@@ -484,7 +480,7 @@ class Igor(object):
 
             # --------------------------------
             # Wheel Commands
-            max_velocity = 10.0
+            max_velocity = self._config.max_wheel_velocity
             l_wheel_vel = self._chassis.calculated_yaw_velocity + self._chassis.velocity_feedforward
             r_wheel_vel = self._chassis.calculated_yaw_velocity - self._chassis.velocity_feedforward
             # Limit velocities
@@ -635,7 +631,7 @@ class Igor(object):
 
         # ---------------------
         # Kinematic body fields
-        chassis = Chassis(value_lock)
+        chassis = Chassis(value_lock, self._config)
         # path to 'hrdf' folder
         hrdf_dir = os.path.join(os.path.dirname(__file__), '..', 'hrdf')
 
@@ -752,15 +748,8 @@ class Igor(object):
             self._left_arm.set_message_views(self._group_command, self._group_feedback)
             self._right_arm.set_message_views(self._group_command, self._group_feedback)
 
-            while True:
-                try:
-                    mio = self._config.setup_controller()
-                    if mio is None:
-                        raise RuntimeError
-                    self._mobile_io = mio
-                    break
-                except RuntimeError:
-                    pass
+            # blocks until successful:
+            self._mobile_io = self._config.get_controller()
 
             def idle_to_running(fbk: 'GroupFeedback'):
                 data_getter = label_to_pin_map[self._config.controller_mapping.exit_idle_mode]
