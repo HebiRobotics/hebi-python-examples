@@ -1,0 +1,21 @@
+names: ['L1_J3_wheel', 'L2_J3_wheel', 'L1_J1_hip', 'L1_J2_knee', 'L2_J1_hip', 'L2_J2_knee', 'A1_J1_base', 'A1_J2_shoulder', 'A1_J3_elbow', 'A1_J4_wrist', 'A2_J1_base', 'A2_J2_shoulder', 'A2_J3_elbow', 'A2_J4_wrist']
+families: 'T-gor'
+gains: 'gains.xml'
+command_lifetime: 500
+feedback_frequency: 200
+
+mobile_io_name: 'mobileIO'
+mobile_io_family: 'T-gor'
+mobile_io_frequency: 200
+
+lean_p: 1.0
+lean_i: 0.0
+lean_d: 10.0
+
+velocity_p: 20.0
+velocity_i: 3.0
+velocity_d: 0.5
+
+max_wheel_velocity: 10.0
+
+enable_logging: False

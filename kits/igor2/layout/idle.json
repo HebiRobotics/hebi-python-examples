@@ -1,0 +1,36 @@
+[
+    {
+        "id": "b1",
+        "channels": [
+            "b1"
+        ],
+        "type": "button",
+        "x": 0.4,
+        "y": -0.1,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "❌"
+            ],
+            "mode": "momentary"
+        }
+    },
+    {
+        "id": "b3",
+        "channels": [
+            "b3"
+        ],
+        "type": "button",
+        "x": -0.4,
+        "y": -0.1,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "▶"
+            ],
+            "mode": "momentary"
+        }
+    }
+]

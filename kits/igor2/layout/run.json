@@ -1,0 +1,163 @@
+[
+    {
+        "id": "arms",
+        "channels": [
+          "a1",
+          "a2"
+        ],
+        "type": "joystick",
+        "x": -0.95,
+        "y": 0.85,
+        "width": 0.18,
+        "height": 0.22,
+        "parameters": {
+            "text": [
+              "Arms (y)",
+              "Arms (x)"
+            ]
+        }
+    },
+    {
+        "id": "a3",
+        "channels": [
+            "a3"
+        ],
+        "type": "slider",
+        "x": 0.45,
+        "y": 1.0,
+        "width": 0.075,
+        "height": 0.4,
+        "parameters": {
+            "text": [
+                "Height"
+            ],
+            "steps": 10,
+            "min": -1,
+            "max": 1
+        }
+    },
+    {
+        "id": "a5",
+        "channels": [
+            "a5"
+        ],
+        "type": "slider",
+        "x": -0.25,
+        "y": 1.0,
+        "width": 0.075,
+        "height": 0.4,
+        "parameters": {
+            "text": [
+                "I term adjustment"
+            ],
+            "min": -1,
+            "max": 1,
+            "snap": null
+        }
+    },
+    {
+        "id": "a6",
+        "channels": [
+            "a6"
+        ],
+        "type": "slider",
+        "x": 0.1,
+        "y": 1.0,
+        "width": 0.075,
+        "height": 0.4,
+        "parameters": {
+            "text": [
+                "Wrist"
+            ],
+            "steps": 10,
+            "min": -1,
+            "max": 1
+        }
+    },
+    {
+        "id": "body",
+        "channels": [
+          "a7",
+          "a8"
+        ],
+        "type": "joystick",
+        "x": 0.9,
+        "y": 0.85,
+        "width": 0.18,
+        "height": 0.22,
+        "parameters": {
+            "text": [
+                "Turn",
+                "Fwd/Back"
+            ]
+        }
+    },
+    {
+        "id": "b2",
+        "channels": [
+            "b2"
+        ],
+        "type": "button",
+        "x": -0.9,
+        "y": -0.5,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "balance toggle"
+            ],
+            "mode": "toggle"
+        }
+    },
+    {
+        "id": "b4",
+        "channels": [
+            "b4"
+        ],
+        "type": "button",
+        "x": -0.9,
+        "y": 0,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "soft shutdown!"
+            ],
+            "mode": "momentary"
+        }
+    },
+    {
+        "id": "b8",
+        "channels": [
+            "b8"
+        ],
+        "type": "button",
+        "x": -0.55,
+        "y": 0.95,
+        "width": 0.1,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "Arm down"
+            ],
+            "mode": "momentary"
+        }
+    },
+    {
+        "id": "b6",
+        "channels": [
+            "b6"
+        ],
+        "type": "button",
+        "x": -0.55,
+        "y": 0.55,
+        "width": 0.1,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "Arm up"
+            ],
+            "mode": "momentary"
+        }
+    }
+]

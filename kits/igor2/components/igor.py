@@ -4,7 +4,7 @@ from numpy import matlib
 from .arm import Arm
 from .chassis import Chassis
 from .leg import Leg
-from .joystick_interface import register_igor_event_handlers, label_to_pin_map
+from .joystick_interface import register_igor_event_handlers
 from .configuration import Igor2Config
 
 from math import atan2, degrees, radians
@@ -50,18 +50,11 @@ def retry_on_error(func, on_error_func=None, sleep_time=0.1):
 def load_gains(igor: 'Igor'):
     group = igor._group
 
-    # Bail out if group is imitation
-    if igor._config.is_imitation:
-        return
-
     gains_command = hebi.GroupCommand(group.size)
     sleep(0.1)
 
     try:
-        if igor._has_camera:
-            gains_command.read_gains(igor._config.gains_xml)
-        else:
-            gains_command.read_gains(igor._config.gains_no_camera_xml)
+        gains_command.read_gains(igor._config.gains_xml)
     except Exception as e:
         print(f'Warning - Could not load gains: {e}')
         return
@@ -72,44 +65,29 @@ def load_gains(igor: 'Igor'):
         sleep(0.1)
 
 
-def create_group(config, has_camera):
+def create_group(config):
     """Used by :class:`Igor` to create the group to interface with modules.
 
     :param config:     The runtime configuration
     :type config:      .configuration.Igor2Config
-    :param has_camera:
-    :type has_camera:  bool
     """
-    imitation = config.is_imitation
+    names = config.module_names
+    families = [config.family]
+    lookup = hebi.Lookup()
 
-    if imitation:
-        if has_camera:
-            num_modules = len(config.module_names)
-        else:
-            num_modules = len(config.module_names_no_cam)
+    def connect():
+        group = lookup.get_group_from_names(families, names)
+        if group is None:
+            print('Cannot find igor on network...')
+            raise RuntimeError()
+        elif group.size != len(names):
+            raise RuntimeError()
 
-        from hebi.util import create_imitation_group
-        return create_imitation_group(num_modules)
-    else:
-        if has_camera:
-            names = config.module_names
-        else:
-            names = config.module_names_no_cam
-        families = [config.family]
-        lookup = hebi.Lookup()
+        group.command_lifetime = config.command_lifetime
+        group.feedback_frequency = config.feedback_frequency
+        return group
 
-        def connect():
-            group = lookup.get_group_from_names(families, names)
-            if group is None:
-                print('Cannot find igor on network...')
-                raise RuntimeError()
-            elif group.size != len(names):
-                raise RuntimeError()
-            return group
-
-        # Let the lookup object discover modules, before trying to connect
-        sleep(2.0)
-        return retry_on_error(connect)
+    return retry_on_error(connect)
 
 
 # ------------------------------------------------------------------------------
@@ -118,10 +96,6 @@ def create_group(config, has_camera):
 
 
 class Igor(object):
-
-    Lean_P = 1.0
-    Lean_I = 0.0
-    Lean_D = 10.0
 
 # ------------------------------------------------
 # Helper functions
@@ -313,11 +287,14 @@ class Igor(object):
         from time import sleep
 
         mio = self._mobile_io
-        mio.set_snap(3, 0)
-        mio.set_snap(6, 0)
+
+        layout_dir = os.path.join(os.path.dirname(__file__), '..', 'layout')
+        success = mio.send_layout(layout_file=os.path.join(layout_dir, 'idle.json'))
+        if not success:
+            print("Error sending layout to Mobile IO!")
+
         mio.set_button_output(3, 1)
         mio.set_button_output(4, 0)
-        mio.set_axis_value(5, -1)
         mio.set_led_color('blue')
 
         if self._num_spins > 0:
@@ -349,6 +326,10 @@ class Igor(object):
         group.send_command(group_command)
 
         mio = self._mobile_io
+        success = mio.send_layout(layout_file=os.path.join(layout_dir, 'run.json'))
+        if not success:
+            print("Error sending layout to Mobile IO!")
+
         mio.set_button_output(3, 0)
         mio.set_button_output(4, 1)
         mio.set_axis_value(5, -1)
@@ -435,23 +416,14 @@ class Igor(object):
         soft_start = min(rel_time, 1.0)
         rx_time = self._group_feedback.receive_time
 
-        if self._config.is_imitation:
-            dt = 0.01
-        else:
-            np.subtract(rx_time, self._time_last, out=self._diff_time)
-            dt = np.mean(self._diff_time)
+        np.subtract(rx_time, self._time_last, out=self._diff_time)
+        dt = np.mean(self._diff_time)
 
         np.copyto(self._time_last, rx_time)
 
         # TODO: cache these too
         gyro = self._group_feedback.gyro
         orientation = self._group_feedback.orientation
-
-        if self._config.is_imitation:
-            gyro[:, :] = 0.33
-            orientation[:, 0] = 0.25
-            orientation[:, 1] = 1.0
-            orientation[:, 2:4] = 0.0
 
         self._update_com()
         self._update_pose_estimate(gyro, orientation)
@@ -487,9 +459,9 @@ class Igor(object):
 
             #bc = False
             if bc:  # bc
-                leanP = Igor.Lean_P
-                leanI = Igor.Lean_I
-                leanD = Igor.Lean_D
+                leanP = self._config.lean_p
+                leanI = self._config.lean_i
+                leanD = self._config.lean_d
 
                 l_wheel = self._group_command[0]
                 r_wheel = self._group_command[1]
@@ -508,7 +480,7 @@ class Igor(object):
 
             # --------------------------------
             # Wheel Commands
-            max_velocity = 10.0
+            max_velocity = self._config.max_wheel_velocity
             l_wheel_vel = self._chassis.calculated_yaw_velocity + self._chassis.velocity_feedforward
             r_wheel_vel = self._chassis.calculated_yaw_velocity - self._chassis.velocity_feedforward
             # Limit velocities
@@ -533,6 +505,9 @@ class Igor(object):
         # Value Critical section end
 
         self._group.send_command(self._group_command)
+        # Add debugging for the balance controller
+        if self._config.enable_logging:
+            self._group.log_user_state(self._feedback_lean_angle_velocity, self._feedback_lean_angle, self._chassis.lean_angle_error, self._chassis.lean_angle_error_cumulative, self._feedback_lean_angle_velocity, self._chassis._cmd_lean_angle, self._chassis._lean_ff)
 
 # ------------------------------------------------
 # Lifecycle functions
@@ -560,6 +535,11 @@ class Igor(object):
         self._group_command.led.color = 'transparent'
         self._group.send_command_with_acknowledgement(self._group_command)
 
+        if self._config.enable_logging:
+            self._group.stop_log()
+
+        self._mobile_io.resetUI()
+
         self._on_stop()
 
     def _start(self):
@@ -567,20 +547,13 @@ class Igor(object):
 
         This runs on a background thread.
         """
+        register_igor_event_handlers(self)
         first_run = True
         while True:
             self._enter_idle()
             self._soft_startup()
 
-            # Delay registering event handlers until now, so Igor
-            # can start up without being interrupted by user commands.
-            # View this function in `event_handlers.py` to see
-            # all of the joystick event handlers registered
             if first_run:
-                try:
-                    register_igor_event_handlers(self)
-                except Exception as e:
-                    print('Caught exception while registering event handlers:\n{0}'.format(e))
                 self._start_time = time()
                 first_run = False
 
@@ -608,7 +581,7 @@ class Igor(object):
 # Initialization functions
 # ------------------------------------------------
 
-    def __init__(self, has_camera=False, config: Igor2Config = None):
+    def __init__(self, config: Igor2Config = None):
         if config is None:
             self._config = Igor2Config()
         elif type(config) is not Igor2Config:
@@ -616,10 +589,7 @@ class Igor(object):
         else:
             self._config = config
 
-        if has_camera:
-            num_dofs = 15
-        else:
-            num_dofs = 14
+        num_dofs = len(config.module_names)
 
         # The joystick interface
         self._mobile_io = None
@@ -639,7 +609,6 @@ class Igor(object):
 
         # ----------------
         # Parameter fields
-        self._has_camera = has_camera
         self._joy_dead_zone = 0.06
         self._wheel_radius = 0.100
         self._wheel_base = 0.43
@@ -663,7 +632,7 @@ class Igor(object):
 
         # ---------------------
         # Kinematic body fields
-        chassis = Chassis(value_lock)
+        chassis = Chassis(value_lock, self._config)
         # path to 'hrdf' folder
         hrdf_dir = os.path.join(os.path.dirname(__file__), '..', 'hrdf')
 
@@ -768,9 +737,9 @@ class Igor(object):
                 self._state_lock.release()
                 return
 
-            group = create_group(self._config, self._has_camera)
-            group.command_lifetime = 500
-            group.feedback_frequency = 100.0
+            group = create_group(self._config)
+            if self._config.enable_logging:
+                group.start_log("logs")
 
             self._group = group
             self._group_command = hebi.GroupCommand(group.size)
@@ -782,22 +751,11 @@ class Igor(object):
             self._left_arm.set_message_views(self._group_command, self._group_feedback)
             self._right_arm.set_message_views(self._group_command, self._group_feedback)
 
-            setup_controller = self._config.setup_controller
-
-            while True:
-                try:
-                    mio = setup_controller()
-                    if mio is None:
-                        raise RuntimeError
-                    self._mobile_io = mio
-                    break
-                except:
-                    pass
+            # blocks until successful:
+            self._mobile_io = self._config.get_controller()
 
             def idle_to_running(fbk: 'GroupFeedback'):
-                data_getter = label_to_pin_map[self._config.controller_mapping.exit_idle_mode]
- 
-                if data_getter(fbk) == 1:
+                if self._config.controller_mapping.exit_idle_mode(fbk) == 1:
                     self._leave_idle_flag = True
 
             self._mobile_io._group.add_feedback_handler(idle_to_running)

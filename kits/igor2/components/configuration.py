@@ -1,231 +1,101 @@
-import os
-
-# ------------------------------------------------------------------------------
-# Controller selectors
-# ------------------------------------------------------------------------------
-
-
-def _joystick_first_available_selector():
-  return None
-
-
-def _controller_by_mobile_io_selector(family, name, feedback_frequency):
-  import hebi
-  from time import sleep
-  lookup = hebi.Lookup()
-  sleep(2)
-  mio = hebi.util.create_mobile_io(lookup, family, name)
-  while mio is None:
-    msg = f'Could not find mobileIO on network with\nfamily: {family}\nname: {name}'
-    print(msg)
-    sleep(1)
-    mio = hebi.util.create_mobile_io(lookup, family, name)
-
-  mio._group.feedback_frequency = feedback_frequency
-  return mio
-
+import os, yaml
+import numpy as np
 
 # ------------------------------------------------------------------------------
 # Controller Mappings
 # ------------------------------------------------------------------------------
 
+# Map from mobile IO feedback object to controllable states
+class IgorControllerWrapper(object):
+    def __init__(self):
+        pass
 
-class IgorControllerMapping(object):
-  __slots__ = ('_arm_vel_x', '_arm_vel_y', '_stance_height', '_wrist_vel',
-    '_chassis_yaw', '_chassis_vel', '_exit_idle_mode', '_quit', '_balance_controller_toggle',
-    '_soft_shutdown', '_lower_arm', '_raise_arm', '_stance_height_control_strategy', 
-    '_wrist_velocity_control_strategy', '_i_term_adjust')
+    def arm_vel_x(self, fbk):
+        return fbk[0].io.a.get_float(2)
 
-  def __init__(self, arm_vel_x, arm_vel_y, stance_height, wrist_vel, chassis_yaw,
-    chassis_vel, exit_idle_mode, quit, balance_controller_toggle, soft_shutdown,
-    lower_arm, raise_arm, stance_height_control_strategy, wrist_velocity_control_strategy, i_term_adjust=None):
+    def arm_vel_y(self, fbk):
+        return fbk[0].io.a.get_float(1)
 
-    self._arm_vel_x = arm_vel_x
-    self._arm_vel_y = arm_vel_y
-    self._stance_height = stance_height
-    self._wrist_vel = wrist_vel
-    self._chassis_yaw = chassis_yaw
-    self._chassis_vel = chassis_vel
-    self._exit_idle_mode = exit_idle_mode
-    self._quit = quit
-    self._balance_controller_toggle = balance_controller_toggle
-    self._soft_shutdown = soft_shutdown
-    self._lower_arm = lower_arm
-    self._raise_arm = raise_arm
-    if stance_height_control_strategy == 'SLIDER':
-      if type(stance_height) is not str:
-        raise TypeError('stance_height must be a string for `SLIDER` stance height control strategy')
-    elif stance_height_control_strategy == 'TRIGGERS':
-      if type(stance_height) is not tuple:
-        raise TypeError('stance_height must be a tuple for `TRIGGERS` stance height control strategy')
-    else:
-      raise ValueError('Invalid stance height control strategy {0}'.format(stance_height_control_strategy))
+    def stance_height(self, fbk):
+        return fbk[0].io.a.get_float(3)
 
-    if wrist_velocity_control_strategy == 'SLIDER':
-      if type(wrist_vel) is not str:
-        raise TypeError('wrist_vel must be a string for `SLIDER` wrist velocity control strategy')
-    elif wrist_velocity_control_strategy == 'BUTTONS':
-      if type(wrist_vel) is not tuple:
-        raise TypeError('wrist_vel must be a tuple for `BUTTONS` wrist velocity control strategy')
-    else:
-      raise ValueError('Invalid wrist velocity control strategy {0}'.format(wrist_velocity_control_strategy))
-  
-    self._wrist_velocity_control_strategy = wrist_velocity_control_strategy
-    self._stance_height_control_strategy = stance_height_control_strategy
-    self._i_term_adjust = i_term_adjust
+    def wrist_vel(self, fbk):
+        return fbk[0].io.a.get_float(6)
 
-  @property
-  def arm_vel_x(self):
-    return self._arm_vel_x
+    def chassis_yaw(self, fbk):
+        return fbk[0].io.a.get_float(7)
 
-  @property
-  def arm_vel_y(self):
-    return self._arm_vel_y
+    def chassis_vel(self, fbk):
+        return fbk[0].io.a.get_float(8)
 
-  @property
-  def stance_height(self):
-    return self._stance_height
+    def exit_idle_mode(self, fbk):
+        return fbk[0].io.b.get_int(3)
 
-  @property
-  def wrist_vel(self):
-    return self._wrist_vel
+    def quit(self, fbk):
+        return fbk[0].io.b.get_int(1)
 
-  @property
-  def chassis_yaw(self):
-    return self._chassis_yaw
+    def balance_controller_toggle(self, fbk):
+        return fbk[0].io.b.get_int(2)
 
-  @property
-  def chassis_vel(self):
-    return self._chassis_vel
+    def soft_shutdown(self, fbk):
+        return fbk[0].io.b.get_int(4)
 
-  @property
-  def exit_idle_mode(self):
-    return self._exit_idle_mode
+    def lower_arm(self, fbk):
+        return fbk[0].io.b.get_int(8)
 
-  @property
-  def quit(self):
-    return self._quit
+    def raise_arm(self, fbk):
+        return fbk[0].io.b.get_int(6)
 
-  @property
-  def balance_controller_toggle(self):
-    return self._balance_controller_toggle
-
-  @property
-  def soft_shutdown(self):
-    return self._soft_shutdown
-
-  @property
-  def lower_arm(self):
-    return self._lower_arm
-
-  @property
-  def raise_arm(self):
-    return self._raise_arm
-
-  @property
-  def stance_height_control_strategy(self):
-    return self._stance_height_control_strategy
-
-  @property
-  def wrist_velocity_control_strategy(self):
-    return self._wrist_velocity_control_strategy
-
-  @property
-  def i_term_adjust(self):
-    return self._i_term_adjust
-
-
-_default_joystick_mapping =  IgorControllerMapping('LEFT_STICK_Y', 'LEFT_STICK_X', ('L2', 'R2'), ('DPAD_DOWN', 'DPAD_UP'), 'RIGHT_STICK_X', 'RIGHT_STICK_Y', 'L3', 'SHARE', 'TOUCHPAD', 'OPTIONS', 'L1', 'R1', 'TRIGGERS', 'BUTTONS', None)
-_default_mobile_io_mapping = IgorControllerMapping(          'a2',           'a1',         'a3',                     'a6',            'a7',            'a8', 'b3',    'b1',       'b2',      'b4', 'b8', 'b6',   'SLIDER',  'SLIDER', 'a5')
-
+    def i_term_adjust(self, fbk):
+        tmp = fbk[0].io.a.get_float(5)
+        # If this is called without the relevant slider on the screen, use the -1 value indicating no I term
+        if np.isnan(tmp):
+            return -1
+        return tmp
 
 # ------------------------------------------------------------------------------
 # Configuration
 # ------------------------------------------------------------------------------
 
-
 class Igor2Config(object):
-  """
-  Used when starting up Igor II.
-
-  By default, the configuration selects the first available joystick.
-  To select a different joystick selection strategy, you must call
-  one of the select_joystick_by_* methods.
-  """
-
-  def __init__(self, imitation=False):
-    self.__module_names = ['L1_J3_wheel', 'L2_J3_wheel',
-                           'L1_J1_hip', 'L1_J2_knee',
-                           'L2_J1_hip', 'L2_J2_knee',
-                           'A1_J1_base', 'A1_J2_shoulder', 'A1_J3_elbow', 'A1_J4_wrist',
-                           'A2_J1_base', 'A2_J2_shoulder', 'A2_J3_elbow', 'A2_J4_wrist',
-                           'camTilt']
-    self.__family = 'T-gor'
-    resource_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'resources'))
-    self.__default_gains = os.path.join(resource_path, 'igorGains.xml')
-    self.__default_gains_no_cam = os.path.join(resource_path, 'igorGains_noCamera.xml')
-    self.__imitation = imitation
-    self.__find_joystick_strategy = None
-    self.__controller_mapping = None
-    self.select_first_available_joystick()
-
-  def select_joystick_by_name(self, name):
     """
-    Set the joystick selection strategy to select a joystick by name
+    Used when starting up Igor II.
     """
-    self.__find_joystick_strategy = lambda: _joystick_by_name_selector(name)
-    self.__controller_mapping = _default_joystick_mapping
+    def __init__(self, filename):
+        resource_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'resources'))
+        with open(filename) as config_file:
+            config = yaml.safe_load(config_file)
+            self.module_names = config['names']
+            self.family = config['families']
+            self.gains_xml = os.path.join(resource_path, config['gains'])
+            self.command_lifetime = config['command_lifetime']
+            self.feedback_frequency = config['feedback_frequency']
+            
+            self._mobile_io_name = config['mobile_io_name']
+            self._mobile_io_family = config['mobile_io_family']
+            self._mobile_io_frequency = config['mobile_io_frequency']
 
-  def select_joystick_by_index(self, index):
-    """
-    Set the joystick selection strategy to select a joystick by index
-    """
-    self.__find_joystick_strategy = lambda: _joystick_by_index_selector(arg)
-    self.__controller_mapping = _default_joystick_mapping
+            self.lean_p = config['lean_p']
+            self.lean_i = config['lean_i']
+            self.lean_d = config['lean_d']
+            self.max_wheel_velocity = config['max_wheel_velocity']
+            self.velocity_p = config['velocity_p']
+            self.velocity_i = config['velocity_i']
+            self.velocity_d = config['velocity_d']
 
-  def select_first_available_joystick(self):
-    """
-    Set the joystick selection strategy to select the first available joystick
-    """
-    self.__find_joystick_strategy = _joystick_first_available_selector
-    self.__controller_mapping = _default_joystick_mapping
+            self.enable_logging = config['enable_logging']
+    
+        self.controller_mapping = IgorControllerWrapper()
 
-  def select_controller_by_mobile_io(self, family, name, feedback_frequency=200):
-    """
-    Set the joystick selection strategy to select a mobile IO module with the provided family and name
-    """
-    self.__find_joystick_strategy = lambda: _controller_by_mobile_io_selector(family, name, feedback_frequency)
-    self.__controller_mapping = _default_mobile_io_mapping
-
-  @property
-  def module_names(self):
-    return self.__module_names
-
-  @property
-  def module_names_no_cam(self):
-    return self.__module_names[0:-1]
-
-  @property
-  def family(self):
-    return self.__family
-
-  @property
-  def gains_xml(self):
-    return self.__default_gains
-
-  @property
-  def gains_no_camera_xml(self):
-    return self.__default_gains_no_cam
-
-  @property
-  def is_imitation(self):
-    return self.__imitation
-
-  @property
-  def setup_controller(self):
-    return self.__find_joystick_strategy
-
-  @property
-  def controller_mapping(self):
-    return self.__controller_mapping
-  
+    # Return a mobile IO object (blocking until it is found)
+    def get_controller(self):
+        import hebi
+        from time import sleep
+        lookup = hebi.Lookup()
+        mio = hebi.util.create_mobile_io(lookup, self._mobile_io_family, self._mobile_io_name)
+        while mio is None:
+            print(f'Could not find mobileIO on network with\nfamily: {self._mobile_io_family}\nname: {self._mobile_io_name}')
+            sleep(1)
+            mio = hebi.util.create_mobile_io(lookup, self._mobile_io_family, self._mobile_io_name)
+        mio._group.feedback_frequency = self._mobile_io_frequency
+        return mio

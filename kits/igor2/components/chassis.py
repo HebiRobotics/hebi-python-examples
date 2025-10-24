@@ -12,18 +12,14 @@ class Chassis(BaseBody):
   Class representing the chassis of Igor
   """
 
-  Velocity_P = 20.0
-  Velocity_I = 3.0
-  Velocity_D = 0.5
-
   def _create_trajectory(self):
     return hebi.trajectory.create_trajectory(self._traj_times,
                                              self._velocities,
                                              self._accels,
                                              self._jerks)
 
-  def __init__(self, val_lock):
-    super(Chassis, self).__init__(val_lock, mass=6.0, com=[0.05, 0.0, 0.10+0.3])
+  def __init__(self, val_lock, config):
+    super(Chassis, self).__init__(val_lock, mass=6.0, com=[0.0, 0.0, 0.10+0.3])
     self._user_commanded_directional_velocity = 0.0
     self._user_commanded_yaw_velocity = 0.0
     self._min_ramp_time = 0.5
@@ -62,6 +58,10 @@ class Chassis(BaseBody):
 
     self._trajectory = self._create_trajectory()
     self._time_s = None
+
+    self._velocity_p = config.velocity_p
+    self._velocity_i = config.velocity_i
+    self._velocity_d = config.velocity_d
 
   def update_time(self):
     """
@@ -131,13 +131,13 @@ class Chassis(BaseBody):
     :param robot_mass:
     :param fbk_lean_angle:
     """
-    velP = Chassis.Velocity_P
+    velP = self._velocity_p
     # For calibrating Igor (finding the ideal I term for the individual kit), uncomment this out and find a good value from the `a5` slider (Mobile IO only)
     # BE CAREFUL! adjusting the I term too quickly can cause the balance controller to command a very fast rotation to the wheels,
     # possibly causing Igor to fall forwards/backwards without anybody to support the kit.
-    velI = Chassis.Velocity_I * (self._i_term_adjust + 1.0)
-    #velI = Chassis.Velocity_I
-    velD = Chassis.Velocity_D
+    velI = self._velocity_i * (self._i_term_adjust + 1.0)
+    #velI = self._velocity_i
+    velD = self._velocity_d
 
     inv_dt = 1.0/dt
     l_wheel_vel = math_utils.zero_on_nan(velocities[0])
@@ -146,8 +146,12 @@ class Chassis(BaseBody):
     fbk_chassis_vel = wheel_radius*(l_wheel_vel-r_wheel_vel)*0.5+(height_com*fbk_lean_angle_vel)
     cmd_chassis_vel = self._velocities[0, 0]
     chassis_vel_error = cmd_chassis_vel-fbk_chassis_vel
-    chassis_vel_error_cumulative = self._velocity_error_cumulative+(chassis_vel_error*dt)
-    chassis_vel_error_cumulative = np.clip(chassis_vel_error_cumulative, -50.0, 50.0)
+    # If I term is turned off, reset error so we don't wind up!
+    if velI < 0.01:
+      chassis_vel_error_cumulative = 0
+    else:
+      chassis_vel_error_cumulative = self._velocity_error_cumulative+(chassis_vel_error*dt)
+      chassis_vel_error_cumulative = np.clip(chassis_vel_error_cumulative, -50.0, 50.0)
 
     cmd_chassis_accel = (cmd_chassis_vel-self._cmd_chassis_vel_last)*inv_dt
     self._cmd_chassis_vel_last = cmd_chassis_vel
@@ -158,6 +162,10 @@ class Chassis(BaseBody):
 
     cmd_lean_angle = (velP * chassis_vel_error) + (velI * chassis_vel_error_cumulative) + (
           velD * chassis_accel) + lean_feedforward
+
+    # Store so we can save to logs
+    self._cmd_lean_angle = cmd_lean_angle
+    self._lean_ff = lean_feedforward
 
     lean_angle_error = fbk_lean_angle-cmd_lean_angle
     lean_angle_error_cumulative = self._lean_angle_error_cumulative+(lean_angle_error*dt)
