@@ -6,8 +6,8 @@
           "a2"
         ],
         "type": "joystick",
-        "x": -1,
-        "y": 0.9,
+        "x": -0.95,
+        "y": 0.85,
         "width": 0.18,
         "height": 0.22,
         "parameters": {
@@ -82,7 +82,7 @@
         ],
         "type": "joystick",
         "x": 0.9,
-        "y": 0.9,
+        "y": 0.85,
         "width": 0.18,
         "height": 0.22,
         "parameters": {
@@ -132,8 +132,8 @@
             "b8"
         ],
         "type": "button",
-        "x": -0.6,
-        "y": 1,
+        "x": -0.55,
+        "y": 0.95,
         "width": 0.1,
         "height": 0.15,
         "parameters": {
@@ -149,8 +149,8 @@
             "b6"
         ],
         "type": "button",
-        "x": -0.6,
-        "y": 0.6,
+        "x": -0.55,
+        "y": 0.55,
         "width": 0.1,
         "height": 0.15,
         "parameters": {
