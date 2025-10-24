@@ -538,6 +538,8 @@ class Igor(object):
         if self._config.enable_logging:
             self._group.stop_log()
 
+        self._mobile_io.resetUI()
+
         self._on_stop()
 
     def _start(self):
@@ -545,20 +547,13 @@ class Igor(object):
 
         This runs on a background thread.
         """
+        register_igor_event_handlers(self)
         first_run = True
         while True:
             self._enter_idle()
             self._soft_startup()
 
-            # Delay registering event handlers until now, so Igor
-            # can start up without being interrupted by user commands.
-            # View this function in `event_handlers.py` to see
-            # all of the joystick event handlers registered
             if first_run:
-                try:
-                    register_igor_event_handlers(self)
-                except Exception as e:
-                    print('Caught exception while registering event handlers:\n{0}'.format(e))
                 self._start_time = time()
                 first_run = False
 
