@@ -178,7 +178,7 @@ if __name__ == "__main__":
 
     lookup = hebi.Lookup()
 
-    root_dir = os.path.dirname(__file__)
+    root_dir = os.path.abspath(os.path.dirname(__file__))
     cfg_file = os.path.join(root_dir, 'config', 'rosie-t.cfg.yaml')
     cfg = hebi.config.load_config(cfg_file)
     family = cfg.families[0]
