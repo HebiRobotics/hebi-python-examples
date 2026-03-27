@@ -10,7 +10,7 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Config file
-example_config_file = "config/ex_teach_repeat_w_gripper.cfg.yaml"
+example_config_file = "config/T25-7-dof.cfg.yaml"
 example_config = hebi.config.load_config(example_config_file)
 
 if example_config.user_data is None:

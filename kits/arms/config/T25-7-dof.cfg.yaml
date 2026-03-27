@@ -1,7 +1,7 @@
 # HEBI Robot Config file
 # See https://github.com/HebiRobotics/robot-config/blob/main/README.adoc
 
-# 6-DoF Arm
+# 7-DoF Hybrid T25/T8 Arm
 version: 1.1
 families: ["Arm"]
 names: ["J1_base", "J2_shoulder1", "J3_shoulder2", "J4_elbow", "J5_wrist1", "J6_wrist2", "J7_wrist3"]
@@ -25,20 +25,15 @@ plugins:
     ramp_time: 5
 
 user_data:
-  # Joint angles at home for AR demo: [0, pi/3, pi/2, 2*pi/3, -pi/2, 0]
-  home_position: [0.001, 1.047, 2.0943, 2.618, -1.571, 0.001] # radians
+  # Travel time is calculated using
+  #   base_travel_time + slider * (base_travel_time - min_travel_time)
+  # Since slider goes from -1 to 1, travel time goes from min_travel_time to 2 * base_travel_time - min_travel_time
 
-  # Time taken for a steady motion to the home position
-  homing_duration: 5 # seconds
+  # Minimum travel time value
+  min_travel_time: 0.5
 
-  # Online trajectory delay to smooth out controller motion.  A shorter
-  # delay will make a trajectory more response, and longer delay will make
-  # the trajectory smooother.
-  delay_time: 0.5 # seconds
-
-  # Displacements of the mobile device are scaled by these value to give
-  # displacement of the end-effector
-  xyz_scale: [1.0, 1.0, 2.0] # [ x, y, z ]
+  # The default travel time value
+  base_travel_time: 3 # seconds
 
   gripper_family: "Arm"
   gripper_name: "gripperSpool"
@@ -46,6 +41,9 @@ user_data:
   gripper_close_effort: -5.0 # (Nm) Effort applied to close the gripper. More negative effort will pinch the gripper harder.
   gripper_open_effort: 1.0 # (Nm) Effort applied to open the gripper. More positive effort will NOT make the gripper harder to close.
 
-  mobile_io_family: "Arm"
+  pose_1: [-1.5, 0, 0, -2.1, 0, 0, 0]
+  pose_2: [1.5, 0, 0, -2.1, 0, 0, 0]
+
+  mobile_io_family: "HEBI"
   mobile_io_name: "mobileIO"
-  mobile_io_layout: "layouts/ex_AR_kit_w_gripper.json"
+  mobile_io_layout: "layouts/ex_teach_repeat_w_gripper.json"

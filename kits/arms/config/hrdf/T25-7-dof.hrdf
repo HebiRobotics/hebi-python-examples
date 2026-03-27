@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- For documentation on the HEBI Robot Configuration please visit: -->
+<!-- https://github.com/HebiRobotics/hebi-hrdf/blob/master/FORMAT.md -->
+
+<!-- 7-dof T-Series Arm (with Gripper) -->
+<robot version="1.6.0">
+  <actuator type="T25-20"/>
+  <bracket type="R25HeavyRightInside"/>
+  <actuator type="T25-40"/>
+  <bracket type="R25LightLeft"/>
+  <actuator type="T25-8"/>
+  <link type="R25" extension="0.5" twist="0" input="Inline"/>
+  <actuator type="T25-8"/>
+  <!-- Mass offset to account for mounted gripper actuator --> 
+  <link type="R25-R8" extension="0.5" twist="pi" mass_offset="1.0"/>
+  <actuator type="T5-9"/>
+  <bracket type="R8LightLeft"/>
+  <actuator type="T5-4"/>
+  <bracket type="R8LightRight"/>
+  <actuator type="T5-4"/>
+  <end-effector type="R8Parallel"/>
+</robot>
