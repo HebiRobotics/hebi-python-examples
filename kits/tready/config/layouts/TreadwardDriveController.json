@@ -1,0 +1,223 @@
+[
+    {
+        "id": "b1",
+        "channels": [
+            "b1"
+        ],
+        "type": "button",
+        "x": -0.94,
+        "y": -0.92,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "⟲"
+            ],
+            "mode": "momentary"
+        }
+    },
+    {
+        "id": "b2",
+        "channels": [
+            "b2"
+        ],
+        "type": "button",
+        "x": -0.55,
+        "y": -0.92,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "Torque"
+            ],
+            "mode": "toggle"
+        }
+    },
+    {
+        "id": "b3",
+        "channels": [
+            "b3"
+        ],
+        "type": "button",
+        "x": -0.94,
+        "y": -0.5,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "Deploy"
+            ],
+            "mode": "momentary"
+        }
+    },
+    {
+        "id": "b5",
+        "channels": [
+            "b5"
+        ],
+        "type": "button",
+        "x": 0.55,
+        "y": -0.92,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "⤾◼⤿"
+            ],
+            "mode": "momentary"
+        }
+    },
+    {
+        "id": "b6",
+        "channels": [
+            "b6"
+        ],
+        "type": "button",
+        "x": 0.94,
+        "y": -0.92,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "Center"
+            ],
+            "mode": "momentary"
+        }
+    },
+    {
+        "id": "b7",
+        "channels": [
+            "b7"
+        ],
+        "type": "button",
+        "x": 0.55,
+        "y": -0.5,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "⤿◼⤾"
+            ],
+            "mode": "momentary"
+        }
+    },
+    {
+        "id": "b8",
+        "channels": [
+            "b8"
+        ],
+        "type": "button",
+        "x": 0.94,
+        "y": -0.5,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "❌"
+            ],
+            "mode": "momentary"
+        }
+    },
+    {
+        "id": "left",
+        "channels": [
+            "a1",
+            "a2"
+        ],
+        "type": "joystick",
+        "x": -0.9,
+        "y": 0.72,
+        "width": 0.18,
+        "height": 0.22,
+        "parameters": {
+            "text": [
+                "Turn",
+                "Drive"
+            ]
+        }
+    },
+    {
+        "id": "a3",
+        "channels": [
+            "a3"
+        ],
+        "type": "slider",
+        "x": -0.4,
+        "y": 0.96,
+        "width": 0.05,
+        "height": 0.5,
+        "parameters": {
+            "text": [
+                "FL"
+            ],
+            "snap": 0
+        }
+    },
+    {
+        "id": "a4",
+        "channels": [
+            "a4"
+        ],
+        "type": "slider",
+        "x": -0.2,
+        "y": 0.96,
+        "width": 0.05,
+        "height": 0.5,
+        "parameters": {
+            "text": [
+                "FR"
+            ],
+            "snap": 0
+        }
+    },
+    {
+        "id": "a5",
+        "channels": [
+            "a5"
+        ],
+        "type": "slider",
+        "x": 0.2,
+        "y": 0.96,
+        "width": 0.05,
+        "height": 0.5,
+        "parameters": {
+            "text": [
+                "BL"
+            ],
+            "snap": 0
+        }
+    },
+    {
+        "id": "a6",
+        "channels": [
+            "a6"
+        ],
+        "type": "slider",
+        "x": 0.4,
+        "y": 0.96,
+        "width": 0.05,
+        "height": 0.5,
+        "parameters": {
+            "text": [
+                "BR"
+            ],
+            "snap": 0
+        }
+    },
+    {
+        "id": "textbox",
+        "channels": [
+            "text1"
+        ],
+        "type": "text display",
+        "x": 0.0,
+        "y": -0.9,
+        "width": 0.28,
+        "height": 0.5,
+        "parameters": {
+            "text": [
+                ""
+            ]
+        }
+    }
+]
