@@ -66,20 +66,19 @@ def parse_mobile_io_feedback(m: 'MobileIO', io_mode: 'MobileIOModes'):
             m.set_axis_label(mapping['back_right_slider'], 'BR', blocking=False)
         
         if m.get_button_state(mapping['quit_demo_btn']):
-            print("QUIT PLZZZZ")
-            return True, None, None
+            return True, None, None, True
         if m.get_button_state(mapping['reset_pose_btn']):
-            return False, TreadyInputs(home=True, torque_mode=m.get_button_state(mapping['torque_btn']), torque_toggle=(m.get_button_diff(mapping['torque_btn']) != 0.0)), None
+            return False, TreadyInputs(home=True, torque_mode=m.get_button_state(mapping['torque_btn']), torque_toggle=(m.get_button_diff(mapping['torque_btn']) != 0.0)), None, True
         if m.get_button_diff(mapping['torque_btn']) == 1:
             change_to_torque_mode(m)
         elif m.get_button_diff(mapping['torque_btn']) == -1:
             change_to_velocity_mode(m)
         if m.get_button_state(mapping['recenter_btn']):
-            return False, TreadyInputs(align_flippers=True, torque_mode=m.get_button_state(mapping['torque_btn']), torque_toggle=(m.get_button_diff(mapping['torque_btn']) != 0.0)), None
+            return False, TreadyInputs(align_flippers=True, torque_mode=m.get_button_state(mapping['torque_btn']), torque_toggle=(m.get_button_diff(mapping['torque_btn']) != 0.0)), None, True
         if m.get_button_state(mapping['deploy_btn']):
             b_inputs = TreadyInputs(deploy=True, torque_mode=m.get_button_state(mapping['torque_btn']), torque_toggle=(m.get_button_diff(mapping['torque_btn']) != 0.0))
             p_inputs = CoreSamplerInputs(deploy=True)
-            return False, b_inputs, p_inputs
+            return False, b_inputs, p_inputs, True
 
         chassis_velocity = ChassisVelocity(
             m.get_axis_state(mapping['forward_joy']),
@@ -97,13 +96,13 @@ def parse_mobile_io_feedback(m: 'MobileIO', io_mode: 'MobileIOModes'):
                 m.get_axis_state(mapping['back_left_slider']),
                 m.get_axis_state(mapping['back_right_slider'])
             ]
-
+        
         return False, TreadyInputs(
             base_motion=chassis_velocity,
             flippers=flippers,
             torque_mode=m.get_button_state(mapping['torque_btn']),
             torque_toggle=(m.get_button_diff(mapping['torque_btn']) != 0.0),
-            ), None
+            ), None, True
 
     def update_deployed_mode(m: 'MobileIO'):
         # Deployed buttons and sliders
@@ -115,14 +114,14 @@ def parse_mobile_io_feedback(m: 'MobileIO', io_mode: 'MobileIOModes'):
         }
 
         if m.get_button_state(mapping['quit_demo_btn']):
-            return True, None, None
+            return True, None, None, True
         
         b_inputs = TreadyInputs(stow=m.get_button_state(mapping['stow_btn']))
         p_inputs = CoreSamplerInputs(stow=m.get_button_state(mapping['stow_btn']), 
                                         chain=m.get_axis_state(mapping["chain_slider"]), 
                                         wiggle_mode=m.get_button_state(mapping["wiggle_btn"]),
                                         wiggle_toggle=(m.get_button_diff(mapping["wiggle_btn"]) != 0))
-        return False, b_inputs, p_inputs
+        return False, b_inputs, p_inputs, True
 
     def update_deploying_mode(m: 'MobileIO'): 
         # Deploying buttons and sliders
@@ -131,9 +130,9 @@ def parse_mobile_io_feedback(m: 'MobileIO', io_mode: 'MobileIOModes'):
         }
 
         if m.get_button_state(mapping['quit_demo_btn']):
-            return True, None, None
+            return True, None, None, True
         else:
-            return False, None, None
+            return False, None, None, True
 
     if m.update(0.0):
         # Drive mode
@@ -144,14 +143,14 @@ def parse_mobile_io_feedback(m: 'MobileIO', io_mode: 'MobileIOModes'):
         elif io_mode == MobileIOModes.DEPLOYING:
             return update_deploying_mode(m)
     
-    return False, None, None
+    return False, None, None, False
 
 def update_inputs(base_inputs: 'Optional[TreadyInputs]'=None, payload_inputs: 'Optional[CoreSamplerInputs]'=None):
     if base_inputs is None:
         base_inputs = TreadyInputs()
     if payload_inputs is None:
         payload_inputs = CoreSamplerInputs()
-    
+
     base_inputs.deploy_safe = payload_control.sampler.base_deploy_safe
     base_inputs.stow_safe = payload_control.sampler.base_stow_safe
     base_inputs.payload_deployed = (payload_control.state == CoreSamplerControlState.DEPLOYED)
@@ -159,7 +158,7 @@ def update_inputs(base_inputs: 'Optional[TreadyInputs]'=None, payload_inputs: 'O
     payload_inputs.deploy_safe = base_control.base.payload_deploy_safe
     payload_inputs.stow_safe = base_control.base.payload_stow_safe
     payload_inputs.base_deployed = (base_control.state == TreadyControlState.DEPLOYED)
-
+    
     return base_inputs, payload_inputs
 
 
@@ -196,6 +195,7 @@ if __name__ == "__main__":
     
     root_dir, _ = os.path.split(os.path.abspath(__file__))
     load_gains(base_group, os.path.join(root_dir, 'gains', 'smart-treadward-gains.xml'))
+    #load_gains(base_group, os.path.join(root_dir, 'gains', 'smart-tready-gains.xml'))
 
     base = TreadedBase(base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1)
     base.set_robot_model(os.path.join(root_dir, 'hrdf', 'Treadward.hrdf'))
@@ -271,7 +271,7 @@ if __name__ == "__main__":
             controller.sampler.clear_color()
             mobileIO_mode = MobileIOModes.DEPLOYED
             m.send_layout(layout_file=join(layout_dir, deployed_layout))
-            m.set_axis_label(6, "Chain") # TODO: this should not be needed but send layout has a bug
+            m.set_axis_label(6, "Chain Drive") # TODO: this should not be needed but send layout has a bug
             msg = ('Robot Ready to Control')
             set_mobile_io_instructions(m, msg, color="green")
         
@@ -310,15 +310,19 @@ if __name__ == "__main__":
     while base_control.running and payload_control.running:
         t = time()
         try:
-            quit, base_inputs, payload_inputs = parse_mobile_io_feedback(m, mobileIO_mode)
+            quit, base_inputs, payload_inputs, m_update = parse_mobile_io_feedback(m, mobileIO_mode)
             if quit:
                 break
             base_inputs, payload_inputs = update_inputs(base_inputs, payload_inputs)
 
-            base_control.update(t, base_inputs)
+            base_control.update(t, m_update, base_inputs)
             base_control.send()
-            payload_control.update(t, payload_inputs)
+            payload_control.update(t, m_update, payload_inputs)
             payload_control.send()
+
+            #print("base state: " + str(base_control.state))
+            #print("payload state: " + str(payload_control.state))
+  
         except KeyboardInterrupt:
             break
     

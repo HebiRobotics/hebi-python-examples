@@ -75,7 +75,7 @@ class TreadedBase:
         self.stow_safe = True
         self.deploy_safe = True
         self.payload_deploy_safe = False
-        self.payload_stow_safe = False
+        self.payload_stow_safe = True
     
     @property
     def mstop_pressed(self):
@@ -181,10 +181,10 @@ class TreadedBase:
             if self.flipper_traj is not None:
                 # flipper update
                 t = min(t_now, self.flipper_traj.end_time)
-                [_, vel, _] = self.flipper_traj.get_state(t)
+                [pos, vel, _] = self.flipper_traj.get_state(t)
 
                 self.flipper_cmd.velocity = vel
-                self.flipper_cmd.position += vel * (t_now - self.t_prev)
+                self.flipper_cmd.position = pos
 
         self.t_prev = t_now
 
@@ -344,6 +344,7 @@ class TreadyControl:
 
         # Variable for torque mode update handler
         self.torque_labels = None
+        self.last_cmd_t = time()
 
 
 
@@ -361,29 +362,29 @@ class TreadyControl:
     def send(self):
         self.base.send()
 
-    def update(self, t_now: float, tready_input: 'Optional[TreadyInputs]'=None):
+    def update(self, t_now: float, m_update: bool, tready_input: 'Optional[TreadyInputs]'=None):
         self.base.update_feedback()
 
         if self.state is self.state.EXIT:
             return
-        """
+        
         if self.base.mstop_pressed and self.state is not self.state.EMERGENCY_STOP:
-            self.prev_state = self.state
             self.transition_to(t_now, self.state.EMERGENCY_STOP)
             return
-        """
-        if tready_input is None:
+        
+        if not m_update:
             if not self.state.is_error_state and (t_now - self.last_cmd_t) > 1.0:
-                print(self.namespace + "mobileIO timeout, disabling motion")
-                self.prev_state = self.state
+                print(self.namespace + "mobileIO timeout, base disabling motion")
                 self.transition_to(t_now, self.state.DISCONNECTED)
             return
-        else:
-            self.base.stow_safe = tready_input.stow_safe
-            self.base.deploy_safe = tready_input.deploy_safe
         
         # Reset the timeout
         self.last_cmd_t = t_now
+
+        if tready_input is not None:
+            # Update deploy/stow safety
+            self.base.deploy_safe = tready_input.deploy_safe
+            self.base.stow_safe = tready_input.stow_safe
 
         if self.state is self.state.EMERGENCY_STOP:
             if not self.base.mstop_pressed:
@@ -398,7 +399,7 @@ class TreadyControl:
         
         # After startup, transition to homing
         elif self.state is self.state.STARTUP:
-            self.transition_to(t_now, self.state.HOMING)
+            self.transition_to(t_now, self.state.STOWING)
 
         # If homing/aligning is complete, transition to teleop
         elif self.state is self.state.HOMING or self.state is self.state.ALIGNING:
@@ -414,6 +415,10 @@ class TreadyControl:
         elif self.state is self.state.STOWING:
             if self.base.stow_safe:
                 self.transition_to(t_now, self.state.TELEOP)
+
+        # Catch empty inputs
+        elif tready_input is None:
+            return
 
         # Deployed mode
         elif self.state is self.state.DEPLOYED:
@@ -465,7 +470,7 @@ class TreadyControl:
 
                     self.base.flipper_traj = None
                     self.base.set_flipper_cmd(p=np.ones(4) * np.nan, v = np.ones(4) * np.nan, e=flipper_efforts)
-
+                    
                     self.torque_labels = [
                         f"Max\nEff:\n{np.round(torque_max, 2)}",
                         f"Torque\nAngle:\n{np.round(torque_angle, 2)}",
@@ -479,7 +484,7 @@ class TreadyControl:
                     if tready_input.torque_toggle:
                         self.base.set_flipper_cmd(p=self.base.flipper_fbk.position, e=np.ones(4) * np.nan)
                     self.base.set_flipper_trajectory(t_now, self.base.flipper_ramp_time, v=flipper_vels)
-
+                    
                     self.torque_labels = None
                 
                 # Mobile Base Control
@@ -500,6 +505,7 @@ class TreadyControl:
         # self transitions are noop
         if state == self.state:
             return
+        self.prev_state = self.state
 
         if state is self.state.HOMING:
             print(self.namespace + "BASE TRANSITIONING TO HOMING")
@@ -527,17 +533,17 @@ class TreadyControl:
             self.base.payload_stow_safe = True # false prevents initial stow on launch
 
         elif state is self.state.DISCONNECTED:
-            print(self.namespace + "mobileIO timeout, disabling motion")
+            print(self.namespace + "BASE DISCONNECTED")
             self.base.chassis_traj = None
             self.base.flipper_traj = None
         
         elif state is self.state.EMERGENCY_STOP:
-            print(self.namespace + "Emergency Stop Pressed, disabling motion")
+            print(self.namespace + "BASE EMERGENCY_STOP")
             self.base.chassis_traj = None
             self.base.flipper_traj = None
 
         elif state is self.state.EXIT:
-            print(self.namespace + "TRANSITIONING TO EXIT")
+            print(self.namespace + "BASE EXIT")
 
         for handler in self._transition_handlers:
             handler(self, state)
