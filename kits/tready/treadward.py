@@ -38,7 +38,7 @@ class TreadedBase:
     TORSO_TORQUE_SCALE = 1 # Nm
     TORQUE_MODE_MAX = 200 # Nm
     TORQUE_ANGLE_OFFSET = np.pi/4
-    FLIPPER_HOME_POS = np.pi/3
+    FLIPPER_HOME_POS = np.pi/2
 
     FLIPPER_FLAT_POS = np.pi/4
 
@@ -76,6 +76,8 @@ class TreadedBase:
         self.deploy_safe = True
         self.payload_deploy_safe = False
         self.payload_stow_safe = True
+
+        self.ignore_estop = False # ALWAYS SET FALSE BEFORE RUNNING ON REAL HARDWARE (True for imitation group testing only)
     
     @property
     def mstop_pressed(self):
@@ -145,7 +147,18 @@ class TreadedBase:
         # convert to euler
         rpy = R.from_matrix(rot_mat_tready).as_euler('xyz', degrees=True)
         return rpy
-    
+
+    @property
+    def flipper_wound(self):
+        flipper_pos = self.flipper_fbk.position
+        flipper_distance = np.abs(flipper_pos - self.flipper_sign*self.FLIPPER_FLAT_POS)
+        flipper_wound = []
+
+        for dist in flipper_distance:
+            flipper_wound.append(dist > np.pi/2)
+
+        return flipper_wound
+
     def update_feedback(self):
         self.group.get_next_feedback(reuse_fbk=self.fbk)
 
@@ -253,17 +266,53 @@ class TreadedBase:
         self.set_flipper_trajectory(t_now, 3.0, p=flipper_home)
 
     def deploy(self, t_now: float):
-        flipper_flat = self.flipper_sign * self.FLIPPER_FLAT_POS
         self.set_chassis_vel_trajectory(t_now, 0.25, [0, 0, 0])
+
+    def flatten_flippers(self, t_now: float):
+        flipper_flat = self.flipper_sign * self.FLIPPER_FLAT_POS
         self.set_flipper_trajectory(t_now, 3.0, p=flipper_flat)
-    
-    def stow(self, t_now: float):
-        # add stuff here as needed
-        print("stow placeholder")
 
     def align_flippers(self, t_now: float):
         self.set_flipper_trajectory(t_now, 3.0, p=self.aligned_flipper_position)
-    
+
+    def unlock_flippers(self, flippers: list):
+        f_positions = []
+        f_velocities = []
+        f_efforts = []
+
+        t_positions = []
+        t_velocities = []
+        t_efforts = []
+
+        for flipper in range(4):
+            if flipper in flippers:
+                f_positions.append(np.nan)
+                f_velocities.append(np.nan)
+                f_efforts.append(0.0)
+
+                t_positions.append(np.nan)
+                t_velocities.append(np.nan)
+                t_efforts.append(0.0)
+            else:
+                if self.flipper_cmd is not None:
+                    f_positions.append(self.flipper_cmd.position[flipper])
+                    f_velocities.append(self.flipper_cmd.velocity[flipper])
+                else:
+                    f_positions.append(np.nan)
+                    f_velocities.append(np.nan)
+                if self.wheel_cmd is not None:
+                    t_positions.append(self.wheel_cmd.position[flipper])
+                    t_velocities.append(self.wheel_cmd.velocity[flipper])
+                else:
+                    t_positions.append(np.nan)
+                    t_velocities.append(np.nan)
+
+                f_efforts.append(np.nan)
+                t_efforts.append(np.nan)
+        
+        self.set_flipper_cmd(p=f_positions, v=f_velocities, e=f_efforts)
+        self.set_chassis_cmd(p=t_positions, v=t_velocities, e=t_efforts)
+
     def set_robot_model(self, hrdf_file: str):
         self.robot_model = hebi.robot_model.import_from_hrdf(hrdf_file)
 
@@ -279,8 +328,10 @@ class TreadedBase:
 
 
 class TreadyControlState(Enum):
+    INITIAL = auto()
     STARTUP = auto()
     HOMING = auto()
+    FLATTENING = auto()
     DEPLOYING = auto()
     DEPLOYED = auto()
     STOWING = auto()
@@ -309,7 +360,7 @@ class ChassisVelocity:
 class TreadyInputs:
     def __init__(self, home: bool = False, base_motion: 'ChassisVelocity' = ChassisVelocity(), flippers: 'list[float]' = [0, 0, 0, 0], align_flippers: bool = False, 
                  torque_mode: bool = False, torque_toggle: bool = False, deploy: bool = False, deploy_safe: bool = False, stow: bool = False, stow_safe: bool = False,
-                 payload_deployed: bool = False):
+                 payload_deployed: bool = False, override_startup: bool = False, allow_startup: bool = False, flatten_flippers: bool = False):
         self.home = home
         self.base_motion = base_motion
         self.flippers = flippers
@@ -321,9 +372,15 @@ class TreadyInputs:
         self.stow = stow
         self.stow_safe = stow_safe
         self.payload_deployed = payload_deployed
+        self.override_startup = override_startup
+        self.allow_startup = allow_startup
+        self.flatten_flippers = flatten_flippers
 
     def __repr__(self) -> str:
-        return f'TreadyInputs(home={self.home}, base_motion={self.base_motion}, flippers={self.flippers}, align_flippers={self.align_flippers}, torque_mode={self.torque_mode}, torque_toggle={self.torque_toggle}, deploy={self.deploy}, deploy_safe={self.deploy_safe}, stow={self.stow} stow_safe={self.stow_safe}, payload_deployed={self.payload_deployed})'
+        return (f'TreadyInputs(home={self.home}, base_motion={self.base_motion}, flippers={self.flippers}, align_flippers={self.align_flippers}, '
+                f'torque_mode={self.torque_mode}, torque_toggle={self.torque_toggle}, deploy={self.deploy}, deploy_safe={self.deploy_safe}, '
+                f'stow={self.stow} stow_safe={self.stow_safe}, payload_deployed={self.payload_deployed}, override_startup={self.override_startup}, '
+                f'allow_startup={self.allow_startup}, flatten_flippers={self.flatten_flippers})')
 
 
 class TreadyControl:
@@ -333,20 +390,24 @@ class TreadyControl:
     def __init__(self, base: TreadedBase):
         self.namespace = ''
         
-        self.state = TreadyControlState.STARTUP
+        self.state = TreadyControlState.INITIAL
         self.prev_state = self.state
         self.base = base
 
         self.SPEED_MAX_LIN = 0.60  # m/s, for treadward
         self.SPEED_MAX_ROT = self.SPEED_MAX_LIN / (base.WHEEL_BASE / 2) # rad/s
         self._transition_handlers: 'list[Callable[[TreadyControl, TreadyControlState], None]]' = []
-        self._update_handlers: 'list[Callable[[TreadyControl], None]]' = []
+        self._update_handlers: 'list[Callable[[TreadyControl, TreadyControlState], None]]' = []
 
         # Variable for torque mode update handler
         self.torque_labels = None
         self.last_cmd_t = time()
 
+        self.allow_payload_startup = False
 
+        self.unlocked_flippers = []
+        self.have_wound_flippers = False
+        
 
     @property
     def running(self):
@@ -368,23 +429,27 @@ class TreadyControl:
         if self.state is self.state.EXIT:
             return
         
-        if self.base.mstop_pressed and self.state is not self.state.EMERGENCY_STOP:
+        if self.base.mstop_pressed and self.state is not self.state.EMERGENCY_STOP and not self.base.ignore_estop:
             self.transition_to(t_now, self.state.EMERGENCY_STOP)
             return
         
+        # Should never run. Just here to make the type checker happy.
+        if tready_input is None:
+            print(self.namespace + "tready input is None")
+            return
+
+        # Transition to disconnected if no mobile update recieved
         if not m_update:
             if not self.state.is_error_state and (t_now - self.last_cmd_t) > 1.0:
                 print(self.namespace + "mobileIO timeout, base disabling motion")
-                self.transition_to(t_now, self.state.DISCONNECTED)
-            return
-        
-        # Reset the timeout
-        self.last_cmd_t = t_now
+                self.transition_to(t_now, self.state.DISCONNECTED)   
+        else:
+            # Reset the timeout
+            self.last_cmd_t = t_now
 
-        if tready_input is not None:
-            # Update deploy/stow safety
-            self.base.deploy_safe = tready_input.deploy_safe
-            self.base.stow_safe = tready_input.stow_safe
+        # Update deploy/stow safety
+        self.base.deploy_safe = tready_input.deploy_safe
+        self.base.stow_safe = tready_input.stow_safe
 
         if self.state is self.state.EMERGENCY_STOP:
             if not self.base.mstop_pressed:
@@ -392,23 +457,23 @@ class TreadyControl:
                 self.transition_to(t_now, self.prev_state)
         
         # Transition to previous state if mobileIO is reconnected
-        elif self.state is self.state.DISCONNECTED:
+        elif self.state is self.state.DISCONNECTED and m_update:
             self.last_cmd_t = t_now
             print(self.namespace + 'Controller reconnected, demo continued.')
             self.transition_to(t_now, self.prev_state)
         
-        # After startup, transition to homing
-        elif self.state is self.state.STARTUP:
-            self.transition_to(t_now, self.state.STOWING)
+        # On first loop move to startup
+        elif self.state is self.state.INITIAL:
+            self.transition_to(t_now, self.state.STARTUP)
 
-        # If homing/aligning is complete, transition to teleop
-        elif self.state is self.state.HOMING or self.state is self.state.ALIGNING:
+        # If homing/aligning/flattening is complete, transition to teleop
+        elif self.state is self.state.HOMING or self.state is self.state.ALIGNING or self.state is self.state.FLATTENING:
             if not self.base.has_active_flipper_trajectory:
                 self.transition_to(t_now, self.state.TELEOP)
 
         # If deploying is complete, transition to deployed
         elif self.state is self.state.DEPLOYING:
-            if not self.base.has_active_flipper_trajectory:
+            if not self.base.has_active_trajectory:
                 self.transition_to(t_now, self.state.DEPLOYED)
         
         # Transition to teleop if safe
@@ -416,9 +481,22 @@ class TreadyControl:
             if self.base.stow_safe:
                 self.transition_to(t_now, self.state.TELEOP)
 
-        # Catch empty inputs
-        elif tready_input is None:
-            return
+        # Transition to teleop when startup complete 
+        elif self.state is self.state.STARTUP:
+            if True in self.base.flipper_wound and not self.have_wound_flippers:
+                self.have_wound_flippers = True
+                self.unlocked_flippers = []
+                for i in range(4):
+                    if self.base.flipper_wound[i]:
+                        self.unlocked_flippers.append(i)
+
+            if  not self.have_wound_flippers or tready_input.override_startup or self.allow_payload_startup:
+                self.allow_payload_startup = True
+                if tready_input.allow_startup:
+                    self.transition_to(t_now, self.state.TELEOP)
+            
+            else:                
+                self.base.unlock_flippers(self.unlocked_flippers)
 
         # Deployed mode
         elif self.state is self.state.DEPLOYED:
@@ -428,6 +506,10 @@ class TreadyControl:
                 
         # Teleop mode
         elif self.state is self.state.TELEOP:
+            # IDK why but sometimes this happens
+            if not tready_input.allow_startup:
+                print("How did this happen")
+                self.transition_to(t_now, self.state.STARTUP)
             # Check for home button
             if tready_input.home:
                 if tready_input.torque_mode:
@@ -440,6 +522,12 @@ class TreadyControl:
                     print(self.namespace + "Cannot align flippers in torque mode")
                     return
                 self.transition_to(t_now, self.state.ALIGNING)
+            # Check for flipper flatten
+            elif tready_input.flatten_flippers:
+                if tready_input.torque_mode:
+                    print(self.namespace + "Cannot flatten flippers in torque mode")
+                    return
+                self.transition_to(t_now, self.state.FLATTENING)
             # Check for deployment
             elif tready_input.deploy:
                 if tready_input.torque_mode:
@@ -499,7 +587,7 @@ class TreadyControl:
         self.base.update(t_now, get_feedback=False)
 
         for handler in self._update_handlers:
-            handler(self)
+            handler(self, self.state)
 
     def transition_to(self, t_now: float, state: TreadyControlState):
         # self transitions are noop
@@ -511,6 +599,13 @@ class TreadyControl:
             print(self.namespace + "BASE TRANSITIONING TO HOMING")
             self.base.home(t_now)
         
+        elif state is self.state.FLATTENING:
+            print(self.namespace + "BASE TRANSITIONING TO FLATTENING")
+            self.base.flatten_flippers(t_now)
+
+        elif state is self.state.STARTUP:
+            print(self.namespace + "BASE TRANSITIONING TO STARTUP")
+
         elif state is self.state.ALIGNING:
             print(self.namespace + "BASE TRANSITIONING TO ALIGNING")
             self.base.align_flippers(t_now)
@@ -530,7 +625,7 @@ class TreadyControl:
         elif state is self.state.TELEOP:
             print(self.namespace + "BASE TRANSITIONING TO TELEOP")
             self.base.payload_deploy_safe = False
-            self.base.payload_stow_safe = True # false prevents initial stow on launch
+            self.base.payload_stow_safe = False
 
         elif state is self.state.DISCONNECTED:
             print(self.namespace + "BASE DISCONNECTED")

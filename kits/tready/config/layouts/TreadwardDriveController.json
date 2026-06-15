@@ -51,6 +51,23 @@
         }
     },
     {
+        "id": "b4",
+        "channels": [
+            "b4"
+        ],
+        "type": "button",
+        "x": -0.55,
+        "y": -0.5,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "Flatten"
+            ],
+            "mode": "momentary"
+        }
+    },
+    {
         "id": "b5",
         "channels": [
             "b5"

@@ -22,8 +22,8 @@ if typing.TYPE_CHECKING:
 
 class CoreSampler:
     MAST_DEPLOY_POS = [np.pi/2] # rad
-    MAST_STOW_POS = [0.08] # rad
-    MAX_MAST_ROT = (np.pi/2)/16 # rad/s
+    MAST_STOW_POS = [0.09] # rad
+    MAX_MAST_ROT = (np.pi/2)/22 # rad/s
     MAST_TOLERANCE = .02 # The distance (in rad) we may be away from deployed/stowed target while still considering ourselves deployed/stowed
 
     CHAIN_MAX_POS = [31.05, 31.04]
@@ -34,14 +34,14 @@ class CoreSampler:
 
     CHAIN_VEL_SCALE = 1
     MAX_CHAIN_SPEED = 1/60 # m/s
-    #MAX_CHAIN_SPEED = 30/60 # m/s
+    #MAX_CHAIN_SPEED = 30/60 # m/s FOR IMITATION TESTING ONLY
     CHAIN_SPROCKET_RADIUS = .044 # m
-    MAX_CHAIN_ROT = (MAX_CHAIN_SPEED / CHAIN_SPROCKET_RADIUS)
+    MAX_CHAIN_ROT = (MAX_CHAIN_SPEED / CHAIN_SPROCKET_RADIUS) # rad/s
 
     CHAIN_VEL_SCALE_MARGIN = .3 # The distance (in rad) away from the edges before reducing max speed
 
-    MAX_STOW_WAIT_TIME = 5 # How long will we wait before giving up on stowing
-    MAX_DEPLOY_WAIT_TIME = 5 # How long will we wait before giving up on deploying
+    MAX_STOW_WAIT_TIME = 2 # How long will we wait before giving up on stowing
+    MAX_DEPLOY_WAIT_TIME = 2 # How long will we wait before giving up on deploying
 
     WIGGLER_IO_BANK = CommandIoBankField.E
     WIGGLER_IO_PIN = 8
@@ -81,7 +81,7 @@ class CoreSampler:
         self.base_deploy_safe = True
         self.base_stow_safe = False
 
-        self.ignore_estop = True
+        self.ignore_estop = False # ALWAYS SET FALSE BEFORE RUNNING ON REAL HARDWARE (True for imitation group testing only)
 
     @property
     def mstop_pressed(self):
@@ -332,8 +332,12 @@ class CoreSampler:
         color_cmd.led.color = hebi.Color(0, 0, 0, 0)
         self.group.send_command(color_cmd)
 
+    def stop_wiggler(self):
+        self.tool_cmd.io.set_int(self.WIGGLER_IO_BANK, self.WIGGLER_IO_PIN, 0)
+        self.send()
 
 class CoreSamplerControlState(Enum):
+    INITIAL = auto()
     STARTUP = auto()
     DEPLOYING = auto()
     STOWING = auto()
@@ -351,7 +355,7 @@ class CoreSamplerControlState(Enum):
 class CoreSamplerInputs:
     def __init__(self, deploy: bool = False, deploy_safe: bool = False, stow: bool = False, stow_safe: bool = False, 
                  pivot_adjust: float = 0.0, chain: float = 0.0, wiggle_mode: bool = False, wiggle_toggle: bool = False,
-                 base_deployed: bool = False):
+                 base_deployed: bool = False, override_startup: bool = False, allow_startup: bool = False):
         self.deploy = deploy
         self.deploy_safe = deploy_safe
         self.stow = stow
@@ -361,16 +365,20 @@ class CoreSamplerInputs:
         self.wiggle_mode = wiggle_mode
         self.wiggle_toggle = wiggle_toggle
         self.base_deployed = base_deployed
+        self.override_startup = override_startup
+        self.allow_startup = allow_startup
 
     def __repr__(self) -> str:
-        return (f'CoreSamplerInputs(deploy={self.deploy}, deploy_safe={self.deploy_safe}, stow={self.stow}, stow_safe={self.stow_safe}, 'f'pivot_adjust={self.pivot_adjust}, chain={self.chain}, 'f'wiggle_mode={self.wiggle_mode}, wiggle_toggle={self.wiggle_toggle}, base_deployed={self.base_deployed})')
+        return (f'CoreSamplerInputs(deploy={self.deploy}, deploy_safe={self.deploy_safe}, stow={self.stow}, stow_safe={self.stow_safe}, '
+                f'pivot_adjust={self.pivot_adjust}, chain={self.chain}, 'f'wiggle_mode={self.wiggle_mode}, wiggle_toggle={self.wiggle_toggle}, base_deployed={self.base_deployed})'
+                f'override_startup={self.override_startup}, allow_startup={self.allow_startup}')
 
 
 class CoreSamplerControl:
     def __init__(self, sampler: CoreSampler):
         self.namespace = ''
         
-        self.state = CoreSamplerControlState.STARTUP
+        self.state = CoreSamplerControlState.INITIAL
         self.prev_state = self.state
         self.sampler = sampler
         
@@ -378,9 +386,11 @@ class CoreSamplerControl:
         self.deploy_timeout_time = 0.0
 
         self._transition_handlers: 'list[Callable[[CoreSamplerControl, CoreSamplerControlState], None]]' = []
-        self._update_handlers: 'list[Callable[[CoreSamplerControl], None]]' = []
+        self._update_handlers: 'list[Callable[[CoreSamplerControl, CoreSamplerControlState], None]]' = []
 
         self.last_cmd_t = time()
+
+        self.allow_base_startup = False
 
     @property
     def running(self):
@@ -404,22 +414,24 @@ class CoreSamplerControl:
         
         if self.sampler.mstop_pressed and self.state is not self.state.EMERGENCY_STOP and not self.sampler.ignore_estop:
             self.transition_to(t_now, self.state.EMERGENCY_STOP)
+        
+        # This should never run. Just here to make the type checker happy.
+        if sampler_input is None:
+            print(self.namespace + "sampler input is None")
             return
-        
-        
+
+        # Transition to disconnected if no mobile update recieved
         if not m_update:
             if not self.state.is_error_state and (t_now - self.last_cmd_t) > 1.0:
                 print(self.namespace + "mobileIO timeout, payload disabling motion")
                 self.transition_to(t_now, self.state.DISCONNECTED)
-            return
-            
-        # Reset the timeout
-        self.last_cmd_t = t_now
+        else:   
+            # Reset the timeout
+            self.last_cmd_t = t_now
 
-        if sampler_input is not None:
-            # Update deploy/stow safety
-            self.sampler.deploy_safe = sampler_input.deploy_safe
-            self.sampler.stow_safe = sampler_input.stow_safe
+        # Update deploy/stow safety
+        self.sampler.deploy_safe = sampler_input.deploy_safe
+        self.sampler.stow_safe = sampler_input.stow_safe
         
         if self.state is self.state.EMERGENCY_STOP:
             if not self.sampler.mstop_pressed:
@@ -427,14 +439,14 @@ class CoreSamplerControl:
                 self.transition_to(t_now, self.prev_state)
         
         # Transition to previous state if mobileIO is reconnected
-        elif self.state is self.state.DISCONNECTED:
+        elif self.state is self.state.DISCONNECTED and m_update:
             self.last_cmd_t = t_now
             print(self.namespace + 'Controller reconnected, demo continued.')
             self.transition_to(t_now, self.prev_state)
         
-        # After startup, transition to stowing
-        elif self.state is self.state.STARTUP:
-            self.transition_to(t_now, self.state.STOWING)
+        # On first loop move to startup
+        elif self.state is self.state.INITIAL:
+            self.transition_to(t_now, self.state.STARTUP)
 
         # While stowing
         elif self.state is self.state.STOWING:
@@ -450,7 +462,7 @@ class CoreSamplerControl:
                         self.sampler.stow_mast(t_now)
                     else:
                         self.transition_to(t_now, self.state.STOWED)
-            # If it has been unsafe to stow for to long, return to deployed mode
+            # If it has been unsafe to stow for too long, return to deployed mode
             elif t_now > self.stow_timeout_time:
                 self.transition_to(t_now, self.state.DEPLOYED)
                 print(self.namespace + "Abandoning stow, unsafe")
@@ -467,14 +479,17 @@ class CoreSamplerControl:
                         self.sampler.deploy_mast(t_now)
                     else:
                         self.transition_to(t_now, self.state.DEPLOYED)
-            # If it has been unsafe to deploy for to long, return to stowed mode
+            # If it has been unsafe to deploy for too long, return to stowed mode
             elif t_now > self.deploy_timeout_time:
                 self.transition_to(t_now, self.state.STOWED)
                 print(self.namespace + "Abandoning deploy, unsafe")
         
-        # Catch empty inputs
-        if sampler_input is None:
-            return
+        # Transition to stowed when startup complete
+        elif self.state is self.state.STARTUP:
+            if ((self.sampler.chain_stowed and self.sampler.mast_stowed) or sampler_input.override_startup or self.allow_base_startup):
+                self.allow_base_startup = True
+                if sampler_input.allow_startup:
+                    self.transition_to(t_now, self.state.STOWED)
 
         # Stowed mode
         elif self.state is self.state.STOWED:
@@ -498,17 +513,18 @@ class CoreSamplerControl:
                 target_chain_vel = sampler_input.chain * self.sampler.MAX_CHAIN_ROT
                 self.sampler.set_chain_vel_trajectory(t_now, self.sampler.CHAIN_RAMP_TIME, [target_chain_vel]*2)
 
-
-
         self.sampler.update(t_now, get_feedback=False)
         
         for handler in self._update_handlers:
-            handler(self)
+            handler(self, self.state)
         
     def transition_to(self, t_now: float, state: CoreSamplerControlState):
         if state == self.state:
             return
         self.prev_state= self.state
+
+        if state is self.state.STARTUP:
+            print(self.namespace + "PAYLOAD TRANSITIONING TO STARTUP")
 
         if state is self.state.DEPLOYING:
             print(self.namespace + "PAYLOAD TRANSITIONING TO DEPLOYING")
@@ -541,6 +557,7 @@ class CoreSamplerControl:
         
         if state is self.state.EXIT:
             print(self.namespace + "PAYLOAD EXIT")
+            self.sampler.stop_wiggler()
         
         for handler in self._transition_handlers:
             handler(self, state)

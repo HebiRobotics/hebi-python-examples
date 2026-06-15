@@ -19,8 +19,10 @@ layout_dir = join(os.path.dirname(__file__), 'config', 'layouts')
 drive_layout = 'TreadwardDriveController.json'
 deployed_layout = 'TreadwardDeployedController.json'
 deploying_layout = "TreadwardDeployingController.json"
+startup_layout = "TreadwardStartupController.json"
 
 class MobileIOModes(Enum):
+    STARTUP = auto()
     DRIVE = auto()
     DEPLOYING = auto()
     DEPLOYED = auto()
@@ -29,6 +31,19 @@ mobileIO_mode = MobileIOModes.DRIVE
 
 
 def parse_mobile_io_feedback(m: 'MobileIO', io_mode: 'MobileIOModes'):
+    def update_startup_mode(m: 'MobileIO'):
+        # Startup buttons, joysticks, and sliders
+        mapping = {
+            'override_base_btn': 1,
+            'override_payload_btn': 2,
+            'unlock_flippers_btn': 3,
+            'quit_demo_btn': 8,
+        }   
+
+        if m.get_button_state(mapping['quit_demo_btn']):
+            return True, None, None, True
+        
+        return False, TreadyInputs(override_startup=m.get_button_state(mapping['override_base_btn'])), CoreSamplerInputs(override_startup=m.get_button_state(mapping['override_payload_btn'])), True
 
     def update_drive_mode(m: 'MobileIO'):
         # Drive buttons, joysticks, and sliders
@@ -36,6 +51,7 @@ def parse_mobile_io_feedback(m: 'MobileIO', io_mode: 'MobileIOModes'):
             'reset_pose_btn': 1,
             'torque_btn': 2,
             'deploy_btn': 3,
+            'flatten_btn': 4,
             'height_up_btn': 5,
             'recenter_btn': 6,
             'height_down_btn': 7,
@@ -79,6 +95,8 @@ def parse_mobile_io_feedback(m: 'MobileIO', io_mode: 'MobileIOModes'):
             b_inputs = TreadyInputs(deploy=True, torque_mode=m.get_button_state(mapping['torque_btn']), torque_toggle=(m.get_button_diff(mapping['torque_btn']) != 0.0))
             p_inputs = CoreSamplerInputs(deploy=True)
             return False, b_inputs, p_inputs, True
+        if m.get_button_state(mapping['flatten_btn']):
+            return False, TreadyInputs(flatten_flippers=True, torque_mode=m.get_button_state(mapping['torque_btn']), torque_toggle=(m.get_button_diff(mapping['torque_btn']) != 0.0)), None, True
 
         chassis_velocity = ChassisVelocity(
             m.get_axis_state(mapping['forward_joy']),
@@ -135,13 +153,14 @@ def parse_mobile_io_feedback(m: 'MobileIO', io_mode: 'MobileIOModes'):
             return False, None, None, True
 
     if m.update(0.0):
-        # Drive mode
         if io_mode == MobileIOModes.DRIVE:
             return update_drive_mode(m)
         elif io_mode == MobileIOModes.DEPLOYED:
             return update_deployed_mode(m)
         elif io_mode == MobileIOModes.DEPLOYING:
             return update_deploying_mode(m)
+        elif io_mode == MobileIOModes.STARTUP:
+            return update_startup_mode(m)
     
     return False, None, None, False
 
@@ -154,10 +173,12 @@ def update_inputs(base_inputs: 'Optional[TreadyInputs]'=None, payload_inputs: 'O
     base_inputs.deploy_safe = payload_control.sampler.base_deploy_safe
     base_inputs.stow_safe = payload_control.sampler.base_stow_safe
     base_inputs.payload_deployed = (payload_control.state == CoreSamplerControlState.DEPLOYED)
+    base_inputs.allow_startup = payload_control.allow_base_startup
 
     payload_inputs.deploy_safe = base_control.base.payload_deploy_safe
     payload_inputs.stow_safe = base_control.base.payload_stow_safe
     payload_inputs.base_deployed = (base_control.state == TreadyControlState.DEPLOYED)
+    payload_inputs.allow_startup = base_control.allow_payload_startup
     
     return base_inputs, payload_inputs
 
@@ -167,12 +188,12 @@ if __name__ == "__main__":
     sleep(2)
 
     # Treaded base family & names
-    family = "Tready"
+    family = "Treadward"
     flipper_names = [f'T{n+1}_J1_flipper' for n in range(4)]
     wheel_names = [f'T{n+1}_J2_track' for n in range(4)]
 
     # Payload family & names (fill family and names once known)
-    payload_family = "Tready"
+    payload_family = "Treadward"
     payload_names = ["Mast_Pivot", "Chain_Upper", "Chain_Lower", "Wiggly-IO"]
 
     # mobileIO setup
@@ -214,93 +235,198 @@ if __name__ == "__main__":
     payload = CoreSampler(payload_group)
     #payload.set_robot_model(os.path.join(root_dir, 'hrdf', '')) # add payload hrdf once it exists
     payload_control = CoreSamplerControl(payload)
+       
+   # Update mobile io interface 
+    class MobileIOUpdater:
+        def __init__(self, mobile_io: 'MobileIO'):
 
-    # Update mobile io interface
-    def update_mobile_io_base(controller: TreadyControl, new_state: TreadyControlState):
-        global mobileIO_mode
-        # Runs when base changes state
-        if controller.state == new_state:
-            return
+            self.m = mobile_io
+            self.base_msg = ''
+            self.payload_msg = ''
+            self.color = ''
+            self.last_msg = ''
 
-        if new_state is TreadyControlState.HOMING:
-            controller.base.set_color('magenta')
-            msg = ('Robot Homing Sequence\n'
-                'Please wait...')
-            set_mobile_io_instructions(m, msg, color="blue")
-
-        elif new_state is TreadyControlState.ALIGNING:
-            controller.base.set_color('magenta')
-            msg = ('Robot Flippers Centering\n'
-                'Please wait...')
-            set_mobile_io_instructions(m, msg, color="blue")
-
-        elif new_state is TreadyControlState.DEPLOYING:
-            controller.base.set_color('magenta')
-            mobileIO_mode = MobileIOModes.DEPLOYING
-            m.send_layout(layout_file=join(layout_dir, deploying_layout))
-            msg = ('Robot Deploying\n'
-                'Please wait...\n')
-            set_mobile_io_instructions(m, msg, color="blue")
-
-        elif new_state is TreadyControlState.TELEOP:
-            controller.base.clear_color()
-            mobileIO_mode = MobileIOModes.DRIVE
-            m.send_layout(layout_file=join(layout_dir, drive_layout))
-            m.set_axis_label(6, "BR") # TODO: this should not be needed but send layout has a bug
-            msg = ('Robot Ready to Control')
-            set_mobile_io_instructions(m, msg, color="green")
-
-        elif new_state is TreadyControlState.DISCONNECTED:
-            print('Lost connection to Controller. Please reconnect.')
-            controller.base.set_color('blue')
-        
-        elif new_state is TreadyControlState.EMERGENCY_STOP:
-            controller.base.set_color('yellow')
-            set_mobile_io_instructions(m, 'Emergency Stop Activated', color="red")
-
-        elif new_state is TreadyControlState.EXIT:
-            controller.base.set_color("red")
-            set_mobile_io_instructions(m, 'Demo Stopped', color="red")
-    
-    def update_mobile_io_payload(controller: CoreSamplerControl, new_state: CoreSamplerControlState):
-        global mobileIO_mode
-        if controller.state == new_state:
+        def base_transition_handler(self, controller: TreadyControl, new_state: TreadyControlState): 
+            global mobileIO_mode
+            # Runs when base changes state
+            if controller.state == new_state:
                 return
-        
-        elif new_state is CoreSamplerControlState.DEPLOYED:
-            controller.sampler.clear_color()
-            mobileIO_mode = MobileIOModes.DEPLOYED
-            m.send_layout(layout_file=join(layout_dir, deployed_layout))
-            m.set_axis_label(6, "Chain Drive") # TODO: this should not be needed but send layout has a bug
-            msg = ('Robot Ready to Control')
-            set_mobile_io_instructions(m, msg, color="green")
-        
-        elif new_state is CoreSamplerControlState.STOWING:
-            controller.sampler.set_color('magenta')
-            mobileIO_mode = MobileIOModes.DEPLOYING
-            m.send_layout(layout_file=join(layout_dir, deploying_layout))
-            msg = ('Robot Stowing\n'
-                'Please wait...')
-            set_mobile_io_instructions(m, msg, color="blue")
 
-    def update_torque_mode(controller: TreadyControl):
-        if controller.state is TreadyControlState.TELEOP:
-            if controller.torque_labels is not None:
-                for i, label in enumerate(controller.torque_labels):
-                    m.set_axis_label(i+3, label, blocking=False)
+            if new_state is TreadyControlState.HOMING:
+                controller.base.set_color('magenta')
+                self.base_msg = ('Robot Homing Sequence\n'
+                    'Please wait...')
+                self.color = 'blue'
+
+            elif new_state is TreadyControlState.ALIGNING:
+                controller.base.set_color('magenta')
+                self.base_msg = ('Robot Flippers Centering\n'
+                    'Please wait...')
+                self.color = 'blue'
+
+            elif new_state is TreadyControlState.FLATTENING:
+                controller.base.set_color('magenta')
+                self.base_msg = ('Robot Flippers Flattening\n'
+                    'Please wait...')
+                self.color = 'blue'
+
+            elif new_state is TreadyControlState.STARTUP:
+                controller.base.set_color('magenta')
+                mobileIO_mode = MobileIOModes.STARTUP
+                self.m.send_layout(layout_file=join(layout_dir, startup_layout))
+                self.base_msg = ''
+                for i in range(4):
+                    if controller.base.flipper_wound[i]:
+                        if self.base_msg == '':
+                            self.base_msg += "- Flipper " + str(i+1) + " is wound \n"
+                        else:
+                            self.base_msg += "      - Flipper " + str(i+1) + " is wound \n"
+
+                self.color = 'yellow'
+
+            elif new_state is TreadyControlState.DEPLOYING:
+                controller.base.set_color('magenta')
+                mobileIO_mode = MobileIOModes.DEPLOYING
+                self.m.send_layout(layout_file=join(layout_dir, deploying_layout))
+                self.base_msg = ('Robot Deploying\n'
+                    'Please wait...\n')
+                self.color = 'blue'
+
+            elif new_state is TreadyControlState.TELEOP:
+                controller.base.clear_color()
+                mobileIO_mode = MobileIOModes.DRIVE
+                self.m.send_layout(layout_file=join(layout_dir, drive_layout))
+                self.m.set_axis_label(6, "BR") # TODO: this should not be needed but send layout has a bug
+                self.base_msg = ('Robot Ready to Control')
+                self.color = 'green'
+
+            elif new_state is TreadyControlState.DISCONNECTED:
+                print('Lost connection to Controller. Please reconnect.')
+                controller.base.set_color('blue')
+            
+            elif new_state is TreadyControlState.EMERGENCY_STOP:
+                controller.base.set_color('yellow')
+                self.base_msg = ('Emergency Stop Activated')
+                self.color = 'red'
+
+            elif new_state is TreadyControlState.EXIT:
+                controller.base.set_color("red")
+                self.base_msg = ('Demo Stopped')
+                self.payload_msg = ('')
+                self.color = 'red'
+            
+            elif new_state is TreadyControlState.DEPLOYED:
+                controller.base.clear_color()
+                self.base_msg = ''
+
             else:
-                m.set_axis_label(3, 'FL', blocking=False)
-                m.set_axis_label(4, 'FR', blocking=False)
-                m.set_axis_label(5, 'BL', blocking=False)
-                m.set_axis_label(6, 'BR', blocking=False)
-    
-    base_control._transition_handlers.append(update_mobile_io_base)
-    base_control._update_handlers.append(update_torque_mode)
+                self.base_msg = ''
 
-    payload_control._transition_handlers.append(update_mobile_io_payload)
+            self.needs_update()
+
+        def payload_transition_handler(self, controller: CoreSamplerControl, new_state: CoreSamplerControlState):
+            global mobileIO_mode
+            if controller.state == new_state:
+                    return
+            
+            elif new_state is CoreSamplerControlState.DEPLOYING:
+                controller.sampler.set_color('magenta')
+                self.payload_msg = ("Payload Deploying\n" "Please wait...")
+
+            elif new_state is CoreSamplerControlState.DEPLOYED:
+                controller.sampler.clear_color()
+                mobileIO_mode = MobileIOModes.DEPLOYED
+                self.m.send_layout(layout_file=join(layout_dir, deployed_layout))
+                self.m.set_axis_label(6, "Chain Drive") # TODO: this should not be needed but send layout has a bug
+                self.payload_msg = ('Robot Ready to Control')
+                self.color = 'green'
+            
+            elif new_state is CoreSamplerControlState.STOWING:
+                controller.sampler.set_color('magenta')
+                mobileIO_mode = MobileIOModes.DEPLOYING
+                self.m.send_layout(layout_file=join(layout_dir, deploying_layout))
+                self.payload_msg = ('Payload Stowing\n'
+                    'Please wait...')
+                self.color = 'blue'
+            
+            elif new_state is CoreSamplerControlState.STOWED:
+                controller.sampler.clear_color()
+                self.payload_msg = ''
+
+            elif new_state is CoreSamplerControlState.STARTUP:
+                self.payload_msg = ""
+                if not controller.sampler.mast_stowed:
+                    self.payload_msg += "- Mast not stowed \n"
+                if not controller.sampler.chain_stowed:
+                    if self.payload_msg == '':
+                        self.payload_msg += "- Chain not stowed "
+                    else:
+                        self.payload_msg += "               - Chain not stowed "
+            
+            else:
+                self.payload_msg = ''
+
+            self.needs_update()
+
+        def needs_update(self):
+            if self.base_msg != '' and self.payload_msg != '':
+                msg = f'Base: {self.base_msg}\nPayload: {self.payload_msg}'
+            elif self.base_msg != '':
+                msg = f'Base: {self.base_msg}'
+            elif self.payload_msg != '':
+                msg = f'Payload: {self.payload_msg}'
+            else:
+                msg = ''
+
+            if msg != self.last_msg:
+                set_mobile_io_instructions(self.m, msg, self.color)
+            
+            self.last_msg = msg
+
+        def update_torque_mode(self, controller: TreadyControl, state: TreadyControlState):
+            if controller.state is TreadyControlState.TELEOP:
+                if controller.torque_labels is not None:
+                    for i, label in enumerate(controller.torque_labels):
+                        m.set_axis_label(i+3, label, blocking=False)
+                else:
+                    m.set_axis_label(3, 'FL', blocking=False)
+                    m.set_axis_label(4, 'FR', blocking=False)
+                    m.set_axis_label(5, 'BL', blocking=False)
+                    m.set_axis_label(6, 'BR', blocking=False)
+
+        def update_startup_msg_base(self, controller: TreadyControl, state: TreadyControlState):
+            if state is TreadyControlState.STARTUP:
+                self.base_msg = ''
+                for i in range(4):
+                    if controller.base.flipper_wound[i]:
+                        if self.base_msg == '':
+                            self.base_msg += "- Flipper " + str(i+1) + " is wound \n"
+                        else:
+                            self.base_msg += "          - Flipper " + str(i+1) + " is wound \n"
+                
+                self.needs_update()
+        
+        def update_startup_msg_payload(self, controller: CoreSamplerControl, state: CoreSamplerControlState):
+            if state is TreadyControlState.STARTUP:
+                self.payload_msg = ""
+                if not controller.sampler.mast_stowed:
+                    self.payload_msg += "- Mast not stowed "
+                if not controller.sampler.chain_stowed:
+                    self.payload_msg += "- Chain not stowed "
+
+                self.needs_update()
+
+
+    updater = MobileIOUpdater(m)
+    base_control._transition_handlers.append(updater.base_transition_handler)
+    payload_control._transition_handlers.append(updater.payload_transition_handler)
+
+    base_control._update_handlers.append(updater.update_torque_mode)
+    base_control._update_handlers.append(updater.update_startup_msg_base)
+    payload_control._update_handlers.append(updater.update_startup_msg_payload)
 
     # can enable start logging here
-    logging = False
+    logging = True
 
     if logging:
         tready_dir = os.path.dirname(__file__)
@@ -319,14 +445,12 @@ if __name__ == "__main__":
             base_control.send()
             payload_control.update(t, m_update, payload_inputs)
             payload_control.send()
-
-            #print("base state: " + str(base_control.state))
-            #print("payload state: " + str(payload_control.state))
   
         except KeyboardInterrupt:
             break
     
     base_control.stop()
+    payload_control.stop()
 
     if logging:
         base.group.stop_log()
