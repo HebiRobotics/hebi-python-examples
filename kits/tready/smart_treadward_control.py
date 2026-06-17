@@ -4,7 +4,7 @@ from time import time, sleep
 import datetime
 import os
 from os.path import join
-from .treadward_utils import load_gains, set_mobile_io_instructions
+from .tready_utils import load_gains, set_mobile_io_instructions
 from .treadward import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
 from .treadward_sampler import CoreSampler, CoreSamplerControl, CoreSamplerControlState, CoreSamplerInputs
 import numpy as np
@@ -203,7 +203,7 @@ if __name__ == "__main__":
         print('Waiting for mobileIO device to come online...')
         sleep(1)
         m = create_mobile_io(lookup, family)
-    
+
     print("mobileIO device found.")
     m.update()
 

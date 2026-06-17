@@ -334,11 +334,11 @@ class TreadyControl:
 
         if self.state is self.state.EXIT:
             return
-        """
+        
         if self.base.mstop_pressed and self.state is not self.state.EMERGENCY_STOP:
             self.transition_to(t_now, self.state.EMERGENCY_STOP)
             return
-        """
+        
         if tready_input is None:
             if not self.state.is_error_state and (t_now - self.last_cmd_t) > 1.0:
                 print(self.namespace + "mobileIO timeout, disabling motion")
