@@ -51,6 +51,24 @@
         }
     },
     {
+        "id": "left",
+        "channels": [
+            "a1",
+            "a2"
+        ],
+        "type": "joystick",
+        "x": -0.9,
+        "y": 0.72,
+        "width": 0.18,
+        "height": 0.22,
+        "parameters": {
+            "text": [
+                "Turn",
+                "Drive"
+            ]
+        }
+    },
+    {
         "id": "a6",
         "channels": [
             "a6"

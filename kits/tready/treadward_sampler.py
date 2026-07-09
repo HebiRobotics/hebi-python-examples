@@ -391,6 +391,7 @@ class CoreSamplerControl:
         self.last_cmd_t = time()
 
         self.allow_base_startup = False
+        self.base_drive_safe = False
 
     @property
     def running(self):
@@ -510,8 +511,10 @@ class CoreSamplerControl:
                     print("End wiggle")
                     self.sampler.wiggle = False
                 
-                target_chain_vel = sampler_input.chain * self.sampler.MAX_CHAIN_ROT
+                target_chain_vel = -sampler_input.chain * self.sampler.MAX_CHAIN_ROT
                 self.sampler.set_chain_vel_trajectory(t_now, self.sampler.CHAIN_RAMP_TIME, [target_chain_vel]*2)
+
+                self.base_drive_safe = self.sampler.chain_stowed
 
         self.sampler.update(t_now, get_feedback=False)
         
@@ -530,30 +533,36 @@ class CoreSamplerControl:
             print(self.namespace + "PAYLOAD TRANSITIONING TO DEPLOYING")
             self.deploy_timeout_time = t_now + self.sampler.MAX_DEPLOY_WAIT_TIME
             self.sampler.base_stow_safe = False
+            self.base_drive_safe = False
         
         if state is self.state.DEPLOYED:
             print(self.namespace + "PAYLOAD TRANSITIONING TO DEPLOYED")
+            self.base_drive_safe = False
 
         if state is self.state.STOWING:
             print(self.namespace + "PAYLOAD TRANSITIONING TO STOWING")
             self.sampler.wiggle = False
             self.stow_timeout_time = t_now + self.sampler.MAX_STOW_WAIT_TIME
+            self.base_drive_safe = False
         
         if state is self.state.STOWED:
             print(self.namespace + "PAYLOAD TRANSITIONING TO STOWED")
             self.sampler.base_stow_safe = True
+            self.base_drive_safe = True
         
         if state is self.state.DISCONNECTED:
             print(self.namespace + "PAYLOAD DISCONNECTED")
             self.sampler.mast_traj = None
             self.sampler.chain_traj = None
             self.sampler.wiggle = False
+            self.base_drive_safe = False
         
         if state is self.state.EMERGENCY_STOP:
             print(self.namespace + "PAYLOAD EMERGENCY_STOP")
             self.sampler.mast_traj = None
             self.sampler.chain_traj = None
             self.sampler.wiggle = False
+            self.base_drive_safe = False
         
         if state is self.state.EXIT:
             print(self.namespace + "PAYLOAD EXIT")

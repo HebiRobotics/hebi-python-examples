@@ -17,6 +17,23 @@
         }
     },
     {
+        "id": "b2",
+        "channels": [
+            "b2"
+        ],
+        "type": "button",
+        "x": -0.55,
+        "y": -0.92,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "Override Payload"
+            ],
+            "mode": "toggle"
+        }
+    },
+    {
         "id": "b8",
         "channels": [
             "b8"
