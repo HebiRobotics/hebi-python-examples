@@ -45,7 +45,7 @@ def parse_mobile_io_feedback(m: 'MobileIO', io_mode: 'MobileIOModes'):
         mapping = {
             'reset_pose_btn': 1,
             'torque_btn': 2,
-            'deploy_btn': 3,
+            'rear_up_btn': 3,
             'flatten_btn': 4,
             'height_up_btn': 5,
             'recenter_btn': 6,
@@ -86,8 +86,8 @@ def parse_mobile_io_feedback(m: 'MobileIO', io_mode: 'MobileIOModes'):
             change_to_velocity_mode(m)
         if m.get_button_state(mapping['recenter_btn']):
             return False, TreadyInputs(align_flippers=True, torque_mode=m.get_button_state(mapping['torque_btn']), torque_toggle=(m.get_button_diff(mapping['torque_btn']) != 0.0)), True
-        if m.get_button_state(mapping['deploy_btn']):
-            b_inputs = TreadyInputs(deploy=True, torque_mode=m.get_button_state(mapping['torque_btn']), torque_toggle=(m.get_button_diff(mapping['torque_btn']) != 0.0))
+        if m.get_button_state(mapping['rear_up_btn']):
+            b_inputs = TreadyInputs(rear_up=True, torque_mode=m.get_button_state(mapping['torque_btn']), torque_toggle=(m.get_button_diff(mapping['torque_btn']) != 0.0))
             return False, b_inputs, True
         if m.get_button_state(mapping['flatten_btn']):
             return False, TreadyInputs(flatten_flippers=True, torque_mode=m.get_button_state(mapping['torque_btn']), torque_toggle=(m.get_button_diff(mapping['torque_btn']) != 0.0)), True
@@ -165,8 +165,7 @@ if __name__ == "__main__":
         base_group = lookup.get_group_from_names(family, wheel_names + flipper_names)
     
     root_dir, _ = os.path.split(os.path.abspath(__file__))
-    load_gains(base_group, os.path.join(root_dir, 'gains', 'smart-treadward-gains.xml'))
-    #load_gains(base_group, os.path.join(root_dir, 'gains', 'smart-tready-gains.xml')) # tready gains for testing with tready
+    load_gains(base_group, os.path.join(root_dir, 'gains', 'smart-tready-gains.xml')) #TODO: put back to treadward
 
     base = TreadedBase(base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1)
     base.set_robot_model(os.path.join(root_dir, 'hrdf', 'Treadward.hrdf'))
@@ -181,9 +180,9 @@ if __name__ == "__main__":
             self.color = ''
             self.last_msg = ''
 
+        # Runs when base changes state
         def base_transition_handler(self, controller: TreadyControl, new_state: TreadyControlState): 
             global mobileIO_mode
-            # Runs when base changes state
             if controller.state == new_state:
                 return
 
@@ -202,6 +201,12 @@ if __name__ == "__main__":
             elif new_state is TreadyControlState.FLATTENING:
                 controller.base.set_color('magenta')
                 self.base_msg = ('Robot Flippers Flattening\n'
+                    'Please wait...')
+                self.color = 'blue'
+
+            elif new_state is TreadyControlState.REARING:
+                controller.base.set_color('magenta')
+                self.base_msg = ('Robot Rearing Up\n'
                     'Please wait...')
                 self.color = 'blue'
 
@@ -247,6 +252,7 @@ if __name__ == "__main__":
 
             self.needs_update()
 
+        # Called to update the message on the mobileIO display
         def needs_update(self):
             if self.base_msg != '':
                 msg = f'Base: {self.base_msg}'
@@ -258,6 +264,7 @@ if __name__ == "__main__":
             
             self.last_msg = msg
 
+        # Updates axis labels for torque mode sliders
         def update_torque_mode(self, controller: TreadyControl, state: TreadyControlState):
             if controller.state is TreadyControlState.TELEOP:
                 if controller.torque_labels is not None:
@@ -269,6 +276,7 @@ if __name__ == "__main__":
                     m.set_axis_label(5, 'BL', blocking=False)
                     m.set_axis_label(6, 'BR', blocking=False)
 
+        # Updates the base startup message
         def update_startup_msg_base(self, controller: TreadyControl, state: TreadyControlState):
             if state is TreadyControlState.STARTUP:
                 self.base_msg = ''

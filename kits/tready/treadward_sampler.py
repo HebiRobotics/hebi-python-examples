@@ -28,13 +28,12 @@ class CoreSampler:
 
     CHAIN_MAX_POS = [31.05, 31.04]
     CHAIN_MIN_POS = [-.05, -.06]
-    CHAIN_STOW_POS = [-.05, -.06] # add stow position for chain once known
+    CHAIN_STOW_POS = [-.05, -.06]
     CHAIN_RAMP_TIME = .1 # s
     CHAIN_TOLERANCE = .05 # The distance (in rad) we may be away from stowed target while still considering ourselves stowed
 
     CHAIN_VEL_SCALE = 1
     MAX_CHAIN_SPEED = 1/60 # m/s
-    #MAX_CHAIN_SPEED = 30/60 # m/s FOR IMITATION TESTING ONLY
     CHAIN_SPROCKET_RADIUS = .044 # m
     MAX_CHAIN_ROT = (MAX_CHAIN_SPEED / CHAIN_SPROCKET_RADIUS) # rad/s
 

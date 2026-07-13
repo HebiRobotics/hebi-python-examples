@@ -1,7 +1,3 @@
-# TODO: 
-#       check through and update comments,
-#       update/prune print statements,
-
 import hebi
 from hebi.util import create_mobile_io
 from time import time, sleep
@@ -229,7 +225,6 @@ if __name__ == "__main__":
     
     root_dir, _ = os.path.split(os.path.abspath(__file__))
     load_gains(base_group, os.path.join(root_dir, 'gains', 'smart-treadward-gains.xml'))
-    #load_gains(base_group, os.path.join(root_dir, 'gains', 'smart-tready-gains.xml')) # tready gains for testing with tready
 
     base = TreadedBase(base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1)
     base.set_robot_model(os.path.join(root_dir, 'hrdf', 'Treadward.hrdf'))
@@ -246,9 +241,9 @@ if __name__ == "__main__":
     load_gains(payload_group, os.path.join(root_dir, 'gains', 'core-sampling-gains.xml'))
     
     payload = CoreSampler(payload_group)
-    #payload.set_robot_model(os.path.join(root_dir, 'hrdf', '')) #TODO: add payload hrdf once it exists
+    #payload.set_robot_model(os.path.join(root_dir, 'hrdf', '')) #TODO: add payload hrdf if/when it exists
     payload_control = CoreSamplerControl(payload)
-       
+    
    # Update mobile io interface 
     class MobileIOUpdater:
         def __init__(self, mobile_io: 'MobileIO'):
@@ -259,9 +254,9 @@ if __name__ == "__main__":
             self.color = ''
             self.last_msg = ''
 
+        # Runs when base changes state
         def base_transition_handler(self, controller: TreadyControl, new_state: TreadyControlState): 
             global mobileIO_mode
-            # Runs when base changes state
             if controller.state == new_state:
                 return
 
@@ -337,6 +332,7 @@ if __name__ == "__main__":
 
             self.needs_update()
 
+        # Runs when payload changes state
         def payload_transition_handler(self, controller: CoreSamplerControl, new_state: CoreSamplerControlState):
             global mobileIO_mode
             if controller.state == new_state:
@@ -381,6 +377,7 @@ if __name__ == "__main__":
 
             self.needs_update()
 
+        # Called to update the message on the mobileIO display
         def needs_update(self):
             if self.base_msg != '' and self.payload_msg != '':
                 msg = f'Base: {self.base_msg}\nPayload: {self.payload_msg}'
@@ -396,6 +393,7 @@ if __name__ == "__main__":
             
             self.last_msg = msg
 
+        # Updates axis labels for torque mode sliders
         def update_torque_mode(self, controller: TreadyControl, state: TreadyControlState):
             if controller.state is TreadyControlState.TELEOP:
                 if controller.torque_labels is not None:
@@ -407,6 +405,7 @@ if __name__ == "__main__":
                     m.set_axis_label(5, 'BL', blocking=False)
                     m.set_axis_label(6, 'BR', blocking=False)
 
+        # Updates the base startup message
         def update_startup_msg_base(self, controller: TreadyControl, state: TreadyControlState):
             if state is TreadyControlState.STARTUP:
                 self.base_msg = ''
@@ -419,6 +418,7 @@ if __name__ == "__main__":
                 
                 self.needs_update()
         
+        # Updates the payload startup message
         def update_startup_msg_payload(self, controller: CoreSamplerControl, state: CoreSamplerControlState):
             if state is TreadyControlState.STARTUP:
                 self.payload_msg = ""
@@ -444,6 +444,7 @@ if __name__ == "__main__":
         tready_dir = os.path.dirname(__file__)
         now = datetime.datetime.now()
         base.group.start_log(os.path.join(tready_dir, 'logs'), f'base_{now:%Y-%m-%d-%H:%M:%S}')
+        payload.group.start_log(os.path.join(tready_dir, 'logs'), f'payload_{now:%Y-%m-%d-%H:%M:%S}')
 
     while base_control.running and payload_control.running:
         t = time()
@@ -466,3 +467,4 @@ if __name__ == "__main__":
 
     if logging:
         base.group.stop_log()
+        payload.group.stop_log()
