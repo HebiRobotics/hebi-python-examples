@@ -165,7 +165,7 @@ if __name__ == "__main__":
         base_group = lookup.get_group_from_names(family, wheel_names + flipper_names)
     
     root_dir, _ = os.path.split(os.path.abspath(__file__))
-    load_gains(base_group, os.path.join(root_dir, 'gains', 'smart-tready-gains.xml')) #TODO: put back to treadward
+    load_gains(base_group, os.path.join(root_dir, 'gains', 'smart-treadward-gains.xml'))
 
     base = TreadedBase(base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1)
     base.set_robot_model(os.path.join(root_dir, 'hrdf', 'Treadward.hrdf'))
@@ -179,6 +179,8 @@ if __name__ == "__main__":
             self.base_msg = ''
             self.color = ''
             self.last_msg = ''
+            self.voltage = 0
+            self.voltage_update_time = 0.0
 
         # Runs when base changes state
         def base_transition_handler(self, controller: TreadyControl, new_state: TreadyControlState): 
@@ -255,9 +257,9 @@ if __name__ == "__main__":
         # Called to update the message on the mobileIO display
         def needs_update(self):
             if self.base_msg != '':
-                msg = f'Base: {self.base_msg}'
+                msg = f'Battery: {self.voltage:.2f}V\nBase: {self.base_msg}'
             else:
-                msg = ''
+                msg = f'Battery: {self.voltage:.2f}V'
 
             if msg != self.last_msg:
                 set_mobile_io_instructions(self.m, msg, self.color)
@@ -266,15 +268,30 @@ if __name__ == "__main__":
 
         # Updates axis labels for torque mode sliders
         def update_torque_mode(self, controller: TreadyControl, state: TreadyControlState):
+            
             if controller.state is TreadyControlState.TELEOP:
+                """
+                if self.m.get_button_diff(2) == 1:
+                    self.m.set_axis_label(3, 'Torque', blocking=False)
+                    self.m.set_axis_label(4, 'Angle', blocking=False)
+                    self.m.set_axis_label(5, 'Pitch', blocking=False)
+                    self.m.set_axis_label(6, 'Roll', blocking=False)
+                elif self.m.get_button_diff(2) == -1:
+                    self.m.set_axis_label(3, 'FL', blocking=False)
+                    self.m.set_axis_label(4, 'FR', blocking=False)
+                    self.m.set_axis_label(5, 'BL', blocking=False)
+                    self.m.set_axis_label(6, 'BR', blocking=False)
+                """
                 if controller.torque_labels is not None:
-                    for i, label in enumerate(controller.torque_labels):
-                        m.set_axis_label(i+3, label, blocking=False)
+                    if controller.torque_labels_changed:
+                        for i, label in enumerate(controller.torque_labels):
+                            self.m.set_axis_label(i+3, label, blocking=False)
                 else:
-                    m.set_axis_label(3, 'FL', blocking=False)
-                    m.set_axis_label(4, 'FR', blocking=False)
-                    m.set_axis_label(5, 'BL', blocking=False)
-                    m.set_axis_label(6, 'BR', blocking=False)
+                    self.m.set_axis_label(3, 'FL', blocking=False)
+                    self.m.set_axis_label(4, 'FR', blocking=False)
+                    self.m.set_axis_label(5, 'BL', blocking=False)
+                    self.m.set_axis_label(6, 'BR', blocking=False)
+                
 
         # Updates the base startup message
         def update_startup_msg_base(self, controller: TreadyControl, state: TreadyControlState):
@@ -289,9 +306,19 @@ if __name__ == "__main__":
                 
                 self.needs_update()
 
+        # Updates the voltage reading
+        def update_voltage_reading(self, controller: TreadyControl, state: TreadyControlState):
+            current_voltage = np.mean(controller.base.fbk.voltage)
+            t_now = time()
+            if t_now > self.voltage_update_time:
+                self.voltage_update_time = t_now + 10.0 # update every 10 seconds
+                self.voltage = current_voltage
+                self.needs_update()
+
     updater = MobileIOUpdater(m)
     base_control._transition_handlers.append(updater.base_transition_handler)
 
+    base_control._update_handlers.append(updater.update_voltage_reading)
     base_control._update_handlers.append(updater.update_torque_mode)
     base_control._update_handlers.append(updater.update_startup_msg_base)
 

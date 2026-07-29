@@ -37,10 +37,18 @@ class TreadedBase:
     TORSO_VEL_SCALE = 1 # rad/s
     TORSO_TORQUE_SCALE = 1 # Nm
     TORQUE_MODE_MAX = 200 # Nm
+    TORQUE_RAMP_TIME = 8.0 # second ramp up time on torque mode efforts
+
+
     TORQUE_ANGLE_OFFSET = np.pi/4
     FLIPPER_HOME_POS = np.pi/2
     FLIPPER_FLAT_POS = np.pi/4
     FLIPPER_REAR_POS = np.array([-np.pi/4, -np.pi/4, 6.5*np.pi/4, 6.5*np.pi/4])
+
+    FLIPPER_MAX_POS = np.array([.5, np.inf, np.inf, .5])
+    FLIPPER_MIN_POS = np.array([-np.inf, -.5, -.5, -np.inf])
+
+    FLIPPER_MAX_VEL = 1.0
 
     def __init__(self, group: 'Group', chassis_ramp_time: float, flipper_ramp_time: float):
         self.group = group
@@ -121,11 +129,6 @@ class TreadedBase:
         ])
 
     @property
-    def aligned_flipper_position(self) -> 'npt.NDArray[np.float64]':
-        mean_pos = np.mean(np.abs(self.flipper_fbk.position))
-        return np.array([-mean_pos, mean_pos, mean_pos, -mean_pos], dtype=np.float64)
-
-    @property
     def flipper_height(self) -> 'npt.NDArray[np.float64]':
         x = np.cos(self.flipper_sign * self.TORQUE_ANGLE_OFFSET + self.flipper_fbk.position)
         return (1 + self.WHEEL_BASE * np.clip(x, 0, 1) / self.WHEEL_RADIUS)
@@ -150,6 +153,26 @@ class TreadedBase:
         # convert to euler
         rpy = R.from_matrix(rot_mat_tready).as_euler('xyz', degrees=True)
         return rpy
+
+    @property
+    def flipper_max_velocities(self) -> 'npt.NDArray[np.float64]':
+        max_vel = np.full((4), self.FLIPPER_MAX_VEL)
+        flipper_pos = self.flipper_fbk.position
+        flipper_max_pos = self.FLIPPER_MAX_POS
+
+        for i in range(4):
+            max_vel[i] = min(max_vel[i], 2*(flipper_max_pos[i] - flipper_pos[i]))
+        return max_vel
+
+    @property
+    def flipper_min_velocities(self) -> 'npt.NDArray[np.float64]':
+        min_vel = np.full((4), -self.FLIPPER_MAX_VEL)
+        flipper_pos = self.flipper_fbk.position
+        flipper_min_pos = self.FLIPPER_MIN_POS
+
+        for i in range(4):
+            min_vel[i] = max(min_vel[i], 2*(flipper_min_pos[i] - flipper_pos[i]))
+        return min_vel
 
     @property
     def flipper_wound(self):
@@ -191,9 +214,20 @@ class TreadedBase:
                     else:
                         self.wheel_cmd.effort[i] = self.flipper_sign[i] * np.tanh(-flipper_height[i] * (1 + self.WHEEL_BASE / self.WHEEL_RADIUS))
             else:
-                self.wheel_cmd.velocity = 0.0
-                
+                if self.flipper_traj is not None:
+                    flipper_height = self.flipper_height
+                    flipper_vels = self.flipper_fbk.gyro[:, 2]
 
+                    self.wheel_cmd.position[:] = np.nan
+                    self.wheel_cmd.velocity = flipper_vels * flipper_height
+                    for i in range(len(self.wheel_cmd.effort)):
+                        if flipper_height[i] > 1 - 1e-12:
+                            self.wheel_cmd.effort[i] = np.nan
+                        else:
+                            self.wheel_cmd.effort[i] = self.flipper_sign[i] * np.tanh(-flipper_height[i] * (1 + self.WHEEL_BASE / self.WHEEL_RADIUS))
+                else:
+                    self.wheel_cmd.velocity = 0.0
+                
 
             if self.flipper_traj is not None:
                 # flipper update
@@ -228,21 +262,19 @@ class TreadedBase:
         times = [t_now, t_now + ramp_time]
         positions = np.empty((4, 2), dtype=np.float64)
         velocities = np.empty((4, 2), dtype=np.float64)
-        accelerations = np.empty((4, 2), dtype=np.float64)
 
         if self.flipper_traj is not None:
             t = min(t_now, self.flipper_traj.end_time)
-            positions[:, 0], velocities[:, 0], accelerations[:, 0] = self.flipper_traj.get_state(t)
+            positions[:, 0], velocities[:, 0], _ = self.flipper_traj.get_state(t)
+            positions[:, 0] = np.clip(positions[:, 0], self.FLIPPER_MIN_POS, self.FLIPPER_MAX_POS)
         else:
             positions[:, 0] = self.flipper_fbk.position
             velocities[:, 0] = self.flipper_fbk.velocity
-            accelerations[:, 0] = self.flipper_fbk.effort_command
 
-        positions[:, 1] = np.nan if p is None else p
-        velocities[:, 1] = 0.0 if v is None else v
-        accelerations[:, 1] = 0.0
+        positions[:, 1] = np.nan if p is None else np.clip(p, self.FLIPPER_MIN_POS, self.FLIPPER_MAX_POS)
+        velocities[:, 1] = 0.0 if v is None else np.clip(v, self.flipper_min_velocities, self.flipper_max_velocities)
 
-        self.flipper_traj = hebi.trajectory.create_trajectory(times, positions, velocities, accelerations)
+        self.flipper_traj = hebi.trajectory.create_trajectory(times, positions, velocities)
 
     def set_chassis_vel_trajectory(self, t_now: float, ramp_time: float, v):
         times = [t_now, t_now + ramp_time]
@@ -260,33 +292,33 @@ class TreadedBase:
         positions[:, 1] = np.nan
         velocities[:, 1] = v
         accelerations[:, 1] = 0.0
-
         self.chassis_traj = hebi.trajectory.create_trajectory(times, positions, velocities, accelerations)
 
     def average_distance(self, a, b):
         return np.mean(np.abs(a - b))
 
-    def home(self, t_now: float):
-        flipper_home = self.flipper_sign * self.FLIPPER_HOME_POS
-        traj_length = self.average_distance(self.flipper_fbk.position, flipper_home) * 6
+    def move_flippers_to_waypoint(self, t_now: float, avg_speed: float, waypoint):
+        flipper_target = self.flipper_sign * waypoint
+        ramp_time = self.average_distance(self.flipper_fbk.position, flipper_target) / avg_speed + .5 
         self.set_chassis_vel_trajectory(t_now, 0.25, [0, 0, 0])
-        self.set_flipper_trajectory(t_now, traj_length, p=flipper_home)
+        self.set_flipper_trajectory(t_now, ramp_time, p=flipper_target)
+        
+    def home(self, t_now: float):
+        self.move_flippers_to_waypoint(t_now, 0.2, self.FLIPPER_HOME_POS)
 
     def rear_up(self, t_now: float):
-        flipper_rear = self.flipper_sign * self.FLIPPER_REAR_POS
-        self.set_chassis_vel_trajectory(t_now, 0.25, [0, 0, 0])
-        self.set_flipper_trajectory(t_now, 10.0, p=flipper_rear)
+        self.move_flippers_to_waypoint(t_now, .2, self.FLIPPER_REAR_POS)
 
     def deploy(self, t_now: float):
         self.set_chassis_vel_trajectory(t_now, 0.25, [0, 0, 0])
 
     def flatten_flippers(self, t_now: float):
-        flipper_flat = self.flipper_sign * self.FLIPPER_FLAT_POS
-        traj_length = self.average_distance(self.flipper_fbk.position, flipper_flat) * 6
-        self.set_flipper_trajectory(t_now, traj_length, p=flipper_flat)
+        self.move_flippers_to_waypoint(t_now, .2, self.FLIPPER_FLAT_POS)
 
     def align_flippers(self, t_now: float):
-        self.set_flipper_trajectory(t_now, 3.0, p=self.aligned_flipper_position)
+        mean_pos = np.mean(self.flipper_fbk.position*self.flipper_sign)
+        aligined_pos = np.full(4, mean_pos)
+        self.move_flippers_to_waypoint(t_now, .2, aligined_pos)
 
     def unlock_flippers(self, flippers: list):
         f_positions = []
@@ -416,6 +448,9 @@ class TreadyControl:
 
         # Variable for torque mode update handler
         self.torque_labels = None
+        self.prev_torque_labels = None
+        self.torque_labels_changed = False
+        self.torque_start_time = time()
         self.last_cmd_t = time()
 
         self.allow_payload_startup = False
@@ -558,7 +593,12 @@ class TreadyControl:
                 self.transition_to(t_now, self.state.DEPLOYING)
             else:
                 if tready_input.torque_mode:
+                    if tready_input.torque_toggle:
+                        self.torque_start_time = t_now
+
                     torque_max = self.base.TORQUE_MODE_MAX * ((tready_input.flippers[0] + 1) / 2)
+                    torque_max_label = torque_max
+                    torque_max *= min((t_now - self.torque_start_time)/self.base.TORQUE_RAMP_TIME, 1)                  
                     torque_angle = (1 + tready_input.flippers[1]) * self.base.TORQUE_ANGLE_OFFSET
                     roll_angle, pitch_angle, _ = self.base.pose
 
@@ -580,13 +620,16 @@ class TreadyControl:
 
                     self.base.flipper_traj = None
                     self.base.set_flipper_cmd(p=np.ones(4) * np.nan, v = np.ones(4) * np.nan, e=flipper_efforts)
-                    
+
+                    self.prev_torque_labels = self.torque_labels
                     self.torque_labels = [
-                        f"Max\nEff:\n{np.round(torque_max, 2)}",
+                        f"Max\nEff:\n{np.round(torque_max_label, 2)}",
                         f"Torque\nAngle:\n{np.round(torque_angle, 2)}",
                         f"Roll:\n{np.round(roll_adjust)}",
                         f"Pitch:\n{np.round(pitch_adjust)}"
                     ]
+                    self.torque_labels_changed = self.prev_torque_labels != self.torque_labels
+
                 else:
                     # Flipper Control
                     flipper_vels = - self.base.flipper_sign * tready_input.flippers * self.FLIPPER_VEL_SCALE
@@ -594,8 +637,9 @@ class TreadyControl:
                     if tready_input.torque_toggle:
                         self.base.set_flipper_cmd(p=self.base.flipper_fbk.position, e=np.ones(4) * np.nan)
                     self.base.set_flipper_trajectory(t_now, self.base.flipper_ramp_time, v=flipper_vels)
+                    if m_update:
+                        self.torque_labels = None
                     
-                    self.torque_labels = None
 
         if self.base.internal_drive_safe and self.base.external_drive_safe:        
             # Mobile Base Control
@@ -688,6 +732,7 @@ class TreadyControl:
         self.transition_to(time(), self.state.EXIT)
 
 
+# TODO: EVERYTHING BELOW THIS POINT IS OUTDATED AND IS POSSIBLY (PROBABLY) BROKEN
 def config_mobile_io(m: 'MobileIO'):
     """Sets up mobileIO interface.
 
@@ -739,7 +784,6 @@ def config_mobile_io(m: 'MobileIO'):
                             aligned_flipper_mode)
 
     return parse_mobile_io_feedback
-
 
 if __name__ == "__main__":
     from .tready_utils import set_mobile_io_instructions, setup_base
