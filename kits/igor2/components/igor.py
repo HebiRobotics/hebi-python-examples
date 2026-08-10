@@ -122,6 +122,32 @@ class Igor(object):
 
         return True
 
+    def _update_battery_display(self, force=False):
+        """Update the Mobile IO battery text from actuator feedback.
+
+        The modules share the same supply, so their reported voltages are
+        averaged to reduce measurement noise.  UI writes are rate-limited and
+        sent without acknowledgement so a disconnected tablet cannot stall the
+        balance-control loop.
+        """
+        now = time()
+        if not force and now - self._last_battery_display_time < 1.0:
+            return
+        self._last_battery_display_time = now
+
+        voltage_feedback = np.asarray(self._group_feedback.voltage)
+        valid_voltage = voltage_feedback[np.isfinite(voltage_feedback)]
+        if valid_voltage.size == 0:
+            return
+
+        voltage = float(np.mean(valid_voltage))
+        if not force and self._battery_voltage is not None and abs(voltage - self._battery_voltage) < 0.1:
+            return
+
+        self._mobile_io.clear_text(blocking=False)
+        self._mobile_io.add_text(f'Battery: {voltage:.1f} V', blocking=False)
+        self._battery_voltage = voltage
+
 # ------------------------------------------------
 # Calculations
 # ------------------------------------------------
@@ -349,6 +375,7 @@ class Igor(object):
 
         group = self._group
         group.get_next_feedback(reuse_fbk=self._group_feedback)
+        self._update_battery_display(force=True)
 
         self._time_last[:] = self._group_feedback.receive_time
 
@@ -411,6 +438,7 @@ class Igor(object):
         :type bc:  bool
         """
         self._group.get_next_feedback(reuse_fbk=self._group_feedback)
+        self._update_battery_display()
 
         rel_time = time() - self._start_time
         soft_start = min(rel_time, 1.0)
@@ -629,6 +657,8 @@ class Igor(object):
         self._start_time = -1.0
         self._stop_time = -1.0
         self._num_spins = 0
+        self._battery_voltage = None
+        self._last_battery_display_time = 0.0
 
         # ---------------------
         # Kinematic body fields
