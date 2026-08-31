@@ -6,15 +6,20 @@ import hebi
 
 max_payload_attempts = 5
 
+
 class PayloadInfo:
     def __init__(self, family: str, names: list[str], controller: str):
         self.family = family
         self.names = names
         self.controller = controller
 
+
 payloads = [
-    PayloadInfo("Treadward", ["Mast_Pivot", "Chain_Upper", "Chain_Lower", "Wiggly-IO"], 
-                "kits.tready.smart_treadward_sampler_control"),
+    PayloadInfo(
+        "Treadward",
+        ["Mast_Pivot", "Chain_Upper", "Chain_Lower", "Wiggly-IO"],
+        "kits.tready.smart_treadward_sampler_control",
+    ),
 ]
 default_controller = "kits.tready.smart_treadward_control"
 
@@ -27,7 +32,7 @@ payload_controller = ""
 attempts = 0
 while attempts < max_payload_attempts and payload_group is None:
     attempts += 1
-    print('Looking for payload modules...')
+    print("Looking for payload modules...")
     sleep(1)
 
     for payload in payloads:
