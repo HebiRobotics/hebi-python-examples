@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import time
 from enum import Enum, auto
 
@@ -470,42 +470,25 @@ class ChassisVelocity:
         return f"ChassisVelocity(x={self.x}, rz={self.rz})"
 
 
+@dataclass
 class TreadyInputs:
-    def __init__(
-        self,
-        home: bool = False,
-        base_motion: "ChassisVelocity" = ChassisVelocity(),
-        flippers: "list[float]" = [0.0, 0.0, 0.0, 0.0],
-        align_flippers: bool = False,
-        torque_mode: bool = False,
-        torque_toggle: bool = False,
-        deploy: bool = False,
-        deploy_safe: bool = False,
-        stow: bool = False,
-        stow_safe: bool = False,
-        payload_deployed: bool = False,
-        override_startup: bool = False,
-        allow_startup: bool = False,
-        flatten_flippers: bool = False,
-        drive_safe: bool = False,
-        rear_up: bool = False,
-    ):
-        self.home = home
-        self.base_motion = base_motion
-        self.flippers = flippers
-        self.align_flippers = align_flippers
-        self.torque_mode = torque_mode
-        self.torque_toggle = torque_toggle
-        self.deploy = deploy
-        self.deploy_safe = deploy_safe
-        self.stow = stow
-        self.stow_safe = stow_safe
-        self.payload_deployed = payload_deployed
-        self.override_startup = override_startup
-        self.allow_startup = allow_startup
-        self.flatten_flippers = flatten_flippers
-        self.drive_safe = drive_safe
-        self.rear_up = rear_up
+    quit: bool=False
+    home: bool = False
+    base_motion: ChassisVelocity = field(default_factory=ChassisVelocity)
+    flippers: "list[float]" = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0])
+    align_flippers: bool = False
+    torque_mode: bool = False
+    torque_toggle: bool = False
+    deploy: bool = False
+    deploy_safe: bool = False
+    stow: bool = False
+    stow_safe: bool = False
+    payload_deployed: bool = False
+    override_startup: bool = False
+    allow_startup: bool = False
+    flatten_flippers: bool = False
+    drive_safe: bool = False
+    rear_up: bool = False
 
     def __repr__(self) -> str:
         return (
@@ -564,7 +547,7 @@ class TreadedBaseControl:
         self,
         t_now: float,
         m_update: bool,
-        tready_input: "Optional[TreadyInputs]" = None,
+        tready_input: "TreadyInputs | None" = None,
     ):
         self.base.update_feedback()
 

@@ -1,13 +1,14 @@
 # Update mobile io interface
 
 from enum import Enum, auto
+from typing import Callable
 
 from kits.tready.treaded_base_core import (
     ChassisVelocity,
     TreadyControlState,
     TreadyInputs,
 )
-from kits.tready.tready import TreadyControl
+from kits.tready.tready import TreadedBaseControl
 from kits.tready.tready_utils import set_mobile_io_instructions
 
 import numpy as np
@@ -19,14 +20,23 @@ from time import time
 class MobileIOModes(Enum):
     STARTUP = auto()
     DRIVE = auto()
+    DEPLOYING = auto()
+    DEPLOYED = auto()
+    ARM = auto()
 
 
 class MobileIOUpdater:
-    def __init__(self, mobile_io: "MobileIO", startup_layout, drive_layout):
+    def __init__(
+        self,
+        mobile_io: "MobileIO",
+        demo_config: dict[
+            MobileIOModes, tuple[str, Callable[[MobileIO], tuple]]
+        ],
+    ):
 
         self.m = mobile_io
-        self.startup_layout = startup_layout
-        self.drive_layout = drive_layout
+        self.layouts = {mode: vals[0] for mode, vals in demo_config.items()}
+        self.parsers = {mode: vals[1] for mode, vals in demo_config.items()}
         self.base_msg = ""
         self.color = ""
         self.last_msg = ""
@@ -34,9 +44,19 @@ class MobileIOUpdater:
         self.voltage_update_time = 0.0
         self.io_mode = MobileIOModes.STARTUP
 
+    @property
+    def io_mode(self):
+        return self._io_mode
+
+    @io_mode.setter
+    def io_mode(self, value: MobileIOModes):
+        self._io_mode = value
+        print(f'Sending layout to Mobile IO: "{self.layouts[value]}"')
+        self.m.send_layout(layout_file=self.layouts[value])
+
     # Runs when base changes state
     def base_transition_handler(
-        self, controller: TreadyControl, new_state: TreadyControlState
+        self, controller: TreadedBaseControl, new_state: TreadyControlState
     ):
         if controller.state == new_state:
             return
@@ -64,7 +84,6 @@ class MobileIOUpdater:
         elif new_state is TreadyControlState.STARTUP:
             controller.base.set_color("magenta")
             self.io_mode = MobileIOModes.STARTUP
-            self.m.send_layout(layout_file=self.startup_layout)
             self.base_msg = ""
             for i in range(4):
                 if controller.base.flipper_wound[i]:
@@ -80,7 +99,6 @@ class MobileIOUpdater:
         elif new_state is TreadyControlState.TELEOP:
             controller.base.clear_color()
             self.io_mode = MobileIOModes.DRIVE
-            self.m.send_layout(layout_file=self.drive_layout)
             self.m.set_axis_label(
                 6, "BR"
             )  # TODO: this should not be needed but send layout has a bug
@@ -120,7 +138,9 @@ class MobileIOUpdater:
         self.last_msg = msg
 
     # Updates axis labels for torque mode sliders
-    def update_torque_mode(self, controller: TreadyControl, state: TreadyControlState):
+    def update_torque_mode(
+        self, controller: TreadedBaseControl, state: TreadyControlState
+    ):
 
         if controller.state is TreadyControlState.TELEOP:
             """
@@ -147,7 +167,7 @@ class MobileIOUpdater:
 
     # Updates the base startup message
     def update_startup_msg_base(
-        self, controller: TreadyControl, state: TreadyControlState
+        self, controller: TreadedBaseControl, state: TreadyControlState
     ):
         if state is TreadyControlState.STARTUP:
             self.base_msg = ""
@@ -164,7 +184,7 @@ class MobileIOUpdater:
 
     # Updates the voltage reading
     def update_voltage_reading(
-        self, controller: TreadyControl, state: TreadyControlState
+        self, controller: TreadedBaseControl, state: TreadyControlState
     ):
         current_voltage = np.mean(controller.base.fbk.voltage)
         t_now = time()
@@ -175,139 +195,124 @@ class MobileIOUpdater:
 
     def parse_mobile_io_feedback(self, m: "MobileIO"):
 
-        io_mode = self.io_mode
-
-        def update_startup_mode(m: "MobileIO"):
-            # Startup buttons, joysticks, and sliders
-            mapping = {
-                "override_base_btn": 1,
-                "unlock_flippers_btn": 3,
-                "quit_demo_btn": 8,
-            }
-
-            if m.get_button_state(mapping["quit_demo_btn"]):
-                return True, None, True
-
-            return (
-                False,
-                TreadyInputs(
-                    override_startup=m.get_button_state(mapping["override_base_btn"])
-                ),
-                True,
-            )
-
-        def update_drive_mode(m: "MobileIO"):
-            # Drive buttons, joysticks, and sliders
-            mapping = {
-                "reset_pose_btn": 1,
-                "torque_btn": 2,
-                "rear_up_btn": 3,
-                "flatten_btn": 4,
-                "height_up_btn": 5,
-                "recenter_btn": 6,
-                "height_down_btn": 7,
-                "quit_demo_btn": 8,
-                "turn_joy": 1,
-                "forward_joy": 2,
-                "front_left_slider": 3,
-                "front_right_slider": 4,
-                "back_left_slider": 5,
-                "back_right_slider": 6,
-            }
-
-            def change_to_torque_mode(m: "MobileIO"):
-                axis_vals = [0, -0.5, 1, 1]
-                for i in range(3, 7):
-                    if not m.set_snap(i, np.nan):
-                        print(f"Failed to set snap for axis {i}")
-                    if not m.set_axis_value(i, axis_vals[i - 3]):
-                        print(f"Failed to set axis value for axis {i}")
-
-            def change_to_velocity_mode(m: "MobileIO"):
-                for i in range(3, 7):
-                    if not m.set_snap(i, 0):
-                        print(f"Failed to set snap for axis {i}")
-                m.set_axis_label(mapping["front_left_slider"], "FL", blocking=False)
-                m.set_axis_label(mapping["front_right_slider"], "FR", blocking=False)
-                m.set_axis_label(mapping["back_left_slider"], "BL", blocking=False)
-                m.set_axis_label(mapping["back_right_slider"], "BR", blocking=False)
-
-            if m.get_button_state(mapping["quit_demo_btn"]):
-                return True, None, True
-            if m.get_button_state(mapping["reset_pose_btn"]):
-                return (
-                    False,
-                    TreadyInputs(
-                        home=True,
-                        torque_mode=m.get_button_state(mapping["torque_btn"]),
-                        torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
-                    ),
-                    True,
-                )
-            if m.get_button_diff(mapping["torque_btn"]) == 1:
-                change_to_torque_mode(m)
-            elif m.get_button_diff(mapping["torque_btn"]) == -1:
-                change_to_velocity_mode(m)
-            if m.get_button_state(mapping["recenter_btn"]):
-                return (
-                    False,
-                    TreadyInputs(
-                        align_flippers=True,
-                        torque_mode=m.get_button_state(mapping["torque_btn"]),
-                        torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
-                    ),
-                    True,
-                )
-            if m.get_button_state(mapping["rear_up_btn"]):
-                b_inputs = TreadyInputs(
-                    rear_up=True,
-                    torque_mode=m.get_button_state(mapping["torque_btn"]),
-                    torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
-                )
-                return False, b_inputs, True
-            if m.get_button_state(mapping["flatten_btn"]):
-                return (
-                    False,
-                    TreadyInputs(
-                        flatten_flippers=True,
-                        torque_mode=m.get_button_state(mapping["torque_btn"]),
-                        torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
-                    ),
-                    True,
-                )
-
-            chassis_velocity = ChassisVelocity(
-                m.get_axis_state(mapping["forward_joy"]),
-                m.get_axis_state(mapping["turn_joy"]),
-            )
-            height_up = m.get_button_state(mapping["height_up_btn"])
-            height_down = m.get_button_state(mapping["height_down_btn"])
-            height = height_up - height_down
-            if height != 0:
-                flippers = [-height / 2] * 4
-            else:
-                flippers = [
-                    m.get_axis_state(mapping["front_left_slider"]),
-                    m.get_axis_state(mapping["front_right_slider"]),
-                    m.get_axis_state(mapping["back_left_slider"]),
-                    m.get_axis_state(mapping["back_right_slider"]),
-                ]
-
-            return (
-                False,
-                TreadyInputs(
-                    base_motion=chassis_velocity,
-                    flippers=flippers,
-                    torque_mode=m.get_button_state(mapping["torque_btn"]),
-                    torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
-                ),
-                True,
-            )
-
         if m.update(0.0):
-            if io_mode == MobileIOModes.DRIVE:
-                return update_drive_mode(m)
-            elif io_mode == MobileIOModes.STARTUP:
-                return update_startup_mode(m)
+            if self.io_mode in self.parsers:
+                return self.parsers[self.io_mode](m)
 
-        return False, None, False
+        return None
+
+
+def update_startup_mode(m: "MobileIO"):
+    # Startup buttons, joysticks, and sliders
+    mapping = {
+        "override_base_btn": 1,
+        "unlock_flippers_btn": 3,
+        "quit_demo_btn": 8,
+    }
+
+    quit = m.get_button_state(mapping["quit_demo_btn"])
+    override_startup = m.get_button_state(mapping["override_base_btn"])
+
+    return (TreadyInputs(quit=quit, override_startup=override_startup),)
+
+
+def update_drive_mode(m: "MobileIO"):
+    # Drive buttons, joysticks, and sliders
+    mapping = {
+        "reset_pose_btn": 1,
+        "torque_btn": 2,
+        "rear_up_btn": 3,
+        "flatten_btn": 4,
+        "height_up_btn": 5,
+        "recenter_btn": 6,
+        "height_down_btn": 7,
+        "quit_demo_btn": 8,
+        "turn_joy": 1,
+        "forward_joy": 2,
+        "front_left_slider": 3,
+        "front_right_slider": 4,
+        "back_left_slider": 5,
+        "back_right_slider": 6,
+    }
+
+    def change_to_torque_mode(m: "MobileIO"):
+        axis_vals = [0, -0.5, 1, 1]
+        for i in range(3, 7):
+            if not m.set_snap(i, np.nan):
+                print(f"Failed to set snap for axis {i}")
+            if not m.set_axis_value(i, axis_vals[i - 3]):
+                print(f"Failed to set axis value for axis {i}")
+
+    def change_to_velocity_mode(m: "MobileIO"):
+        for i in range(3, 7):
+            if not m.set_snap(i, 0):
+                print(f"Failed to set snap for axis {i}")
+        m.set_axis_label(mapping["front_left_slider"], "FL", blocking=False)
+        m.set_axis_label(mapping["front_right_slider"], "FR", blocking=False)
+        m.set_axis_label(mapping["back_left_slider"], "BL", blocking=False)
+        m.set_axis_label(mapping["back_right_slider"], "BR", blocking=False)
+
+    if m.get_button_state(mapping["quit_demo_btn"]):
+        return (TreadyInputs(quit=True),)
+    if m.get_button_state(mapping["reset_pose_btn"]):
+        return (
+            TreadyInputs(
+                home=True,
+                torque_mode=m.get_button_state(mapping["torque_btn"]),
+                torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
+            ),
+        )
+    if m.get_button_diff(mapping["torque_btn"]) == 1:
+        change_to_torque_mode(m)
+    elif m.get_button_diff(mapping["torque_btn"]) == -1:
+        change_to_velocity_mode(m)
+    if m.get_button_state(mapping["recenter_btn"]):
+        return (
+            TreadyInputs(
+                align_flippers=True,
+                torque_mode=m.get_button_state(mapping["torque_btn"]),
+                torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
+            ),
+        )
+    if m.get_button_state(mapping["rear_up_btn"]):
+        return (
+            TreadyInputs(
+                rear_up=True,
+                torque_mode=m.get_button_state(mapping["torque_btn"]),
+                torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
+            ),
+        )
+    if m.get_button_state(mapping["flatten_btn"]):
+        return (
+            TreadyInputs(
+                flatten_flippers=True,
+                torque_mode=m.get_button_state(mapping["torque_btn"]),
+                torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
+            ),
+        )
+
+    chassis_velocity = ChassisVelocity(
+        m.get_axis_state(mapping["forward_joy"]),
+        m.get_axis_state(mapping["turn_joy"]),
+    )
+    height_up = m.get_button_state(mapping["height_up_btn"])
+    height_down = m.get_button_state(mapping["height_down_btn"])
+    height = height_up - height_down
+    if height != 0:
+        flippers = [-height / 2] * 4
+    else:
+        flippers = [
+            m.get_axis_state(mapping["front_left_slider"]),
+            m.get_axis_state(mapping["front_right_slider"]),
+            m.get_axis_state(mapping["back_left_slider"]),
+            m.get_axis_state(mapping["back_right_slider"]),
+        ]
+
+    return (
+        TreadyInputs(
+            base_motion=chassis_velocity,
+            flippers=flippers,
+            torque_mode=m.get_button_state(mapping["torque_btn"]),
+            torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
+        ),
+    )

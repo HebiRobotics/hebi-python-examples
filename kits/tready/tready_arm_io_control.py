@@ -14,7 +14,8 @@ from kits.arms.ar_control_sm import (
     ArmControlState,
     ArmMobileIOInputs,
 )
-from .tready import TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
+from .treaded_base_core import TreadyControlState, TreadyInputs, ChassisVelocity
+from .tready import TreadyControl
 from .tready_utils import set_mobile_io_instructions, setup_base, setup_arm_6dof
 
 import typing
@@ -80,10 +81,10 @@ def setup_mobile_io(m: "MobileIO"):
         flip4 = m.get_axis_state(slider_flip4)
 
         tready_inputs = TreadyInputs(
-            should_reset,
-            ChassisVelocity(joy_vel_fwd, joy_vel_rot),
-            [flip1, flip2, flip3, flip4],
-            aligned_flipper_mode,
+            home=should_reset,
+            base_motion=ChassisVelocity(joy_vel_fwd, joy_vel_rot),
+            flippers=[flip1, flip2, flip3, flip4],
+            align_flippers=aligned_flipper_mode,
         )
 
         try:
@@ -114,6 +115,8 @@ if __name__ == "__main__":
     family = "Tready"
 
     arm, gripper = setup_arm_6dof(lookup, family)
+    if arm is None:
+        raise RuntimeError(f'Could not connect to arm w/ family "{family}"')
     arm_control = ArmMobileIOControl(arm, gripper)
 
     # Base setup

@@ -1,0 +1,54 @@
+# R-Series 7-DoF Double Shoulder Arm
+version: 1.0
+families: ["Arm"]
+names: ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3"]
+hrdf: "hrdf/tready-arm-A2240-06G.hrdf"
+
+gains:
+  default: "gains/A-2240-06.xml"
+
+user_data:
+  # Default seed positions for doing inverse kinematics
+  ik_seed_pos:   [ 0.30,  1.2,  2.2,  2.9, -1.57, 0]
+  home_position: [ 0.30,  1.2,  2.2,  2.9, -1.57, 0]
+
+  homing_time: 5.0            # s
+  trajectory_duration: 1.0    # s
+  xyz_scale: [1.0, 1.0, 1.0]
+
+#    def __init__(self, arm: 'Arm', gripper: 'Gripper | None' = None, homing_time=5.0, traj_duration=1.0, xyz_scale: 'npt.NDArray[np.float64]' = np.ones(3)):
+#        self.namespace = ''
+#
+#        self.state = ArmControlState.STARTUP
+#        self.arm = arm
+#        self.gripper = gripper
+#
+#        # 6 DoF home
+#        self.arm_xyz_home = [0.5, 0.0, 0.0]
+#        self.arm_rot_home: 'npt.NDArray[np.float64]' = (R.from_euler(
+#            'z', np.pi / 2) * R.from_euler('x', np.pi)).as_matrix()
+#
+#        self.arm_home = self.arm.ik_target_xyz_so3(
+#            self.arm_seed_ik,
+#            self.arm_xyz_home,
+#            self.arm_rot_home)
+#
+#        self.last_locked_xyz = self.arm_xyz_home.copy()
+#        self.last_locked_rot = self.arm_rot_home.copy()
+#        self.last_locked_seed = self.arm_home.copy()
+#
+#        self.locked = True
+#        self._transition_handlers: 'list[Callable[[ArmMobileIOControl, ArmControlState], None]]' = [
+#        ]
+#        self.last_cmd_t = time()
+
+plugins:
+  - type: GravityCompensationEffort
+    name: gravComp
+    enabled: true
+    ramp_time: 5
+
+  - type: DynamicsCompensationEffort
+    name: dynamicsComp
+    enabled: true
+    ramp_time: 5

@@ -5,12 +5,10 @@ import datetime
 import os
 from os.path import join
 from .tready_utils import load_gains, set_mobile_io_instructions
+from .treaded_base_core import TreadyControlState, TreadyInputs, ChassisVelocity
 from .treadward import (
-    TreadedBase,
+    TreadwardBase,
     TreadwardControl,
-    TreadyControlState,
-    TreadyInputs,
-    ChassisVelocity,
 )
 from .treadward_sampler import (
     CoreSampler,
@@ -19,13 +17,12 @@ from .treadward_sampler import (
     CoreSamplerInputs,
 )
 import numpy as np
-from enum import Enum, auto
 
 import typing
 
 if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
-    from typing import Optional, Callable
+    from typing import Optional
 
 layout_dir = join(os.path.dirname(__file__), "config", "layouts")
 drive_layout = "TreadwardSamplerDriveController.json"
@@ -34,11 +31,7 @@ deploying_layout = "TreadwardSamplerDeployingController.json"
 startup_layout = "TreadwardSamplerStartupController.json"
 
 
-class MobileIOModes(Enum):
-    STARTUP = auto()
-    DRIVE = auto()
-    DEPLOYING = auto()
-    DEPLOYED = auto()
+from mobile_io_manager import MobileIOModes
 
 
 mobileIO_mode = MobileIOModes.DRIVE
@@ -294,7 +287,7 @@ if __name__ == "__main__":
     root_dir, _ = os.path.split(os.path.abspath(__file__))
     load_gains(base_group, os.path.join(root_dir, "gains", "smart-treadward-gains.xml"))
 
-    base = TreadedBase(base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1)
+    base = TreadwardBase(base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1)
     base.set_robot_model(os.path.join(root_dir, "hrdf", "Treadward.hrdf"))
     base_control = TreadwardControl(base)
 

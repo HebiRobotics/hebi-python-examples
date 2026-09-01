@@ -5,7 +5,7 @@ import datetime
 import os
 from os.path import join
 
-from .mobile_io_manager import MobileIOUpdater
+from .mobile_io_manager import MobileIOUpdater, MobileIOModes, update_startup_mode, update_drive_mode
 from .treaded_base_core import TreadyInputs
 from .tready_utils import load_gains
 
@@ -65,7 +65,12 @@ if __name__ == "__main__":
     drive_layout = join(layout_dir, "TreadwardDriveController.json")
     startup_layout = join(layout_dir, "TreadwardStartupController.json")
 
-    updater = MobileIOUpdater(m, startup_layout, drive_layout)
+    mio_demo_config = {
+        MobileIOModes.STARTUP: (startup_layout, update_startup_mode),
+        MobileIOModes.DRIVE: (drive_layout, update_drive_mode),
+    }
+
+    updater = MobileIOUpdater(m, mio_demo_config)
     base_control._transition_handlers.append(updater.base_transition_handler)
 
     base_control._update_handlers.append(updater.update_voltage_reading)
@@ -85,10 +90,16 @@ if __name__ == "__main__":
     while base_control.running:
         t = time()
         try:
-            quit, base_inputs, m_update = updater.parse_mobile_io_feedback(m)
-            if quit:
+            inputs = updater.parse_mobile_io_feedback(m)
+            if inputs is None:
+                m_update = False
+                base_inputs = update_inputs()
+            else:
+                m_update = True
+                base_inputs = update_inputs(inputs[0])
+
+            if base_inputs.quit:
                 break
-            base_inputs = update_inputs(base_inputs)
 
             base_control.update(t, m_update, base_inputs)
             base_control.send()
