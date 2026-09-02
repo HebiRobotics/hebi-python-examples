@@ -106,10 +106,10 @@ def parse_mobile_feedback(m: "MobileIO"):
     flipper4 = m.get_axis_state(6)
 
     base_inputs = TreadyInputs(
-        home,
-        ChassisVelocity(base_x, base_rz),
-        [flipper1, flipper1, flipper4, flipper4],
-        True,
+        home=home,
+        base_motion=ChassisVelocity(base_x, base_rz),
+        flippers=[flipper1, flipper1, flipper4, flipper4],
+        align_flippers=True,
     )
 
     arm_inputs = ArmJoystickInputs(
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     lookup = hebi.Lookup()
     sleep(2)
 
-    arm = setup_arm_7dof(lookup, "Arm")
+    arm, gripper = setup_arm_7dof(lookup, "Arm")
     joint_limits = np.empty((7, 2))
     joint_limits[:, 0] = -np.inf
     joint_limits[:, 1] = np.inf
@@ -153,7 +153,7 @@ if __name__ == "__main__":
         sleep(1)
         base_group = lookup.get_group_from_names("Tready", wheel_names + flipper_names)
 
-    base = TreadyBase(TreadedBase)(base_group, 0.25, 0.33)
+    base = TreadyBase(base_group, 0.25, 0.33)
     base_control = TreadyControl(base)
 
     # Setup MobileIO

@@ -29,9 +29,7 @@ class MobileIOUpdater:
     def __init__(
         self,
         mobile_io: "MobileIO",
-        demo_config: dict[
-            MobileIOModes, tuple[str, Callable[[MobileIO], tuple]]
-        ],
+        demo_config: dict[MobileIOModes, tuple[str, Callable[[MobileIO], tuple]]],
     ):
 
         self.m = mobile_io
@@ -186,11 +184,10 @@ class MobileIOUpdater:
     def update_voltage_reading(
         self, controller: TreadedBaseControl, state: TreadyControlState
     ):
-        current_voltage = np.mean(controller.base.fbk.voltage)
         t_now = time()
         if t_now > self.voltage_update_time:
             self.voltage_update_time = t_now + 10.0  # update every 10 seconds
-            self.voltage = current_voltage
+            self.voltage = np.mean(controller.base.fbk.voltage)
             self.needs_update()
 
     def parse_mobile_io_feedback(self, m: "MobileIO"):

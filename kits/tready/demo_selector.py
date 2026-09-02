@@ -28,7 +28,7 @@ def launch_demo(demo):
 
 def select_demo(mobile_io):
     for i, k in enumerate(DEMOS.keys()):
-        if m.get_button_state(i + 1):
+        if mobile_io.get_button_state(i + 1):
             return k
     else:
         return None
