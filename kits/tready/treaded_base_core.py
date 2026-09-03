@@ -550,7 +550,6 @@ class TreadedBaseControl:
     def update(
         self,
         t_now: float,
-        m_update: bool,
         tready_input: "TreadyInputs | None" = None,
     ):
         self.base.update_feedback()
@@ -566,19 +565,15 @@ class TreadedBaseControl:
             self.transition_to(t_now, self.state.EMERGENCY_STOP)
             return
 
-        # Should never run. Just here to make the type checker happy.
-        if tready_input is None:
-            print(self.namespace + "tready input is None")
-            return
-
         # Transition to disconnected if no mobile update recieved
-        if not m_update:
+        if tready_input is None:
             if not self.state.is_error_state and (t_now - self.last_cmd_t) > 1.0:
                 print(self.namespace + "mobileIO timeout, base disabling motion")
                 self.transition_to(t_now, self.state.DISCONNECTED)
-        else:
-            # Reset the timeout
-            self.last_cmd_t = t_now
+            return
+
+        # Reset the timeout
+        self.last_cmd_t = t_now
 
         # Update deploy/stow/drive safety
         self.base.deploy_safe = tready_input.deploy_safe
@@ -591,7 +586,7 @@ class TreadedBaseControl:
                 self.transition_to(t_now, self.prev_state)
 
         # Transition to previous state if mobileIO is reconnected
-        elif self.state is self.state.DISCONNECTED and m_update:
+        elif self.state is self.state.DISCONNECTED:
             self.last_cmd_t = t_now
             print(self.namespace + "Controller reconnected, demo continued.")
             self.transition_to(t_now, self.prev_state)
@@ -762,8 +757,7 @@ class TreadedBaseControl:
                     self.base.set_flipper_trajectory(
                         t_now, self.base.flipper_ramp_time, v=flipper_vels
                     )
-                    if m_update:
-                        self.torque_labels = None
+                    self.torque_labels = None
 
         if self.base.internal_drive_safe and self.base.external_drive_safe:
             # Mobile Base Control

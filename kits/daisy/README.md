@@ -8,9 +8,6 @@ The demo requires a Mobile IO device acessible from the computer running the dem
 
 ### Software Requirements 
 * [HEBI Python API](https://pypi.org/project/hebi-py/)
-* [PySDL2](https://pypi.org/project/PySDL2/)
-  * **Linux Users:** You should check if your distro has a package for this already. For Ubuntu, install the [pysdl2 package](https://launchpad.net/ubuntu/+source/pysdl2)
-  * If not installing through a package manager, make sure you have the SDL2 library installed!
 
 ## Assembling / Setting Up Daisy
 

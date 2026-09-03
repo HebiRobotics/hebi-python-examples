@@ -12,9 +12,9 @@ class ChassisVelocity:
         self.x = x
         self.y = y
         self.rz = rz
-    
+
     def __repr__(self) -> str:
-        return f'ChassisVelocity(x={self.x}, y={self.y}, rz={self.rz})'
+        return f"ChassisVelocity(x={self.x}, y={self.y}, rz={self.rz})"
 
 
 def load_gains(group, gains_file):
@@ -24,7 +24,7 @@ def load_gains(group, gains_file):
     try:
         gains_command.read_gains(gains_file)
     except Exception as e:
-        print(f'Warning - Could not load gains: {e}')
+        print(f"Warning - Could not load gains: {e}")
         return
 
     # Send gains multiple times
@@ -34,8 +34,8 @@ def load_gains(group, gains_file):
 
 
 class OmniBase:
-    WHEEL_RADIUS = 0.0762 # m
-    BASE_RADIUS = 0.220   # m (center of omni to origin of base)
+    WHEEL_RADIUS = 0.0762  # m
+    BASE_RADIUS = 0.220  # m (center of omni to origin of base)
 
     def __init__(self, group):
         self.group = group
@@ -44,7 +44,9 @@ class OmniBase:
         self.trajectory = None
         self.color = hebi.Color(0, 0, 0)
 
-        self.vels_base_to_wheel = self._build_jacobian(self.BASE_RADIUS, self.WHEEL_RADIUS)
+        self.vels_base_to_wheel = self._build_jacobian(
+            self.BASE_RADIUS, self.WHEEL_RADIUS
+        )
 
     def _build_jacobian(self, base_radius, wheel_radius):
         vels_base_to_wheel = np.zeros((3, 3))
@@ -59,7 +61,6 @@ class OmniBase:
         vels_base_to_wheel[:, 2] = -base_radius
         vels_base_to_wheel /= wheel_radius
         return vels_base_to_wheel
-
 
     def update(self, t_now):
         if not self.group.get_next_feedback(reuse_fbk=self.base_feedback):
@@ -77,12 +78,12 @@ class OmniBase:
             world_to_local_rot[2, 2] = 1.0
 
             v_local = world_to_local_rot @ v
-            #self.base_command.position = self.start_wheel_pos + p
+            # self.base_command.position = self.start_wheel_pos + p
             self.base_command.velocity = self.vels_base_to_wheel @ v_local
             self.base_command.led.color = self.color
-            #print(f"P: {p}")
-            #print(f"V: {v}")
-    
+            # print(f"P: {p}")
+            # print(f"V: {v}")
+
     def send(self):
         self.group.send_command(self.base_command)
 
@@ -115,18 +116,19 @@ class OmniBase:
 
 
 if __name__ == "__main__":
-
     lookup = hebi.Lookup()
     sleep(2)
 
     # Base setup
     base_family = "HEBI"
-    module_names = ['W1', 'W2', 'W3']
+    module_names = ["W1", "W2", "W3"]
 
     # Create group
     group = lookup.get_group_from_names([base_family], module_names)
     if group is None:
-        raise RuntimeError(f"Could not find OmniBase modules: {module_names} in family '{base_family}'")
+        raise RuntimeError(
+            f"Could not find OmniBase modules: {module_names} in family '{base_family}'"
+        )
     load_gains(group, "gains/omni_base.xml")
 
     base = OmniBase(group)
@@ -134,7 +136,7 @@ if __name__ == "__main__":
     # mobileIO setup
     phone_name = "mobileIO"
 
-    print('Waiting for Mobile IO device to come online...')
+    print("Waiting for Mobile IO device to come online...")
     m = create_mobile_io(lookup, base_family, phone_name)
     if m is None:
         raise RuntimeError("Could not find Mobile IO device")

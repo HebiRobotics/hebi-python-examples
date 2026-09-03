@@ -2,19 +2,18 @@
 
 from enum import Enum, auto
 from typing import Callable
+from time import time
 
 from kits.tready.treaded_base_core import (
     ChassisVelocity,
     TreadyControlState,
     TreadyInputs,
+    TreadedBaseControl,
 )
-from kits.tready.tready import TreadedBaseControl
 from kits.tready.tready_utils import set_mobile_io_instructions
 
 import numpy as np
 from hebi._internal.mobile_io import MobileIO
-
-from time import time
 
 
 class MobileIOModes(Enum):

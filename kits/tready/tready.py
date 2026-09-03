@@ -96,16 +96,13 @@ if __name__ == "__main__":
         try:
             inputs = updater.parse_mobile_io_feedback(m)
             if inputs is None:
-                m_update = False
-                base_inputs = update_inputs()
+                base_inputs = None
             else:
-                m_update = True
                 base_inputs = update_inputs(inputs[0])
+                if base_inputs.quit:
+                    break
 
-            if base_inputs.quit:
-                break
-
-            base_control.update(t, m_update, base_inputs)
+            base_control.update(t, base_inputs)
             base_control.send()
 
         except KeyboardInterrupt:

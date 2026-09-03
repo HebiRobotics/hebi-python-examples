@@ -1,23 +1,31 @@
 #! /usr/bin/env python3
 
 import os
+from os.path import join, dirname, abspath
 import hebi
 import numpy as np
 from time import time, sleep
 import datetime
-from hebi.util import create_mobile_io
 
 from kits.arms.joystick_control_sm import (
     ArmJoystickControl,
     ArmControlState,
     ArmJoystickInputs,
 )
-from .treaded_base_core import TreadyControlState, TreadyInputs, ChassisVelocity
-from .tready import (
-    TreadyBase,
-    TreadyControl,
+from .treaded_base_core import (
+    TreadedBase,
+    TreadedBaseConfig,
+    TreadedBaseControl,
+    TreadyControlState,
+    TreadyInputs,
+    ChassisVelocity,
 )
-from .tready_utils import setup_arm_6dof, setup_arm_7dof
+from .tready_utils import (
+    setup_arm_6dof,
+    setup_arm_7dof,
+    wait_for_mobile_io,
+    try_create_base_group,
+)
 
 import typing
 
@@ -123,51 +131,62 @@ def parse_mobile_feedback(m: "MobileIO"):
 
 
 if __name__ == "__main__":
+    config_dir = join(dirname(abspath(__file__)), "config")
+
+    tready_config = TreadedBaseConfig(
+        hrdf_file=join(config_dir, "hrdf", "Tready.hrdf"),
+        gains_file=join(config_dir, "gains", "smart-tready-gains.xml"),
+        wheel_diameter=0.125,  # m
+        wheel_base=0.285,  # m
+        torso_torque_scale=2.5,  # Nm
+        torque_mode_max=25,  # Nm
+    )
     lookup = hebi.Lookup()
     sleep(2)
 
-    arm, gripper = setup_arm_7dof(lookup, "Arm")
-    joint_limits = np.empty((7, 2))
-    joint_limits[:, 0] = -np.inf
-    joint_limits[:, 1] = np.inf
-
-    # base limits [-2, 2] (radians)
-    joint_limits[0, :] = [-2.0, 2.0]
-    # shoulder limits [-2, inf]
-    joint_limits[1, 0] = -2.0
-
-    arm_control = ArmJoystickControl(
-        arm,
-        [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0],
-        homing_time=7.0,
-        joint_limits=joint_limits,
-    )
-
-    flipper_names = [f"T{n + 1}_J1_flipper" for n in range(4)]
-    wheel_names = [f"T{n + 1}_J2_track" for n in range(4)]
-
-    # Create base group
-    base_group = lookup.get_group_from_names("Tready", wheel_names + flipper_names)
-    while base_group is None:
-        print("Looking for Tready modules...")
-        sleep(1)
-        base_group = lookup.get_group_from_names("Tready", wheel_names + flipper_names)
-
-    base = TreadyBase(base_group, 0.25, 0.33)
-    base_control = TreadyControl(base)
-
     # Setup MobileIO
-    print("Looking for Mobile IO...")
-    m = create_mobile_io(lookup, "Tready")
-    while m is None:
-        print("Waiting for Mobile IO device to come online...")
-        sleep(1)
-        m = create_mobile_io(lookup, "Tready")
+    m = wait_for_mobile_io(lookup, "Tready")
 
     m.update()
     setup_mobile_io(m)
 
-    def update_mobile_ui(controller: TreadyControl, new_state: TreadyControlState):
+    # Create Arm group
+    arm_family = "Arm"
+    config_file = join(config_dir, "tready-arm-A-2240-06G.cfg.yaml")
+    cfg = hebi.config.load_config(config_file)
+    arm = hebi.arm.create_from_config(cfg, lookup)
+    gripper = None  # TODO: Reimplement the old behaviors for gripper loading
+    # arm, gripper = setup_arm_6dof(lookup, arm_family, with_gripper=False)
+
+    if arm is None:
+        if len(cfg.families) == 1:
+            families = [cfg.families[0]] * len(cfg.names)
+        else:
+            families = cfg.families
+        pairs = zip(families, cfg.names)
+        modules = [f"{p[0]}/{p[1]}" for p in pairs]
+        raise RuntimeError(f"Could not find modules:\n{'\n'.join(modules)}")
+
+    home_pose = np.array([0.3, 1.2, 2.2, 2.9, -1.57, 0])
+    arm_control = ArmJoystickControl(
+        arm,
+        home_pose,
+        homing_time=7.0,
+    )
+    arm_control.namespace = "[Arm] "
+
+    base_family = "Tready"
+    base_group = try_create_base_group(lookup, base_family)
+    while base_group is None:
+        print(f"Looking for {base_family} modules...")
+        sleep(1)
+        base_group = try_create_base_group(lookup, base_family)
+
+    base = TreadedBase(tready_config, base_group, 0.25, 0.33)
+    base_control = TreadedBaseControl(base, max_base_speed=0.25)
+    base_control.namespace = "[Base] "
+
+    def update_mobile_ui(controller: TreadedBaseControl, new_state: TreadyControlState):
         if (
             controller.state == TreadyControlState.DISCONNECTED
             and new_state == TreadyControlState.TELEOP

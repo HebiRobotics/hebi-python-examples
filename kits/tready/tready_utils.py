@@ -11,13 +11,19 @@ if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
     from hebi import Lookup
 
+
 def wait_for_mobile_io(lookup, family):
     # mobileIO setup
     print("Looking for mobileIO device...")
     m = create_mobile_io(lookup, family)
+    count = 0
     while m is None:
         print("Waiting for mobileIO device to come online...")
+        if count > 10:
+            count = 0
+            lookup.reset()
         sleep(1)
+        count += 1
         m = create_mobile_io(lookup, family)
 
     return m

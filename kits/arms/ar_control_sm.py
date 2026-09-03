@@ -1,8 +1,7 @@
 
 from enum import Enum, auto
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from time import time, sleep
-import os
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
@@ -12,7 +11,7 @@ from hebi.util import create_mobile_io
 import typing
 if typing.TYPE_CHECKING:
     from typing import Callable
-    import numpy.typing as npt
+    from numpy.typing import NDArray
     from hebi._internal.mobile_io import MobileIO
     from hebi.arm import Arm, Gripper
 
@@ -28,8 +27,8 @@ class ArmControlState(Enum):
 
 @dataclass(kw_only=True)
 class ArmMobileIOInputs:
-    phone_pos: 'npt.NDArray[np.float32]' = field(default_factory=lambda: np.array([0., 0., 0.]))
-    phone_rot: 'npt.NDArray[np.float64]' = field(default_factory=lambda: np.eye(3))
+    phone_pos: 'NDArray[np.float32]'
+    phone_rot: 'NDArray[np.float64]'
     ar_scaling: float = 1.0
     lock_toggle: bool = False
     locked: bool = True
@@ -43,7 +42,7 @@ class ArmMobileIOControl:
                  gripper: 'Gripper | None' = None,
                  homing_time=5.0,
                  traj_duration=1.0,
-                 xyz_scale: 'npt.NDArray[np.float64]' = np.ones(3),
+                 xyz_scale: 'NDArray[np.float64]' = np.ones(3),
                  ):
 
         self.namespace = ''
@@ -205,10 +204,20 @@ class ArmMobileIOControl:
         if arm_input.ar_scaling == 0.0:
             self.phone_xyz_home = arm_input.phone_pos
 
-        joint_target = self.arm.ik_target_xyz_so3(
-            self.last_locked_seed,
-            arm_xyz_target,
-            arm_rot_target)
+        try:
+            joint_target = self.arm.ik_target_xyz_so3(
+                self.last_locked_seed,
+                arm_xyz_target,
+                arm_rot_target)
+        except Exception as e:
+            print('-----------------')
+            print(arm_xyz_target)
+            print('-----------------')
+            print(self.last_locked_seed)
+            print('-----------------')
+            print(arm_rot_target)
+            print('-----------------')
+            raise e
 
         arm_goal = hebi.arm.Goal(self.arm.size)
         arm_goal.add_waypoint(t=self.traj_duration, position=joint_target)
@@ -239,8 +248,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
     if m.get_button_state(8):
         return True, None
 
-    if m.get_button_state(1):
-        return False, ArmMobileIOInputs(home=True)
+    user_home = m.get_button_state(1)
 
     try:
         wxyz = m.orientation
@@ -251,6 +259,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
         rotation = np.eye(3)
 
     arm_input = ArmMobileIOInputs(
+        home=user_home,
         phone_pos=np.copy(m.position),
         phone_rot=rotation,
         lock_toggle=m.get_button_state(5),

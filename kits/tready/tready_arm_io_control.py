@@ -6,7 +6,6 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 
 import hebi
-from hebi.util import create_mobile_io
 
 from kits.arms.ar_control_sm import ArmMobileIOControl, ArmMobileIOInputs
 
@@ -45,13 +44,41 @@ def update_inputs(base_inputs: "TreadyInputs | None" = None):
     return base_inputs
 
 
-def arm_update_drive_mode(m: "MobileIO"):
+def update_ar_arm(m: "MobileIO"):
+    # Drive buttons, joysticks, and sliders
+    mapping = {
+        "reset_pose_btn": 1,
+        "arm_lock": 3,
+        "gripper": 4,
+    }
+
+    if m.get_button_state(mapping["reset_pose_btn"]):
+        user_home = True
+
+    try:
+        # reorder quaternion components
+        rotation = R.from_quat(m.orientation, scalar_first=True).as_matrix()
+    except ValueError as e:
+        print(f"Error getting orientation as matrix: {e}\n{m.orientation}")
+        rotation = np.eye(3)
+
+    arm_inputs = ArmMobileIOInputs(
+        phone_pos=np.copy(m.position),
+        phone_rot=rotation,
+        lock_toggle=m.get_button_diff(mapping["arm_lock"]) != 0,
+        locked=m.get_button_state(mapping["arm_lock"]) == 0,
+        gripper_closed=m.get_button_state(mapping["gripper"]),
+        home=user_home,
+    )
+
+    return arm_inputs
+
+
+def update_drive_mode(m: "MobileIO"):
     # Drive buttons, joysticks, and sliders
     mapping = {
         "reset_pose_btn": 1,
         "torque_btn": 2,
-        "arm_lock": 3,
-        "gripper": 4,
         "height_up_btn": 5,
         "recenter_btn": 6,
         "height_down_btn": 7,
@@ -65,7 +92,6 @@ def arm_update_drive_mode(m: "MobileIO"):
     }
 
     base_inputs = None
-    arm_inputs = ArmMobileIOInputs()
 
     if m.get_button_state(mapping["quit_demo_btn"]):
         base_inputs = TreadyInputs(quit=True)
@@ -106,22 +132,6 @@ def arm_update_drive_mode(m: "MobileIO"):
             torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
         )
 
-    try:
-        # reorder quaternion components
-        rotation = R.from_quat(m.orientation, scalar_first=True).as_matrix()
-    except ValueError as e:
-        print(f"Error getting orientation as matrix: {e}\n{m.orientation}")
-        rotation = np.eye(3)
-
-    arm_inputs = ArmMobileIOInputs(
-        phone_pos=np.copy(m.position),
-        phone_rot=rotation,
-        lock_toggle=m.get_button_diff(mapping["arm_lock"]) != 0,
-        locked=m.get_button_state(mapping["arm_lock"]) == 0,
-        gripper_closed=m.get_button_state(mapping["gripper"]),
-        home=base_inputs.home,
-    )
-
     if m.get_button_diff(mapping["torque_btn"]) == 1:
         axis_vals = [0, -0.5, 1, 1]
         for i in range(3, 7):
@@ -139,7 +149,7 @@ def arm_update_drive_mode(m: "MobileIO"):
         m.set_axis_label(mapping["back_left_slider"], "BL", blocking=False)
         m.set_axis_label(mapping["back_right_slider"], "BR", blocking=False)
 
-    return (base_inputs, arm_inputs)
+    return base_inputs
 
 
 if __name__ == "__main__":
@@ -160,6 +170,11 @@ if __name__ == "__main__":
 
     def arm_update_startup_mode(m):
         return (update_startup_mode(m)[0], None)
+
+    def arm_update_drive_mode(m):
+        base_input = update_drive_mode(m)
+        arm_input = update_ar_arm(m)
+        return (base_input, arm_input)
 
     mio_demo_config = {
         MobileIOModes.STARTUP: (startup_layout, arm_update_startup_mode),
@@ -208,7 +223,7 @@ if __name__ == "__main__":
         modules = [f"{p[0]}/{p[1]}" for p in pairs]
         raise RuntimeError(f"Could not find modules:\n{'\n'.join(modules)}")
 
-    arm_control = ArmMobileIOControl(arm, gripper)
+    arm_control = ArmMobileIOControl(arm, gripper, traj_duration=0.5)
     arm_control.namespace = "[Arm] "
     arm_control.arm_ik_seed = np.array([0.3, 1.2, 2.2, 2.9, -1.57, 0])
 
@@ -236,18 +251,15 @@ if __name__ == "__main__":
         try:
             inputs = updater.parse_mobile_io_feedback(m)
             if inputs is None:
-                m_update = False
-                base_inputs = update_inputs()
-                arm_inputs = ArmMobileIOInputs()
+                base_inputs = None
+                arm_inputs = None
             else:
-                m_update = True
                 base_inputs = update_inputs(inputs[0])
                 arm_inputs = inputs[1]
+                if base_inputs.quit:
+                    break
 
-            if base_inputs.quit:
-                break
-
-            base_control.update(t, m_update, base_inputs)
+            base_control.update(t, base_inputs)
             arm_control.update(t, arm_inputs)
             base_control.send()
             arm_control.send()
