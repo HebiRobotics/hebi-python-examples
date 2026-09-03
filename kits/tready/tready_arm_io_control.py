@@ -1,207 +1,272 @@
-import sys
 from time import time, sleep
-from os.path import join, dirname
 import datetime
+from os.path import join, dirname, abspath
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
 import hebi
-from hebi.util import create_mobile_io
 
-from kits.arms.ar_control_sm import ArmMobileIOControl, ArmControlState, ArmMobileIOInputs
-from .tready import TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
-from .tready_utils import set_mobile_io_instructions, setup_base, setup_arm_6dof
+from kits.arms.ar_control_sm import ArmMobileIOControl, ArmMobileIOInputs
+
+from .treaded_base_core import (
+    TreadedBase,
+    TreadedBaseConfig,
+    TreadedBaseControl,
+    TreadyInputs,
+    ChassisVelocity,
+)
+
+from .mobile_io_manager import (
+    MobileIOUpdater,
+    MobileIOModes,
+    update_startup_mode,
+)
+
+from .tready_utils import wait_for_mobile_io, try_create_base_group
 
 import typing
+
 if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
 
 
-def setup_mobile_io(m: 'MobileIO'):
-    """Sets up mobileIO interface.
+def update_inputs(base_inputs: "TreadyInputs | None" = None):
+    if base_inputs is None:
+        base_inputs = TreadyInputs()
 
-    Return a function that parses mobileIO feedback into the format
-    expected by the Demo
-    """
+    base_inputs.deploy_safe = True
+    base_inputs.stow_safe = True
+    base_inputs.payload_deployed = False
+    base_inputs.allow_startup = True
+    base_inputs.drive_safe = True
 
-    # MobileIO Button Config
-    reset_pose_btn = 1
-    joined_flipper_btn = 6
-    quit_btn = 8
+    return base_inputs
 
-    slider_flip1 = 3
-    slider_flip2 = 4
-    slider_flip3 = 5
-    slider_flip4 = 6
 
-    joy_fwd = 2
-    joy_rot = 1
+def update_ar_arm(m: "MobileIO"):
+    # Drive buttons, joysticks, and sliders
+    mapping = {
+        "reset_pose_btn": 1,
+        "arm_lock": 3,
+        "gripper": 4,
+    }
 
-    arm_enable = 2
-    arm_lock = 4
-    gripper_close = 5
+    try:
+        # reorder quaternion components
+        rotation = R.from_quat(m.orientation, scalar_first=True).as_matrix()
+    except ValueError as e:
+        print(f"Error getting orientation as matrix: {e}\n{m.orientation}")
+        rotation = np.eye(3)
 
-    # set mobileIO control config
-    m.set_led_color("blue")
-    m.set_snap(slider_flip1, 0)
-    m.set_snap(slider_flip2, 0)
-    m.set_snap(slider_flip3, 0)
-    m.set_snap(slider_flip4, 0)
+    arm_inputs = ArmMobileIOInputs(
+        phone_pos=np.copy(m.position),
+        phone_rot=rotation,
+        lock_toggle=m.get_button_diff(mapping["arm_lock"]) != 0,
+        locked=m.get_button_state(mapping["arm_lock"]) == 0,
+        gripper_closed=m.get_button_state(mapping["gripper"]),
+        home=m.get_button_state(mapping["reset_pose_btn"]),
+    )
 
-    m.set_button_mode(joined_flipper_btn, 1)
-    m.set_button_mode(arm_enable, 1)
-    m.set_button_mode(arm_lock, 1)
-    m.set_button_mode(gripper_close, 1)
+    return arm_inputs
 
-    m.set_button_output(reset_pose_btn, 1)
-    m.set_button_output(quit_btn, 1)
 
-    m.set_button_output(arm_enable, 1)
-    m.set_button_output(arm_lock, 1)
+def update_drive_mode(m: "MobileIO"):
+    # Drive buttons, joysticks, and sliders
+    mapping = {
+        "reset_pose_btn": 1,
+        "torque_btn": 2,
+        "height_up_btn": 5,
+        "recenter_btn": 6,
+        "height_down_btn": 7,
+        "quit_demo_btn": 8,
+        "turn_joy": 1,
+        "forward_joy": 2,
+        "front_left_slider": 3,
+        "front_right_slider": 4,
+        "back_left_slider": 5,
+        "back_right_slider": 6,
+    }
 
-    def parse_mobile_io_feedback(m: 'MobileIO'):
-        should_exit = m.get_button_state(quit_btn)
-        should_reset = m.get_button_state(reset_pose_btn)
-        # Chassis Control
-        aligned_flipper_mode = m.get_button_state(joined_flipper_btn)
-        joy_vel_fwd = m.get_axis_state(joy_fwd)
-        joy_vel_rot = m.get_axis_state(joy_rot)
+    base_inputs = None
 
-        # Flipper Control
-        flip1 = m.get_axis_state(slider_flip1)
-        flip2 = m.get_axis_state(slider_flip2)
-        flip3 = m.get_axis_state(slider_flip3)
-        flip4 = m.get_axis_state(slider_flip4)
+    if m.get_button_state(mapping["quit_demo_btn"]):
+        base_inputs = TreadyInputs(quit=True)
+    elif m.get_button_state(mapping["reset_pose_btn"]):
+        base_inputs = TreadyInputs(
+            home=True,
+            torque_mode=m.get_button_state(mapping["torque_btn"]),
+            torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
+        )
 
-        tready_inputs = TreadyInputs(
-            should_reset,
-            ChassisVelocity(joy_vel_fwd, joy_vel_rot),
-            [flip1, flip2, flip3, flip4],
-            aligned_flipper_mode)
+    elif m.get_button_state(mapping["recenter_btn"]):
+        base_inputs = TreadyInputs(
+            align_flippers=True,
+            torque_mode=m.get_button_state(mapping["torque_btn"]),
+            torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
+        )
+    else:
+        height_up = m.get_button_state(mapping["height_up_btn"])
+        height_down = m.get_button_state(mapping["height_down_btn"])
+        height = height_up - height_down
+        if height != 0:
+            flippers = [-height / 2] * 4
+        else:
+            flippers = [
+                m.get_axis_state(mapping["front_left_slider"]),
+                m.get_axis_state(mapping["front_right_slider"]),
+                m.get_axis_state(mapping["back_left_slider"]),
+                m.get_axis_state(mapping["back_right_slider"]),
+            ]
 
-        try:
-            # reorder quaternion components
-            rotation = R.from_quat(m.orientation, scalar_first=True).as_matrix()
-        except ValueError as e:
-            print(f'Error getting orientation as matrix: {e}\n{m.orientation}')
-            rotation = np.eye(3)
+        base_inputs = TreadyInputs(
+            base_motion=ChassisVelocity(
+                m.get_axis_state(mapping["forward_joy"]),
+                m.get_axis_state(mapping["turn_joy"]),
+            ),
+            flippers=flippers,
+            torque_mode=m.get_button_state(mapping["torque_btn"]),
+            torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
+        )
 
-        arm_inputs = ArmMobileIOInputs(
-            phone_pos=np.copy(m.position),
-            phone_rot=rotation,
-            lock_toggle=m.get_button_state(arm_lock),
-            locked=m.get_button_state(arm_enable),
-            gripper_closed=m.get_button_state(gripper_close))
+    if m.get_button_diff(mapping["torque_btn"]) == 1:
+        axis_vals = [0, -0.5, 1, 1]
+        for i in range(3, 7):
+            if not m.set_snap(i, np.nan):
+                print(f"Failed to set snap for axis {i}")
+            if not m.set_axis_value(i, axis_vals[i - 3]):
+                print(f"Failed to set axis value for axis {i}")
 
-        # return DemoInputs(should_exit, should_reset, tready_inputs, arm_inputs)
-        return tready_inputs, arm_inputs
+    elif m.get_button_diff(mapping["torque_btn"]) == -1:
+        for i in range(3, 7):
+            if not m.set_snap(i, 0):
+                print(f"Failed to set snap for axis {i}")
+        m.set_axis_label(mapping["front_left_slider"], "FL", blocking=False)
+        m.set_axis_label(mapping["front_right_slider"], "FR", blocking=False)
+        m.set_axis_label(mapping["back_left_slider"], "BL", blocking=False)
+        m.set_axis_label(mapping["back_right_slider"], "BR", blocking=False)
 
-    return parse_mobile_io_feedback
+    return base_inputs
 
 
 if __name__ == "__main__":
+    config_dir = join(dirname(abspath(__file__)), "config")
+
+    tready_config = TreadedBaseConfig(
+        hrdf_file=join(config_dir, "hrdf", "Tready.hrdf"),
+        gains_file=join(config_dir, "gains", "smart-tready-gains.xml"),
+        wheel_diameter=0.125,  # m
+        wheel_base=0.285,  # m
+        torso_torque_scale=2.5,  # Nm
+        torque_mode_max=25,  # Nm
+    )
+
+    layout_dir = join(config_dir, "layouts")
+    startup_layout = join(layout_dir, "TreadwardStartupController.json")
+    drive_layout = join(layout_dir, "TreadwardARArmController.json")
+
+    def arm_update_startup_mode(m):
+        return (update_startup_mode(m)[0], None)
+
+    def arm_update_drive_mode(m):
+        base_input = update_drive_mode(m)
+        arm_input = update_ar_arm(m)
+        return (base_input, arm_input)
+
+    mio_demo_config = {
+        MobileIOModes.STARTUP: (startup_layout, arm_update_startup_mode),
+        MobileIOModes.DRIVE: (drive_layout, arm_update_drive_mode),
+    }
 
     lookup = hebi.Lookup()
     sleep(2)
 
-    family = "Tready"
-
-    arm, gripper = setup_arm_6dof(lookup, family)
-    arm_control = ArmMobileIOControl(arm, gripper)
-
-    # Base setup
-    base = setup_base(lookup, family)
-    base_control = TreadyControl(base)
+    base_family = "Tready"
 
     # mobileIO setup
-    phone_name = "mobileIO"
-
-    print('Waiting for mobileIO device to come online...')
-    m = create_mobile_io(lookup, family, phone_name)
-    while m is None:
-        m = create_mobile_io(lookup, family, phone_name)
-        print("Could not find mobileIO device, waiting...")
-        sleep(0.5)
+    print("Looking for mobileIO device...")
+    m = wait_for_mobile_io(lookup, base_family)
 
     print("mobileIO device found.")
-    parse_mobile_feedback = setup_mobile_io(m)
+    m.update()
 
-    def update_mobile_io_cb(m: 'MobileIO'):
-        def cb(controller: TreadyControl, new_state: TreadyControlState):
-            if controller.state == new_state:
-                return
+    # Create base group
+    base_group = try_create_base_group(lookup, base_family)
+    while base_group is None:
+        print(f"Looking for {base_family} modules...")
+        sleep(1)
+        base_group = try_create_base_group(lookup, base_family)
 
-            if new_state is TreadyControlState.HOMING:
-                controller.base.set_color('magenta')
-                msg = ('Robot Homing Sequence\n'
-                       'Please wait...')
-                set_mobile_io_instructions(m, msg)
+    base = TreadedBase(
+        tready_config, base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1
+    )
+    base_control = TreadedBaseControl(base, max_base_speed=0.25)
+    base_control.namespace = "[Base] "
 
-            elif new_state is TreadyControlState.TELEOP:
-                controller.base.clear_color()
-                # Print Instructions
-                instructions = ('Robot Ready to Control\n'
-                                'B1: Reset\n'
-                                'B2: Arm Motion Enable\n'
-                                'B4: Arm Lock\n'
-                                'B5: Close Gripper\n'
-                                'B6: Joined Flipper\n'
-                                'B8 - Quit')
-                set_mobile_io_instructions(m, instructions, color='green')
+    # Create Arm group
+    arm_family = "Arm"
+    config_file = join(config_dir, "tready-arm-A-2240-06G.cfg.yaml")
+    cfg = hebi.config.load_config(config_file)
+    arm = hebi.arm.create_from_config(cfg, lookup)
+    gripper = None  # TODO: Reimplement the old behaviors for gripper loading
+    # arm, gripper = setup_arm_6dof(lookup, arm_family, with_gripper=False)
 
-            elif new_state is TreadyControlState.DISCONNECTED:
-                controller.base.set_color('blue')
+    if arm is None:
+        if len(cfg.families) == 1:
+            families = [cfg.families[0]] * len(cfg.names)
+        else:
+            families = cfg.families
+        pairs = zip(families, cfg.names)
+        modules = [f"{p[0]}/{p[1]}" for p in pairs]
+        raise RuntimeError(f"Could not find modules:\n{'\n'.join(modules)}")
 
-            elif new_state is TreadyControlState.EXIT:
-                print("TRANSITIONING TO EXIT")
-                controller.base.set_color("red")
+    arm_control = ArmMobileIOControl(arm, gripper, traj_duration=0.5)
+    arm_control.namespace = "[Arm] "
+    arm_control.arm_ik_seed = np.array([0.3, 1.2, 2.2, 2.9, -1.57, 0])
 
-                # unset mobileIO control config
-                m.set_button_mode(6, 0)
-                m.set_button_output(1, 0)
-                m.set_button_output(8, 0)
-                set_mobile_io_instructions(m, 'Demo Stopped.', color='red')
-        return cb
+    home_orientation = R.from_euler("z", np.pi / 2) * R.from_euler("x", np.pi)
+    arm_control.set_arm_home(np.array([0.5, 0.0, 0.0]), home_orientation.as_matrix())
 
-    base_control._transition_handlers.append(update_mobile_io_cb(m))
+    updater = MobileIOUpdater(m, mio_demo_config)
+    base_control._transition_handlers.append(updater.base_transition_handler)
 
-    #######################
-    ## Main Control Loop ##
-    #######################
+    base_control._update_handlers.append(updater.update_voltage_reading)
+    base_control._update_handlers.append(updater.update_torque_mode)
+    base_control._update_handlers.append(updater.update_startup_msg_base)
 
+    # can enable start logging here
     logging = True
 
     if logging:
-        tready_log_dir = join(dirname(__file__), 'logs')
+        tready_log_dir = join(dirname(__file__), "logs")
         now = datetime.datetime.now()
-        if arm:
-            arm.group.start_log(tready_log_dir, f'arm_{now:%Y-%m-%d-%H:%M:%S}')
-        base.group.start_log(tready_log_dir, f'base_{now:%Y-%m-%d-%H:%M:%S}')
+        arm.group.start_log(tready_log_dir, f"arm_{now:%Y-%m-%d-%H:%M:%S}")
+        base.group.start_log(tready_log_dir, f"base_{now:%Y-%m-%d-%H:%M:%S}")
 
-    m.set_led_color('blue')
     while base_control.running and arm_control.running:
         t = time()
         try:
-            base_inputs, arm_inputs = parse_mobile_feedback(m)
+            inputs = updater.parse_mobile_io_feedback(m)
+            if inputs is None:
+                base_inputs = None
+                arm_inputs = None
+            else:
+                base_inputs = update_inputs(inputs[0])
+                arm_inputs = inputs[1]
+                if base_inputs.quit:
+                    break
+
             base_control.update(t, base_inputs)
             arm_control.update(t, arm_inputs)
+            base_control.send()
+            arm_control.send()
+
         except KeyboardInterrupt:
-            base_control.transition_to(t, TreadyControlState.EXIT)
-            arm_control.transition_to(t, ArmControlState.EXIT)
-            m.set_led_color('red')
+            break
 
-        if m.get_button_state(4):
-            base_control.transition_to(t, TreadyControlState.EXIT)
-            arm_control.transition_to(t, ArmControlState.EXIT)
-            m.set_led_color('red')
-
-        base_control.send()
-        arm_control.send()
+    base_control.stop()
+    arm_control.stop()
 
     if logging:
-        if arm:
-            arm.group.stop_log()
         base.group.stop_log()
-
-    sys.exit(0)
+        arm.group.stop_log()

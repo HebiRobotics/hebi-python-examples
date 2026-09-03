@@ -8,9 +8,9 @@ import hebi
 from hebi.util import create_mobile_io
 
 DEMOS = {
-    'Leader-Follower Ctrl': 'advanced.demos.MAPS_control.MAPS_input_device_w_gripper_example',
-    'Tready MAPS Control': 'kits.tready.tready_leader_follower_control',
-    'Tready Joystick Arm': 'kits.tready.tready_arm_joystick_control',
+    "Leader-Follower Ctrl": "advanced.demos.MAPS_control.MAPS_input_device_w_gripper_example",
+    "Tready MAPS Control": "kits.tready.tready_leader_follower_control",
+    "Tready Joystick Arm": "kits.tready.tready_arm_joystick_control",
 }
 
 
@@ -19,16 +19,16 @@ def launch_demo(demo):
         print(f"ERROR: No demo #{demo} set, cannot launch!")
         return
 
-    print(f'Launching {DEMOS[demo]}')
+    print(f"Launching {DEMOS[demo]}")
     root = os.path.split(os.path.abspath(__file__))[0]
-    kits_dir = root.split('kits')[0]
+    kits_dir = root.split("kits")[0]
     os.chdir(kits_dir)
-    subprocess.check_output(['python3', '-m', f'{DEMOS[demo]}'])
+    subprocess.check_output(["python3", "-m", f"{DEMOS[demo]}"])
 
 
 def select_demo(mobile_io):
     for i, k in enumerate(DEMOS.keys()):
-        if m.get_button_state(i + 1):
+        if mobile_io.get_button_state(i + 1):
             return k
     else:
         return None
@@ -44,7 +44,7 @@ if __name__ == "__main__":
 
     # Outer loop, create mobileIO, set text
     while True:
-        print('Waiting for mobileIO device to come online...')
+        print("Waiting for mobileIO device to come online...")
         m = create_mobile_io(lookup, family, phone_name)
         while m is None:
             m = create_mobile_io(lookup, family, phone_name)
@@ -54,8 +54,8 @@ if __name__ == "__main__":
         print("mobileIO device found.")
         # clear buttons before demo selection
         m.resetUI()
-        demos_text = [f'B{i+1}: {k}\n' for i, k in enumerate(DEMOS.keys())]
-        m.add_text(''.join(demos_text))
+        demos_text = [f"B{i + 1}: {k}\n" for i, k in enumerate(DEMOS.keys())]
+        m.add_text("".join(demos_text))
 
         #######################
         ## Demo Select Loop ##
@@ -68,6 +68,6 @@ if __name__ == "__main__":
                     del m  # does this actually delete the group?
                     launch_demo(next_demo)  # blocking
                     break  # break to outer loop when demo done
-        print('here?')
+        print("here?")
 
     sys.exit(0)

@@ -31,7 +31,7 @@ class WheelieDrive:
             self.base_command.velocity = v
 
             self.base_command.led.color = self.color
-            #print(f"P: {p}")
+            # print(f"P: {p}")
             print(f"V: {v}")
             self.group.send_command(self.base_command)
 
@@ -78,25 +78,26 @@ class WheelieDrive:
 
 
 if __name__ == "__main__":
-
     lookup = hebi.Lookup()
     sleep(2)
 
     # Base setup
     base_family = "Chevron"
-    module_names = ['W1_front-left', 'W2_front-right', 'W3_rear-left', 'W4_rear-right']
+    module_names = ["W1_front-left", "W2_front-right", "W3_rear-left", "W4_rear-right"]
 
     # Create group
     group = lookup.get_group_from_names([base_family], module_names)
     if group is None:
-        raise RuntimeError(f"Could not find Wheelie modules: {module_names} in family '{base_family}'")
+        raise RuntimeError(
+            f"Could not find Wheelie modules: {module_names} in family '{base_family}'"
+        )
 
     base = DiffDrive(group)
 
-    print('Waiting for Mobile IO device to come online...')
+    print("Waiting for Mobile IO device to come online...")
     m = create_mobile_io(lookup, base_family, phone_name)
     while m is None:
-        print('Looking for MobileIO...')
+        print("Looking for MobileIO...")
         time.sleep(1)
         m = create_mobile_io(lookup, base_family)
     m.set_led_color("blue")

@@ -10,8 +10,6 @@ It is expected that you have a `hebi-py` version of at least `2.2.0` for this re
 
 **Note that this revision does not support Python 2!**
 
-Additionally, some of the kits examples require the [PySDL2 Package](https://pypi.org/project/PySDL2/). You will need the `SDL2` shared library for this to work. For Windows, this library is included for you in this repository.
-
 ### Nightly API
 
 If you want access to the newest API, you can download one of our nightly builds by doing:

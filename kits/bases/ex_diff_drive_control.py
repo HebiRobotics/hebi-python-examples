@@ -14,7 +14,7 @@ def load_gains(group, gains_file):
     try:
         gains_command.read_gains(gains_file)
     except Exception as e:
-        print(f'Warning - Could not load gains: {e}')
+        print(f"Warning - Could not load gains: {e}")
         return
 
     # Send gains multiple times
@@ -47,7 +47,7 @@ class DiffDrive:
             self.base_command.velocity = v
 
             self.base_command.led.color = self.color
-            #print(f"P: {p}")
+            # print(f"P: {p}")
             print(f"V: {v}")
             self.group.send_command(self.base_command)
 
@@ -91,18 +91,19 @@ class DiffDrive:
 
 
 if __name__ == "__main__":
-
     lookup = hebi.Lookup()
     sleep(2)
 
     # Base setup
     base_family = "HEBI"
-    module_names = ['W1_left', 'W2_right']
+    module_names = ["W1_left", "W2_right"]
 
     # Create group
     group = lookup.get_group_from_names([base_family], module_names)
     if group is None:
-        raise RuntimeError(f"Could not find Diff Drive modules: {module_names} in family '{base_family}'")
+        raise RuntimeError(
+            f"Could not find Diff Drive modules: {module_names} in family '{base_family}'"
+        )
     load_gains(group, "gains/diff_drive.xml")
 
     base = DiffDrive(group)
@@ -110,7 +111,7 @@ if __name__ == "__main__":
     # mobileIO setup
     phone_name = "mobileIO"
 
-    print('Waiting for Mobile IO device to come online...')
+    print("Waiting for Mobile IO device to come online...")
     m = create_mobile_io(lookup, base_family, phone_name)
     if m is None:
         raise RuntimeError("Could not find Mobile IO device")

@@ -36,13 +36,13 @@ def update_inputs(base_inputs: "TreadyInputs | None" = None):
 if __name__ == "__main__":
     config_dir = join(dirname(abspath(__file__)), "config")
 
-    tready_config = TreadedBaseConfig(
-        hrdf_file=join(config_dir, "hrdf", "Tready.hrdf"),
-        gains_file=join(config_dir, "gains", "smart-tready-gains.xml"),
-        wheel_diameter=0.125,  # m
-        wheel_base=0.285,  # m
-        torso_torque_scale=2.5,  # Nm
-        torque_mode_max=25,  # Nm
+    treadward_config = TreadedBaseConfig(
+        hrdf_file=join(config_dir, "hrdf", "Treadward.hrdf"),
+        gains_file=join(config_dir, "gains", "smart-treadward-gains.xml"),
+        wheel_diameter=0.175,  # m
+        wheel_base=0.650,  # m
+        torso_torque_scale=1.0,  # Nm
+        torque_mode_max=200,  # Nm
     )
 
     layout_dir = join(config_dir, "layouts")
@@ -57,8 +57,9 @@ if __name__ == "__main__":
     lookup = hebi.Lookup()
     sleep(2)
 
-    family = "Tready"
+    family = "Treadward"
 
+    # mobileIO setup
     m = wait_for_mobile_io(lookup, family)
 
     print("mobileIO device found.")
@@ -72,9 +73,9 @@ if __name__ == "__main__":
         base_group = try_create_base_group(lookup, family)
 
     base = TreadedBase(
-        tready_config, base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1
+        treadward_config, base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1
     )
-    base_control = TreadedBaseControl(base, max_base_speed=0.25)
+    base_control = TreadedBaseControl(base, max_base_speed=0.60)
 
     updater = MobileIOUpdater(m, mio_demo_config)
     base_control._transition_handlers.append(updater.base_transition_handler)

@@ -11,7 +11,7 @@ from hebi.util import create_mobile_io
 import typing
 if typing.TYPE_CHECKING:
     from typing import Sequence, Optional
-    import numpy.typing as npt
+    from numpy.typing import NDArray
     from hebi._internal.mobile_io import MobileIO
 
 
@@ -26,13 +26,16 @@ class ArmControlState(Enum):
 class ArmJoystickInputs:
     def __init__(self, home: bool, delta_xyz, delta_rot_xyz, gripper_closed: bool):
         self.home = home
-        self.delta_xyz: 'npt.NDArray[np.float64]' = np.array(delta_xyz, dtype=np.float64)
-        self.delta_rot_xyz: 'npt.NDArray[np.float64]' = np.array(delta_rot_xyz, dtype=np.float64)
+        self.delta_xyz: 'NDArray[np.float64]' = np.array(delta_xyz, dtype=np.float64)
+        self.delta_rot_xyz: 'NDArray[np.float64]' = np.array(delta_rot_xyz, dtype=np.float64)
         self.gripper_closed = gripper_closed
 
 
 class ArmJoystickControl:
-    def __init__(self, arm: hebi.arm.Arm, home_pose: 'Sequence[float] | npt.NDArray[np.float64]', homing_time: float = 5.0, shoulder_flip_angle=-np.pi / 2, joint_limits=None, use_gripper=False):
+    def __init__(self, arm: hebi.arm.Arm, home_pose: 'Sequence[float] | NDArray[np.float64]', homing_time: float = 5.0, shoulder_flip_angle=-np.pi / 2, joint_limits=None, use_gripper=False):
+
+        self.namespace = ''
+
         self.state = ArmControlState.STARTUP
         self.arm = arm
         self.use_gripper = use_gripper
@@ -52,6 +55,8 @@ class ArmJoystickControl:
         self.rot_curr = np.empty((3, 3))
         self.joint_target = arm.last_feedback.position_command
 
+        self.last_cmd_t = time()
+
     @property
     def running(self):
         return self.state is not self.state.EXIT
@@ -66,15 +71,15 @@ class ArmJoystickControl:
             return
 
         if demo_input is None:
-            if t_now - self.mobile_last_fbk_t > 1.0 and self.state is not self.state.DISCONNECTED:
-                print("mobileIO timeout, disabling motion")
+            if t_now - self.last_cmd_t > 1.0 and self.state is not self.state.DISCONNECTED:
+                print(self.namespace + "mobileIO timeout, disabling motion")
                 self.transition_to(t_now, self.state.DISCONNECTED)
             return
 
-        self.mobile_last_fbk_t = t_now
+        self.last_cmd_t = t_now
 
         if self.state is self.state.DISCONNECTED:
-            self.mobile_last_fbk_t = t_now
+            self.last_cmd_t = t_now
             self.transition_to(t_now, self.state.TELEOP)
 
         elif self.state is self.state.HOMING:
@@ -106,19 +111,19 @@ class ArmJoystickControl:
             return
 
         if state is self.state.HOMING:
-            print("TRANSITIONING TO HOMING")
+            print(self.namespace + "TRANSITIONING TO HOMING")
             g = hebi.arm.Goal(self.arm.size)
             g.add_waypoint(t=self.homing_time, position=self.arm_home)
             self.arm.set_goal(g)
 
         elif state is self.state.TELEOP:
-            print("TRANSITIONING TO TELEOP")
+            print(self.namespace + "TRANSITIONING TO TELEOP")
 
         elif state is self.state.DISCONNECTED:
-            print("TRANSITIONING TO DISCONNECTED")
+            print(self.namespace + "TRANSITIONING TO DISCONNECTED")
 
         elif state is self.state.EXIT:
-            print("TRANSITIONING TO EXIT")
+            print(self.namespace + "TRANSITIONING TO EXIT")
 
         self.state = state
 
@@ -127,13 +132,13 @@ class ArmJoystickControl:
         pos_curr = self.arm.last_feedback.position_command
 
         if np.any(np.isnan(pos_curr)):
-            print('No position command, falling back to feedback position')
+            print(self.namespace + 'No position command, falling back to feedback position')
             pos_curr = self.arm.last_feedback.position
 
         try:
             self.arm.FK(pos_curr, xyz_out=self.xyz_curr, orientation_out=self.rot_curr)
         except ValueError:
-            print(f'ERROR: Cannot compute FK with input position: {pos_curr}')
+            print(self.namespace + f'ERROR: Cannot compute FK with input position: {pos_curr}')
             exit()
 
         arm_xyz_target = self.xyz_curr + arm_inputs.delta_xyz
@@ -166,6 +171,9 @@ class ArmJoystickControl:
 
         arm_goal.add_waypoint(position=self.joint_target)
         return arm_goal
+
+    def stop(self):
+        self.transition_to(time(), self.state.EXIT)
 
 
 def setup_mobile_io(m: 'MobileIO'):
@@ -232,25 +240,14 @@ if __name__ == "__main__":
     sleep(2)
 
     # Arm setup
-    arm_family = "Arm"
-    module_names = ['J1_base', 'J2_shoulder', 'J3_elbow', 'J4_wrist1', 'J5_wrist2', 'J6_wrist3']
-    hrdf_file = "config/hrdf/A-2580-06.hrdf"
-    gains_file = "config/gains/A-2580-06.xml"
-
-    root_dir = os.path.abspath(os.path.dirname(__file__))
-    hrdf_file = os.path.join(root_dir, hrdf_file)
-    gains_file = os.path.join(root_dir, gains_file)
-
-    # Create Arm object
-    arm = hebi.arm.create([arm_family],
-                          names=module_names,
-                          hrdf_file=hrdf_file,
-                          lookup=lookup)
-    arm.load_gains(gains_file)
+    cfg = hebi.config.load_config('./config/A-2580-06.cfg.yaml')
+    arm = hebi.arm.create_from_config(cfg, lookup)
+    arm_family = cfg.families[0]
 
     # Check if the gripper is disabled
     use_gripper = not args.no_gripper
     if use_gripper:
+        root_dir = os.path.abspath(os.path.dirname(__file__))
         gripper_family = arm_family
         gripper_name = 'gripperSpool'
 

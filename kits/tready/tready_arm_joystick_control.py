@@ -1,197 +1,284 @@
-#! /usr/bin/env python3
-
-import os
-import hebi
-import numpy as np
 from time import time, sleep
 import datetime
-from hebi.util import create_mobile_io
+from os.path import join, dirname, abspath
 
-from kits.arms.joystick_control_sm import ArmJoystickControl, ArmControlState, ArmJoystickInputs
-from .tready import TreadedBase, TreadyControl, TreadyControlState, TreadyInputs, ChassisVelocity
-from .tready_utils import setup_arm_6dof, setup_arm_7dof
+import numpy as np
+import hebi
+
+from kits.arms.joystick_control_sm import (
+    ArmJoystickControl,
+    ArmJoystickInputs,
+)
+from .treaded_base_core import (
+    TreadedBase,
+    TreadedBaseConfig,
+    TreadedBaseControl,
+    TreadyInputs,
+    ChassisVelocity,
+)
+
+from .mobile_io_manager import (
+    MobileIOUpdater,
+    MobileIOModes,
+    update_startup_mode,
+)
+
+from .tready_utils import wait_for_mobile_io, try_create_base_group
+
 
 import typing
+
 if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
 
 
-def setup_mobile_io(m: 'MobileIO'):
-    m.resetUI()
-    m.set_button_label(1, '⟲', blocking=False)
-    m.set_button_label(2, '', blocking=False)
-    m.set_button_label(3, '', blocking=False)
-    m.set_button_label(4, 'Quit', blocking=False)
-    m.set_button_label(5, 'arm', blocking=False)
-    m.set_button_mode(5, 1)
-    m.set_button_label(6, '\u21E7', blocking=False)
-    m.set_button_label(7, 'grip', blocking=False)
-    m.set_button_mode(7, 1)
-    m.set_button_label(8, '\u21E9', blocking=False)
+def update_inputs(base_inputs: "TreadyInputs | None" = None):
+    if base_inputs is None:
+        base_inputs = TreadyInputs()
 
-    m.set_axis_label(4, '', blocking=False)
-    m.set_axis_label(5, 'front', blocking=False)
-    m.set_snap(5, 0)
-    m.set_axis_label(6, 'rear', blocking=False)
-    m.set_snap(6, 0)
+    base_inputs.deploy_safe = True
+    base_inputs.stow_safe = True
+    base_inputs.payload_deployed = False
+    base_inputs.allow_startup = True
+    base_inputs.drive_safe = True
 
-    m.set_axis_label(1, '')
-    m.set_axis_label(7, '')
-    if m.get_button_state(5):
-        m.set_axis_label(2, 'rotate')
-        m.set_axis_label(8, 'translate')
-        m.set_axis_label(3, 'wrist', blocking=False)
-        m.set_snap(3, 0)
-    else:
-        m.set_axis_label(2, 'drive')
-        m.set_axis_label(8, 'translate')
-        m.set_axis_label(3, '', blocking=False)
-        m.set_snap(3, np.nan)
+    return base_inputs
 
 
-def parse_mobile_feedback(m: 'MobileIO'):
-    if not m.update(0.0):
-        return None, None
+def update_arm_labels(m: "MobileIO"):
+    mapping = {
+        "arm_layer": 3,
+        "right_joystick": 2,
+        "wrist_slider": 5,
+    }
+    layer_change = m.get_button_diff(mapping["arm_layer"])
 
-    home = m.get_button_state(1)
+    if layer_change == 1:
+        m.set_axis_label(mapping["right_joystick"], "rotate")
+        m.set_axis_label(mapping["wrist_slider"], "wrist", blocking=False)
+        m.set_snap(mapping["wrist_slider"], 0)
+    elif layer_change == -1:
+        m.set_axis_label(mapping["right_joystick"], "drive")
+        m.set_axis_label(mapping["wrist_slider"], "", blocking=False)
+        m.set_snap(mapping["wrist_slider"], np.nan)
 
-    if m.get_button_diff(5) == 1:
-        m.set_axis_label(2, 'rotate')
-        m.set_axis_label(8, 'translate')
-        m.set_axis_label(3, 'wrist', blocking=False)
-        m.set_snap(3, 0)
-    elif m.get_button_diff(5) == -1:
-        m.set_axis_label(2, 'drive')
-        m.set_axis_label(8, 'translate')
-        m.set_axis_label(3, '', blocking=False)
-        m.set_snap(3, np.nan)
 
-    arm_dx = 0.25 * m.get_axis_state(8)
-    arm_dy = -0.25 * m.get_axis_state(7)
+def update_joystick_arm(m: "MobileIO"):
+    # Drive buttons, joysticks, and sliders
+    mapping = {
+        "reset_pose_btn": 1,
+        "arm_mode": 3,
+        "gripper": 4,
+        "arm_drx_slider": 2,
+        "arm_dry_slider": 1,
+        "arm_drz_slider": 5,
+        "arm_dx_slider": 8,
+        "arm_dy_slider": 7,
+        "arm_dz_slider": 6,
+    }
 
-    arm_dz = 0.0
-    if m.get_button_state(6):
-        arm_dz = 0.1
-    elif m.get_button_state(8):
-        arm_dz = -0.1
+    update_arm_labels(m)
 
-    if m.get_button_state(5):
-        base_x = 0.0
-        base_rz = 0.0
+    arm_dx = 0.2 * m.get_axis_state(mapping["arm_dx_slider"])
+    arm_dy = -0.2 * m.get_axis_state(mapping["arm_dy_slider"])
+    arm_dz = 0.2 * m.get_axis_state(mapping["arm_dz_slider"])
 
-        arm_drx = 0.5 * m.get_axis_state(1)
-        arm_dry = -0.5 * m.get_axis_state(2)
-        arm_drz = 0.75 * m.get_axis_state(3)
+    if m.get_button_state(mapping["arm_mode"]):
+        arm_drx = 0.5 * m.get_axis_state(mapping["arm_drx_slider"])
+        arm_dry = -0.5 * m.get_axis_state(mapping["arm_dry_slider"])
+        arm_drz = 0.75 * m.get_axis_state(mapping["arm_drz_slider"])
 
     else:
-        base_x = m.get_axis_state(2)
-        base_rz = m.get_axis_state(1) * 2.0
-
         arm_drx = 0.0
         arm_dry = 0.0
         arm_drz = 0.0
 
-    gripper_closed = m.get_button_state(7)
-
-    flipper1 = m.get_axis_state(5)
-    flipper4 = m.get_axis_state(6)
-
-    base_inputs = TreadyInputs(
-        home,
-        ChassisVelocity(base_x, base_rz),
-        [flipper1, flipper1, flipper4, flipper4],
-        True)
-
     arm_inputs = ArmJoystickInputs(
-        home,
-        [arm_dx, arm_dy, arm_dz],
-        [arm_drx, arm_dry, arm_drz],
-        gripper_closed=gripper_closed)
+        home=m.get_button_state(mapping["reset_pose_btn"]),
+        delta_xyz=[arm_dx, arm_dy, arm_dz],
+        delta_rot_xyz=[arm_drx, arm_dry, arm_drz],
+        gripper_closed=m.get_button_state(mapping["gripper"]),
+    )
 
-    return base_inputs, arm_inputs
+    return arm_inputs
+
+
+def update_drive_mode(m: "MobileIO"):
+    # Drive buttons, joysticks, and sliders
+    mapping = {
+        "reset_pose_btn": 1,
+        "arm_mode": 3,
+        "height_up_btn": 5,
+        "recenter_btn": 6,
+        "height_down_btn": 7,
+        "quit_demo_btn": 8,
+        "turn_joy": 1,
+        "forward_joy": 2,
+        "front_slider": 3,
+        "back_slider": 4,
+    }
+
+    base_inputs = None
+
+    if m.get_button_state(mapping["quit_demo_btn"]):
+        base_inputs = TreadyInputs(quit=True)
+    elif m.get_button_state(mapping["reset_pose_btn"]):
+        base_inputs = TreadyInputs(
+            home=True,
+        )
+
+    elif m.get_button_state(mapping["recenter_btn"]):
+        base_inputs = TreadyInputs(
+            align_flippers=True,
+        )
+    else:
+        height_up = m.get_button_state(mapping["height_up_btn"])
+        height_down = m.get_button_state(mapping["height_down_btn"])
+        height = height_up - height_down
+        if height != 0:
+            flippers = [-height / 2] * 4
+        else:
+            flippers = [
+                m.get_axis_state(mapping["front_slider"]),
+                m.get_axis_state(mapping["front_slider"]),
+                m.get_axis_state(mapping["back_slider"]),
+                m.get_axis_state(mapping["back_slider"]),
+            ]
+
+        if m.get_button_state(mapping["arm_mode"]) == 0:
+            base_inputs = TreadyInputs(
+                base_motion=ChassisVelocity(
+                    m.get_axis_state(mapping["forward_joy"]),
+                    m.get_axis_state(mapping["turn_joy"]),
+                ),
+                flippers=flippers,
+            )
+        else:
+            base_inputs = TreadyInputs(
+                flippers=flippers,
+            )
+
+    return base_inputs
 
 
 if __name__ == "__main__":
+    config_dir = join(dirname(abspath(__file__)), "config")
+
+    tready_config = TreadedBaseConfig(
+        hrdf_file=join(config_dir, "hrdf", "Tready.hrdf"),
+        gains_file=join(config_dir, "gains", "smart-tready-gains.xml"),
+        wheel_diameter=0.125,  # m
+        wheel_base=0.285,  # m
+        torso_torque_scale=2.5,  # Nm
+        torque_mode_max=25,  # Nm
+    )
+
+    layout_dir = join(config_dir, "layouts")
+    startup_layout = join(layout_dir, "TreadwardStartupController.json")
+    drive_layout = join(layout_dir, "TreadwardJoystickArmController.json")
+
+    def arm_update_startup_mode(m):
+        return (update_startup_mode(m)[0], None)
+
+    def arm_update_drive_mode(m):
+        base_input = update_drive_mode(m)
+        arm_input = update_joystick_arm(m)
+        return (base_input, arm_input)
+
+    mio_demo_config = {
+        MobileIOModes.STARTUP: (startup_layout, arm_update_startup_mode),
+        MobileIOModes.DRIVE: (drive_layout, arm_update_drive_mode),
+    }
+
     lookup = hebi.Lookup()
     sleep(2)
 
-    arm = setup_arm_7dof(lookup, 'Arm')
-    joint_limits = np.empty((7, 2))
-    joint_limits[:, 0] = -np.inf
-    joint_limits[:, 1] = np.inf
+    base_family = "Tready"
 
-    # base limits [-2, 2] (radians)
-    joint_limits[0, :] = [-2.0, 2.0]
-    # shoulder limits [-2, inf]
-    joint_limits[1, 0] = -2.0
+    # mobileIO setup
+    print("Looking for mobileIO device...")
+    m = wait_for_mobile_io(lookup, base_family)
 
-    arm_control = ArmJoystickControl(arm,
-                                     [0.0, -2.0, 0.0, -0.5, -1.5, 0.2, 0.0],
-                                     homing_time=7.0,
-                                     joint_limits=joint_limits)
-
-    flipper_names = [f'T{n+1}_J1_flipper' for n in range(4)]
-    wheel_names = [f'T{n+1}_J2_track' for n in range(4)]
+    print("mobileIO device found.")
+    m.update()
 
     # Create base group
-    base_group = lookup.get_group_from_names('Tready', wheel_names + flipper_names)
+    base_group = try_create_base_group(lookup, base_family)
     while base_group is None:
-        print('Looking for Tready modules...')
+        print(f"Looking for {base_family} modules...")
         sleep(1)
-        base_group = lookup.get_group_from_names('Tready', wheel_names + flipper_names)
+        base_group = try_create_base_group(lookup, base_family)
 
-    base = TreadedBase(base_group, 0.25, 0.33)
-    base_control = TreadyControl(base)
+    base = TreadedBase(
+        tready_config, base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1
+    )
+    base_control = TreadedBaseControl(base, max_base_speed=0.25)
+    base_control.namespace = "[Base] "
 
-    # Setup MobileIO
-    print('Looking for Mobile IO...')
-    m = create_mobile_io(lookup, 'Tready')
-    while m is None:
-        print('Waiting for Mobile IO device to come online...')
-        sleep(1)
-        m = create_mobile_io(lookup, 'Tready')
+    # Create Arm group
+    arm_family = "Arm"
+    config_file = join(config_dir, "tready-arm-A-2240-06G.cfg.yaml")
+    cfg = hebi.config.load_config(config_file)
+    arm = hebi.arm.create_from_config(cfg, lookup)
+    gripper = None  # TODO: Reimplement the old behaviors for gripper loading
+    # arm, gripper = setup_arm_6dof(lookup, arm_family, with_gripper=False)
 
-    m.update()
-    setup_mobile_io(m)
+    if arm is None:
+        if len(cfg.families) == 1:
+            families = [cfg.families[0]] * len(cfg.names)
+        else:
+            families = cfg.families
+        pairs = zip(families, cfg.names)
+        modules = [f"{p[0]}/{p[1]}" for p in pairs]
+        raise RuntimeError(f"Could not find modules:\n{'\n'.join(modules)}")
 
-    def update_mobile_ui(controller: TreadyControl, new_state: TreadyControlState):
-        if controller.state == TreadyControlState.DISCONNECTED and new_state == TreadyControlState.TELEOP:
-            setup_mobile_io(m)
+    home_pose = np.array([0.3, 1.2, 2.2, 2.9, -1.57, 0])
+    arm_control = ArmJoystickControl(
+        arm,
+        home_pose,
+        homing_time=7.0,
+    )
+    arm_control.namespace = "[Arm] "
 
-    base_control._transition_handlers.append(update_mobile_ui)
+    updater = MobileIOUpdater(m, mio_demo_config)
+    base_control._transition_handlers.append(updater.base_transition_handler)
 
-    #######################
-    ## Main Control Loop ##
-    #######################
+    base_control._update_handlers.append(updater.update_voltage_reading)
+    base_control._update_handlers.append(updater.update_startup_msg_base)
 
+    # can enable start logging here
     logging = True
 
     if logging:
-        tready_dir = os.path.dirname(__file__)
+        tready_log_dir = join(dirname(__file__), "logs")
         now = datetime.datetime.now()
-        arm.group.start_log(os.path.join(tready_dir, 'logs'), f'arm_{now:%Y-%m-%d-%H:%M:%S}')
-        base.group.start_log(os.path.join(tready_dir, 'logs'), f'base_{now:%Y-%m-%d-%H:%M:%S}')
+        arm.group.start_log(tready_log_dir, f"arm_{now:%Y-%m-%d-%H:%M:%S}")
+        base.group.start_log(tready_log_dir, f"base_{now:%Y-%m-%d-%H:%M:%S}")
 
-    m.set_led_color('blue')
     while base_control.running and arm_control.running:
         t = time()
         try:
-            base_inputs, arm_inputs = parse_mobile_feedback(m)
+            inputs = updater.parse_mobile_io_feedback(m)
+            if inputs is None:
+                base_inputs = None
+                arm_inputs = None
+            else:
+                base_inputs = update_inputs(inputs[0])
+                arm_inputs = inputs[1]
+                if base_inputs.quit:
+                    break
+
             base_control.update(t, base_inputs)
             arm_control.update(t, arm_inputs)
+            base_control.send()
+            arm_control.send()
+
         except KeyboardInterrupt:
-            base_control.transition_to(t, TreadyControlState.EXIT)
-            arm_control.transition_to(t, ArmControlState.EXIT)
-            m.set_led_color('red')
+            break
 
-        if m.get_button_state(4):
-            base_control.transition_to(t, TreadyControlState.EXIT)
-            arm_control.transition_to(t, ArmControlState.EXIT)
-            m.set_led_color('red')
-
-        base_control.send()
-        arm_control.send()
+    base_control.stop()
+    arm_control.stop()
 
     if logging:
-        arm.group.stop_log()
         base.group.stop_log()
+        arm.group.stop_log()

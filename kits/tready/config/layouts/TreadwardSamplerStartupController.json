@@ -1,0 +1,69 @@
+[
+    {
+        "id": "b1",
+        "channels": [
+            "b1"
+        ],
+        "type": "button",
+        "x": -0.94,
+        "y": -0.92,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "Override Base"
+            ],
+            "mode": "toggle"
+        }
+    },
+    {
+        "id": "b2",
+        "channels": [
+            "b2"
+        ],
+        "type": "button",
+        "x": -0.55,
+        "y": -0.92,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "Override Payload"
+            ],
+            "mode": "toggle"
+        }
+    },
+    {
+        "id": "b8",
+        "channels": [
+            "b8"
+        ],
+        "type": "button",
+        "x": 0.94,
+        "y": -0.5,
+        "width": 0.15,
+        "height": 0.15,
+        "parameters": {
+            "text": [
+                "❌"
+            ],
+            "mode": "momentary"
+        }
+    },
+    {
+        "id": "textbox",
+        "channels": [
+            "text1"
+        ],
+        "type": "text display",
+        "x": 0.0,
+        "y": -0.9,
+        "width": 0.28,
+        "height": 0.5,
+        "parameters": {
+            "text": [
+                ""
+            ]
+        }
+    }
+]
