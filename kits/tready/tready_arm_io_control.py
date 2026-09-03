@@ -52,9 +52,6 @@ def update_ar_arm(m: "MobileIO"):
         "gripper": 4,
     }
 
-    if m.get_button_state(mapping["reset_pose_btn"]):
-        user_home = True
-
     try:
         # reorder quaternion components
         rotation = R.from_quat(m.orientation, scalar_first=True).as_matrix()
@@ -68,7 +65,7 @@ def update_ar_arm(m: "MobileIO"):
         lock_toggle=m.get_button_diff(mapping["arm_lock"]) != 0,
         locked=m.get_button_state(mapping["arm_lock"]) == 0,
         gripper_closed=m.get_button_state(mapping["gripper"]),
-        home=user_home,
+        home=m.get_button_state(mapping["reset_pose_btn"]),
     )
 
     return arm_inputs

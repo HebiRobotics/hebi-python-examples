@@ -165,7 +165,7 @@
         "height": 0.5,
         "parameters": {
             "text": [
-                "FL"
+                "Front"
             ],
             "snap": 0
         }
@@ -182,7 +182,7 @@
         "height": 0.5,
         "parameters": {
             "text": [
-                "FR"
+                "Rear"
             ],
             "snap": 0
         }
@@ -199,7 +199,7 @@
         "height": 0.5,
         "parameters": {
             "text": [
-                "BL"
+                "Wrist"
             ],
             "snap": 0
         }
@@ -216,9 +216,27 @@
         "height": 0.5,
         "parameters": {
             "text": [
-                "BR"
+                "Z"
             ],
             "snap": 0
+        }
+    },
+    {
+        "id": "right",
+        "channels": [
+            "a7",
+            "a8"
+        ],
+        "type": "joystick",
+        "x": 0.9,
+        "y": 0.72,
+        "width": 0.18,
+        "height": 0.22,
+        "parameters": {
+            "text": [
+                "",
+                "Translate"
+            ]
         }
     },
     {

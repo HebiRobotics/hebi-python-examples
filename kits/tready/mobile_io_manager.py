@@ -96,9 +96,9 @@ class MobileIOUpdater:
         elif new_state is TreadyControlState.TELEOP:
             controller.base.clear_color()
             self.io_mode = MobileIOModes.DRIVE
-            self.m.set_axis_label(
-                6, "BR"
-            )  # TODO: this should not be needed but send layout has a bug
+            # self.m.set_axis_label(
+            #    6, "BR"
+            # )  # TODO: this should not be needed but send layout has a bug
             self.base_msg = "Robot Ready to Control"
             self.color = "green"
 
@@ -140,18 +140,6 @@ class MobileIOUpdater:
     ):
 
         if controller.state is TreadyControlState.TELEOP:
-            """
-            if self.m.get_button_diff(2) == 1:
-                self.m.set_axis_label(3, 'Torque', blocking=False)
-                self.m.set_axis_label(4, 'Angle', blocking=False)
-                self.m.set_axis_label(5, 'Pitch', blocking=False)
-                self.m.set_axis_label(6, 'Roll', blocking=False)
-            elif self.m.get_button_diff(2) == -1:
-                self.m.set_axis_label(3, 'FL', blocking=False)
-                self.m.set_axis_label(4, 'FR', blocking=False)
-                self.m.set_axis_label(5, 'BL', blocking=False)
-                self.m.set_axis_label(6, 'BR', blocking=False)
-            """
             if controller.torque_labels is not None:
                 if controller.torque_labels_changed:
                     for i, label in enumerate(controller.torque_labels):

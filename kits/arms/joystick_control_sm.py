@@ -55,6 +55,8 @@ class ArmJoystickControl:
         self.rot_curr = np.empty((3, 3))
         self.joint_target = arm.last_feedback.position_command
 
+        self.last_cmd_t = time()
+
     @property
     def running(self):
         return self.state is not self.state.EXIT
@@ -69,15 +71,15 @@ class ArmJoystickControl:
             return
 
         if demo_input is None:
-            if t_now - self.mobile_last_fbk_t > 1.0 and self.state is not self.state.DISCONNECTED:
+            if t_now - self.last_cmd_t > 1.0 and self.state is not self.state.DISCONNECTED:
                 print(self.namespace + "mobileIO timeout, disabling motion")
                 self.transition_to(t_now, self.state.DISCONNECTED)
             return
 
-        self.mobile_last_fbk_t = t_now
+        self.last_cmd_t = t_now
 
         if self.state is self.state.DISCONNECTED:
-            self.mobile_last_fbk_t = t_now
+            self.last_cmd_t = t_now
             self.transition_to(t_now, self.state.TELEOP)
 
         elif self.state is self.state.HOMING:
@@ -169,6 +171,9 @@ class ArmJoystickControl:
 
         arm_goal.add_waypoint(position=self.joint_target)
         return arm_goal
+
+    def stop(self):
+        self.transition_to(time(), self.state.EXIT)
 
 
 def setup_mobile_io(m: 'MobileIO'):
