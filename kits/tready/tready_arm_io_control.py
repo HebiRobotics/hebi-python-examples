@@ -33,19 +33,6 @@ if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
 
 
-def update_inputs(base_inputs: TreadyInputs | None = None):
-    if base_inputs is None:
-        base_inputs = TreadyInputs()
-
-    base_inputs.deploy_safe = True
-    base_inputs.stow_safe = True
-    base_inputs.payload_deployed = False
-    base_inputs.allow_startup = True
-    base_inputs.drive_safe = True
-
-    return base_inputs
-
-
 def update_ar_arm(m: MobileIO):
     # Drive buttons, joysticks, and sliders
     mapping = {
@@ -251,14 +238,15 @@ if __name__ == "__main__":
                 base_inputs = None
                 arm_inputs = None
             else:
-                base_inputs = update_inputs(inputs[0])
+                base_inputs = inputs[0]
                 arm_inputs = inputs[1]
+
                 if base_inputs.quit:
                     break
 
-            base_control.update(t, base_inputs)
+                base_control.receive_inputs(t, base_inputs)
+
             arm_control.update(t, arm_inputs)
-            base_control.send()
             arm_control.send()
 
         except KeyboardInterrupt:

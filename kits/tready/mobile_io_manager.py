@@ -40,7 +40,7 @@ class MobileIOUpdater:
         self.layouts = {mode: vals[0] for mode, vals in demo_config.items()}
         self.parsers = {mode: vals[1] for mode, vals in demo_config.items()}
         self.base_msg = ""
-        self.color = ""
+        self.color = "transparent"
         self.last_msg = ""
         self.voltage = 0
         self.voltage_update_time = 0.0

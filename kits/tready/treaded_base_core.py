@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from time import time
+import time
 from enum import Enum, auto
 
 import numpy as np
@@ -112,7 +112,7 @@ class TreadedBase(GroupManager):
         config: hebi.config.HebiConfig,
         group: Group,
     ):
-        super().__init__(time, group)
+        super().__init__(time.time, group)
 
         self.config = TreadedBaseConfig.from_hebi_config(config)
 
@@ -130,7 +130,6 @@ class TreadedBase(GroupManager):
         self.flipper_cmd.position = self.flipper_fbk.position
         self.wheel_cmd.position = np.nan
 
-        self.t_prev: float = time()
         self._aligned_flipper_mode = False
 
         self.chassis_traj = None
@@ -154,13 +153,13 @@ class TreadedBase(GroupManager):
 
     @property
     def has_active_base_trajectory(self):
-        if self.chassis_traj is not None and self.t_prev < self.chassis_traj.end_time:
+        if self.chassis_traj is not None and self._last_time < self.chassis_traj.end_time:
             return True
         return False
 
     @property
     def has_active_flipper_trajectory(self):
-        if self.flipper_traj is not None and self.t_prev < self.flipper_traj.end_time:
+        if self.flipper_traj is not None and self._last_time < self.flipper_traj.end_time:
             return True
         return False
 
@@ -261,7 +260,6 @@ class TreadedBase(GroupManager):
                         -self.flipper_height[i] * (1 + self.config.chassis_rotation_from_wheel)
                     )
 
-        self.t_prev = t
         return res
 
     def set_flipper_torque(self, e: NDArray[np.float64]):
@@ -270,8 +268,9 @@ class TreadedBase(GroupManager):
 
     def set_flipper_trajectory(self, ramp_time: float, p=np.full(4, np.nan), v=np.zeros(4)):
 
+        t_now = time.time()
         if self.flipper_traj is not None:
-            p_now, v_now, _ = self.flipper_traj.get_state(self.t_prev)
+            p_now, v_now, _ = self.flipper_traj.get_state(t_now)
             p_now = self.config.clamp_flipper_position(p_now)
         else:
             p_now = self.flipper_fbk.position
@@ -279,15 +278,18 @@ class TreadedBase(GroupManager):
 
         g = hebi.Goal(4)
         g.add_waypoint(
-            ramp_time, self.config.clamp_flipper_position(p), np.clip(v, self.flipper_min_velocities, self.flipper_max_velocities)
+            ramp_time,
+            self.config.clamp_flipper_position(p),
+            np.clip(v, self.flipper_min_velocities, self.flipper_max_velocities)
         )
         self.user_flipper_torque[:] = np.nan
-        self.flipper_traj, _ = g.build_trajectory_from(self.t_prev, p_now, v_now.astype(np.float64))
+        self.flipper_traj, _ = g.build_trajectory_from(t_now, p_now, v_now.astype(np.float64))
 
     def set_chassis_vel_trajectory(self, ramp_time: float, v):
+        t_now = time.time()
 
         if self.chassis_traj is not None:
-            p_now, v_now, a_now = self.chassis_traj.get_state(self.t_prev)
+            p_now, v_now, a_now = self.chassis_traj.get_state(t_now)
         else:
             p_now = np.zeros(3)
             v_now = self.config.wheel_to_chassis_vel @ self.wheel_fbk.velocity
@@ -296,33 +298,33 @@ class TreadedBase(GroupManager):
         g = hebi.Goal(3)
         g.add_waypoint(ramp_time, np.full(3, np.nan), v)
 
-        self.chassis_traj, _ = g.build_trajectory_from(self.t_prev, p_now, v_now, a_now)
+        self.chassis_traj, _ = g.build_trajectory_from(t_now, p_now, v_now, a_now)
 
     def average_distance(self, a, b):
         return np.mean(np.abs(a - b))
 
     def move_flippers_to_waypoint(self, avg_speed: float, waypoint):
         flipper_target = self.flipper_sign * waypoint
-        ramp_time = self.average_distance(self.flipper_fbk.position, flipper_target) / avg_speed + 0.5
         self.set_chassis_vel_trajectory(0.25, [0, 0, 0])
-        self.set_flipper_trajectory(ramp_time, p=flipper_target)
+        self.set_flipper_trajectory(1.0, p=flipper_target)
+        self.flipper_traj.rescale_with_limits(np.full(4, avg_speed), None)
 
     def home(self):
-        self.move_flippers_to_waypoint(0.2, self.config.flipper_home_pos)
+        self.move_flippers_to_waypoint(0.75, self.config.flipper_home_pos)
 
     def rear_up(self):
-        self.move_flippers_to_waypoint(0.2, self.config.flipper_rear_pos)
+        self.move_flippers_to_waypoint(0.75, self.config.flipper_rear_pos)
 
     def deploy(self):
         self.set_chassis_vel_trajectory(0.25, [0, 0, 0])
 
     def flatten_flippers(self):
-        self.move_flippers_to_waypoint(0.2, self.config.flipper_flat_pos)
+        self.move_flippers_to_waypoint(0.75, self.config.flipper_flat_pos)
 
     def align_flippers(self):
         mean_pos = np.mean(self.flipper_fbk.position * self.flipper_sign)
         aligned_pos = np.full(4, mean_pos)
-        self.move_flippers_to_waypoint(0.2, aligned_pos)
+        self.move_flippers_to_waypoint(0.75, aligned_pos)
 
     def unlock_flippers(self, flippers: list):
         f_positions = self.flipper_cmd.position.copy()
@@ -374,6 +376,7 @@ class TreadyControlState(Enum):
     STOWING = auto()
     ALIGNING = auto()
     TELEOP = auto()
+    COMPLIANT_FLIPPERS = auto()
     DISCONNECTED = auto()
     EMERGENCY_STOP = auto()
     EXIT = auto()
@@ -405,14 +408,14 @@ class TreadyInputs:
     torque_mode: bool = False
     torque_toggle: bool = False
     deploy: bool = False
-    deploy_safe: bool = False
+    deploy_safe: bool = True
     stow: bool = False
-    stow_safe: bool = False
+    stow_safe: bool = True
     payload_deployed: bool = False
     override_startup: bool = False
-    allow_startup: bool = False
+    allow_startup: bool = True
     flatten_flippers: bool = False
-    drive_safe: bool = False
+    drive_safe: bool = True
     rear_up: bool = False
 
     def __repr__(self) -> str:
@@ -432,8 +435,6 @@ class TreadedBaseControl:
         self.prev_state = self.state
         self.base = base
 
-        self.base.set_on_update_callback(self.on_base_update)
-
         self.flipper_vel_scale = flipper_vel_scale
         self.max_base_speed = max_base_speed
 
@@ -444,8 +445,8 @@ class TreadedBaseControl:
         self.torque_labels = None
         self.prev_torque_labels = None
         self.torque_labels_changed = False
-        self.torque_start_time = time()
-        self.last_cmd_t = time()
+        self.torque_start_time = time.time()
+        self.last_cmd_t = time.time()
 
         self.allow_payload_startup = False
         self.payload_deploy_safe = False
@@ -453,6 +454,11 @@ class TreadedBaseControl:
 
         self.unlocked_flippers = []
         self.have_wound_flippers = False
+
+        self.base.set_on_update_callback(self.on_base_update)
+
+        if not self.base.running:
+            self.base.start()
 
     @property
     def max_chassis_rotation_vel(self):
@@ -507,7 +513,7 @@ class TreadedBaseControl:
 
         return True
 
-    def update(self, t_now: float, tready_input: TreadyInputs):
+    def receive_inputs(self, t_now: float, tready_input: TreadyInputs):
 
         if self.state is self.state.EXIT:
             return
@@ -548,6 +554,54 @@ class TreadedBaseControl:
             if tready_input.stow:
                 self.transition_to(self.state.STOWING)
 
+        # Compliant flipper (Torque) mode
+        elif self.state is self.state.COMPLIANT_FLIPPERS:
+            torque_slider = (tready_input.flippers[0] + 1) / 2
+            angle_slider =  (tready_input.flippers[1] + 1) / 2
+            roll_slider =   (tready_input.flippers[2] + 1) / 2
+            pitch_slider =  (tready_input.flippers[3] + 1) / 2
+
+            config = self.base.config
+
+            torque_max = config.torque_mode_max * torque_slider
+            torque_max_label = torque_max
+
+            target_flipper_angle = angle_slider * 2 * config.torque_angle_offset
+            roll_angle, pitch_angle, _ = self.base.pose
+
+            roll_err = roll_angle
+            pitch_err = pitch_angle
+
+            roll_p_gain = config.torso_torque_scale * roll_slider
+            pitch_p_gain = config.torso_torque_scale * pitch_slider
+
+            signs = np.empty((4, 2))
+            signs[:, 0] = [0, -1, 0, 1] if roll_err > 0 else [-1, 0, 1, 0]
+            signs[:, 1] = [1, -1, 0, 0] if pitch_err > 0 else [0, 0, 1, -1]
+
+            leveling_torque = (signs @ np.array([roll_p_gain * roll_err, pitch_p_gain * pitch_err])).flatten()
+
+            flipper_angle_error = self.base.flipper_sign * target_flipper_angle - self.base.flipper_fbk.position
+            flipper_efforts = torque_max * np.tanh(flipper_angle_error) + leveling_torque
+            flipper_efforts *= min(
+                (t_now - self.torque_start_time) / config.torque_ramp_time,
+                1,
+            )
+
+            self.base.set_flipper_torque(flipper_efforts)
+
+            self.prev_torque_labels = self.torque_labels
+            self.torque_labels = [
+                f"Max\nEff:\n{np.round(torque_max_label, 2)}",
+                f"Torque\nAngle:\n{np.round(target_flipper_angle, 2)}",
+                f"Roll:\n{np.round(roll_slider)}",
+                f"Pitch:\n{np.round(pitch_slider)}",
+            ]
+            self.torque_labels_changed = self.prev_torque_labels != self.torque_labels
+
+            if not tready_input.torque_mode:
+                self.transition_to(self.state.TELEOP)
+
         # Teleop mode
         elif self.state is self.state.TELEOP:
             # IDK why but sometimes this happens
@@ -555,70 +609,30 @@ class TreadedBaseControl:
                 print("How did this happen")
                 self.transition_to(self.state.STARTUP)
 
+            # Flipper Control
+            flipper_vels = -self.base.flipper_sign * tready_input.flippers * self.flipper_vel_scale
+            self.base.set_flipper_trajectory(self.base.flipper_ramp_time, v=flipper_vels)
+            self.torque_labels = None
+
             if tready_input.torque_mode:
-                if tready_input.torque_toggle:
-                    self.torque_start_time = t_now
+                self.transition_to(self.state.COMPLIANT_FLIPPERS)
+            # Check for home button
+            elif tready_input.home:
+                self.transition_to(self.state.HOMING)
+            # Check for flipper alignment
+            elif tready_input.align_flippers:
+                self.transition_to(self.state.ALIGNING)
+            # Check for flipper flatten
+            elif tready_input.flatten_flippers:
+                self.transition_to(self.state.FLATTENING)
+            # Check for rear up
+            elif tready_input.rear_up:
+                self.transition_to(self.state.REARING)
+            # Check for deployment
+            elif tready_input.deploy:
+                self.transition_to(self.state.DEPLOYING)
 
-                torque_slider = (tready_input.flippers[0] + 1) / 2
-                angle_slider =  (tready_input.flippers[1] + 1) / 2
-                roll_slider =   (tready_input.flippers[2] + 1) / 2
-                pitch_slider =  (tready_input.flippers[3] + 1) / 2
-
-                config = self.base.config
-
-                torque_max = config.torque_mode_max * torque_slider
-                torque_max_label = torque_max
-
-                target_flipper_angle = angle_slider * 2 * config.torque_angle_offset
-                roll_angle, pitch_angle, _ = self.base.pose
-
-                roll_signs = [0, -1, 0, 1] if roll_angle > 0 else [-1, 0, 1, 0]
-                roll_torque = np.array(roll_signs) * roll_angle * config.torso_torque_scale * roll_slider
-
-                pitch_signs = [1, -1, 0, 0] if pitch_angle > 0 else [0, 0, 1, -1]
-                pitch_torque = np.array(pitch_signs) * pitch_angle * config.torso_torque_scale * pitch_slider
-
-                flipper_angle_error = self.base.flipper_sign * target_flipper_angle - self.base.flipper_fbk.position
-                flipper_efforts = torque_max * np.tanh(flipper_angle_error) + roll_torque + pitch_torque
-                flipper_efforts *= min(
-                    (t_now - self.torque_start_time) / config.torque_ramp_time,
-                    1,
-                )
-
-                self.base.set_flipper_torque(flipper_efforts)
-
-                self.prev_torque_labels = self.torque_labels
-                self.torque_labels = [
-                    f"Max\nEff:\n{np.round(torque_max_label, 2)}",
-                    f"Torque\nAngle:\n{np.round(target_flipper_angle, 2)}",
-                    f"Roll:\n{np.round(roll_slider)}",
-                    f"Pitch:\n{np.round(pitch_slider)}",
-                ]
-                self.torque_labels_changed = self.prev_torque_labels != self.torque_labels
-
-            else:
-                # Flipper Control
-                flipper_vels = -self.base.flipper_sign * tready_input.flippers * self.flipper_vel_scale
-                self.base.set_flipper_trajectory(self.base.flipper_ramp_time, v=flipper_vels)
-                self.torque_labels = None
-
-                # Check for home button
-                if tready_input.home:
-                    self.transition_to(self.state.HOMING)
-                # Check for flipper alignment
-                elif tready_input.align_flippers:
-                    self.transition_to(self.state.ALIGNING)
-                # Check for flipper flatten
-                elif tready_input.flatten_flippers:
-                    self.transition_to(self.state.FLATTENING)
-                # Check for rear up
-                elif tready_input.rear_up:
-                    self.transition_to(self.state.REARING)
-                # Check for deployment
-                elif tready_input.deploy:
-                    self.transition_to(self.state.DEPLOYING)
-
-        if self.state in [TreadyControlState.TELEOP, TreadyControlState.DEPLOYED] and tready_input.drive_safe:
+        if self.state in [TreadyControlState.TELEOP, TreadyControlState.COMPLIANT_FLIPPERS, TreadyControlState.DEPLOYED] and tready_input.drive_safe:
             # Mobile Base Control
             chassis_vels: NDArray[np.float64] = np.array(
                 [
@@ -681,6 +695,10 @@ class TreadedBaseControl:
             self.payload_deploy_safe = False
             self.payload_stow_safe = False
 
+        elif state is self.state.COMPLIANT_FLIPPERS:
+            print(self.namespace + "BASE TRANSITIONING TO COMPLIANT_FLIPPERS")
+            self.torque_start_time = time.time()
+
         elif state is self.state.DISCONNECTED:
             print(self.namespace + "BASE DISCONNECTED")
             self.base.set_flipper_trajectory(0.2, self.base.flipper_fbk.position)
@@ -693,6 +711,7 @@ class TreadedBaseControl:
 
         elif state is self.state.EXIT:
             print(self.namespace + "BASE EXIT")
+            self.base.stop()
 
         for handler in self._transition_handlers:
             handler(self, state)
