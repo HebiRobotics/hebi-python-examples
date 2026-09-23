@@ -512,7 +512,7 @@ if __name__ == "__main__":
             base_inputs, payload_inputs = update_inputs(base_inputs, payload_inputs)
 
             if m_update:
-                base_control.update(t, base_inputs)
+                base_control.receive_inputs(t, base_inputs)
             payload_control.update(t, m_update, payload_inputs)
             payload_control.send()
 
