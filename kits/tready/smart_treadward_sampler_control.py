@@ -10,12 +10,10 @@ import hebi
 from hebi.util import create_mobile_io
 from .tready_utils import load_gains, set_mobile_io_instructions
 
-from .treaded_base_core import (
+from .treaded_base_core import ChassisVelocity, TreadyInputs, TreadyControlState
+from .treaded_base import (
     TreadedBase,
     TreadedBaseControl,
-    TreadyControlState,
-    TreadyInputs,
-    ChassisVelocity
 )
 
 from .treadward_sampler import (

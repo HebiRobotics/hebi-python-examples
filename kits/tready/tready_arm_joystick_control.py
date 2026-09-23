@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from time import time, sleep
+import time
 import datetime
-from os.path import join, dirname, abspath
+import sys
+from pathlib import Path
 
 import numpy as np
 import hebi
@@ -11,12 +12,10 @@ from kits.arms.joystick_control_sm import (
     ArmJoystickControl,
     ArmJoystickInputs,
 )
-from .treaded_base_core import (
+from .treaded_base_core import ChassisVelocity, TreadyInputs
+from .treaded_base import (
     TreadedBase,
-    TreadedBaseConfig,
     TreadedBaseControl,
-    TreadyInputs,
-    ChassisVelocity,
 )
 
 from .mobile_io_manager import (
@@ -25,7 +24,7 @@ from .mobile_io_manager import (
     update_startup_mode,
 )
 
-from .tready_utils import wait_for_mobile_io, try_create_base_group
+from .tready_utils import wait_for_mobile_io
 
 
 import typing
@@ -151,20 +150,10 @@ def update_drive_mode(m: MobileIO):
 
 
 if __name__ == "__main__":
-    config_dir = join(dirname(abspath(__file__)), "config")
+    lookup = hebi.Lookup()
 
-    tready_config = TreadedBaseConfig(
-        hrdf_file=join(config_dir, "hrdf", "Tready.hrdf"),
-        gains_file=join(config_dir, "gains", "smart-tready-gains.xml"),
-        wheel_diameter=0.125,  # m
-        wheel_base=0.285,  # m
-        torso_torque_scale=2.5,  # Nm
-        torque_mode_max=25,  # Nm
-    )
-
-    layout_dir = join(config_dir, "layouts")
-    startup_layout = join(layout_dir, "TreadwardStartupController.json")
-    drive_layout = join(layout_dir, "TreadwardJoystickArmController.json")
+    config_dir = Path(__file__).absolute().parent / "config"
+    base_cfg = hebi.config.load_config(str(config_dir / sys.argv[1]))
 
     def arm_update_startup_mode(m):
         return (update_startup_mode(m)[0], None)
@@ -173,14 +162,6 @@ if __name__ == "__main__":
         base_input = update_drive_mode(m)
         arm_input = update_joystick_arm(m)
         return (base_input, arm_input)
-
-    mio_demo_config = {
-        MobileIOModes.STARTUP: (startup_layout, arm_update_startup_mode),
-        MobileIOModes.DRIVE: (drive_layout, arm_update_drive_mode),
-    }
-
-    lookup = hebi.Lookup()
-    sleep(2)
 
     base_family = "Tready"
 
@@ -191,31 +172,31 @@ if __name__ == "__main__":
     print("mobileIO device found.")
     m.update()
 
-    # Create base group
-    base_group = try_create_base_group(lookup, base_family)
-    while base_group is None:
-        print(f"Looking for {base_family} modules...")
-        sleep(1)
-        base_group = try_create_base_group(lookup, base_family)
+    layout_dir = config_dir / "layouts"
+    mio_demo_config = {
+        MobileIOModes.STARTUP: (layout_dir / "TreadwardStartupController.json", arm_update_startup_mode),
+        MobileIOModes.DRIVE: (layout_dir / "TreadwardJoystickArmController.json", arm_update_drive_mode),
+    }
+    updater = MobileIOUpdater(m, mio_demo_config)
 
-    base = TreadedBase(tready_config, base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1)
-    base_control = TreadedBaseControl(base, max_base_speed=0.25)
+    base = TreadedBase.from_config(base_cfg)
+    base_control = TreadedBaseControl(base, max_base_speed=base_cfg.user_data["max_base_speed"])
     base_control.namespace = "[Base] "
 
     # Create Arm group
     arm_family = "Arm"
-    config_file = join(config_dir, "tready-arm-A-2240-06G.cfg.yaml")
-    cfg = hebi.config.load_config(config_file)
-    arm = hebi.arm.create_from_config(cfg, lookup)
+    config_file = config_dir / "tready-arm-A-2240-06G.cfg.yaml"
+    arm_cfg = hebi.config.load_config(str(config_file))
+    arm = hebi.arm.create_from_config(arm_cfg, lookup)
     gripper = None  # TODO: Reimplement the old behaviors for gripper loading
     # arm, gripper = setup_arm_6dof(lookup, arm_family, with_gripper=False)
 
     if arm is None:
-        if len(cfg.families) == 1:
-            families = [cfg.families[0]] * len(cfg.names)
+        if len(arm_cfg.families) == 1:
+            families = [arm_cfg.families[0]] * len(arm_cfg.names)
         else:
-            families = cfg.families
-        pairs = zip(families, cfg.names)
+            families = arm_cfg.families
+        pairs = zip(families, arm_cfg.names)
         modules = [f"{p[0]}/{p[1]}" for p in pairs]
         raise RuntimeError(f"Could not find modules:\n{'\n'.join(modules)}")
 
@@ -227,7 +208,6 @@ if __name__ == "__main__":
     )
     arm_control.namespace = "[Arm] "
 
-    updater = MobileIOUpdater(m, mio_demo_config)
     base_control._transition_handlers.append(updater.base_transition_handler)
 
     base_control._update_handlers.append(updater.update_voltage_reading)
@@ -237,13 +217,13 @@ if __name__ == "__main__":
     logging = True
 
     if logging:
-        tready_log_dir = join(dirname(__file__), "logs")
+        tready_log_dir = str(Path(__file__).parent /  "logs")
         now = datetime.datetime.now()
         arm.group.start_log(tready_log_dir, f"arm_{now:%Y-%m-%d-%H:%M:%S}")
         base.group.start_log(tready_log_dir, f"base_{now:%Y-%m-%d-%H:%M:%S}")
 
     while base_control.running and arm_control.running:
-        t = time()
+        t = time.time()
         try:
             inputs = updater.parse_mobile_io_feedback(m)
             if inputs is None:
@@ -267,5 +247,4 @@ if __name__ == "__main__":
     arm_control.stop()
 
     if logging:
-        base.group.stop_log()
         arm.group.stop_log()
