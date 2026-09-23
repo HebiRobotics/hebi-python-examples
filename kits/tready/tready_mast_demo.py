@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+from __future__ import annotations
 
 import os
 import hebi
@@ -14,7 +15,7 @@ from ..camera.pan_tilt_mast import (
     MastControlState,
     MastInputs,
 )
-from ..arm.joystick_control_sm import (
+from ..arms.joystick_control_sm import (
     ArmJoystickControl,
     ArmControlState,
     ArmJoystickInputs,
@@ -36,7 +37,7 @@ if typing.TYPE_CHECKING:
 # 192.168.131.117 : wide angle
 
 
-def setup_arm_6dof(lookup: "Lookup", family: str):
+def setup_arm_6dof(lookup: Lookup, family: str):
     root_dir = os.path.join(os.path.abspath(__file__.split("kits")[0]), "kits")
     print(root_dir)
     # arm setup
@@ -71,7 +72,7 @@ def setup_arm_6dof(lookup: "Lookup", family: str):
     return arm
 
 
-def setup_mobile_io(m: "MobileIO"):
+def setup_mobile_io(m: MobileIO):
     # Button Assignments
     # 1 (Momentary): Home/Reset
     # 2 (Toggle): Wide Angle Camera Floodlight On/Off
@@ -133,7 +134,7 @@ def setup_mobile_io(m: "MobileIO"):
 light_level = 0.0
 
 
-def parse_mobile_feedback(m: "MobileIO"):
+def parse_mobile_feedback(m: MobileIO):
     global light_level
     if not m.update(0.0):
         return None, None, None
@@ -217,9 +218,7 @@ def parse_mobile_feedback(m: "MobileIO"):
         gripper_closed=gripper_closed,
     )
 
-    mast_inputs = MastInputs(
-        [mast_pan, mast_tilt], home, camera_zoom, flood_light, spot_light
-    )
+    mast_inputs = MastInputs([mast_pan, mast_tilt], home, camera_zoom, flood_light, spot_light)
 
     return base_inputs, arm_inputs, mast_inputs
 
@@ -242,9 +241,7 @@ if __name__ == "__main__":
     # shoulder limits [-2, inf]
     joint_limits[1, 0] = -2.0
 
-    arm_control = ArmJoystickControl(
-        arm, [-0.5, -2, 1, 0, 0.5, -0.5], homing_time=7.0, joint_limits=joint_limits
-    )
+    arm_control = ArmJoystickControl(arm, [-0.5, -2, 1, 0, 0.5, -0.5], homing_time=7.0, joint_limits=joint_limits)
 
     group = lookup.get_group_from_names(family, module_names)
     while group is None:
@@ -293,10 +290,7 @@ if __name__ == "__main__":
     setup_mobile_io(m)
 
     def update_mobile_ui(controller: TreadyControl, new_state: TreadyControlState):
-        if (
-            controller.state == TreadyControlState.DISCONNECTED
-            and new_state == TreadyControlState.TELEOP
-        ):
+        if controller.state == TreadyControlState.DISCONNECTED and new_state == TreadyControlState.TELEOP:
             setup_mobile_io(m)
 
     base_control._transition_handlers.append(update_mobile_ui)
