@@ -1,0 +1,22 @@
+# Tready Tracked Mobile Base
+version: 1.1
+families: ["Tready"]
+names: ["T1_J2_track", "T2_J2_track", "T3_J2_track", "T4_J2_track", "T1_J1_flipper", "T2_J1_flipper", "T3_J1_flipper", "T4_J1_flipper"]
+hrdf: "hrdf/Tready.hrdf"
+
+gains:
+  default: "gains/smart-tready-gains.xml"
+
+feedback_frequency: 100  # [Hz]
+command_lifetime: 0.25   # [s]
+
+user_data:
+    wheel_diameter: 0.125    # m
+    wheel_base: 0.285        # m
+    torso_torque_scale: 2.5  # Nm
+    torque_mode_max: 25      # Nm
+
+    chassis_ramp_time: 0.5   # s
+    flipper_ramp_time: 0.1   # s
+    max_base_speed: 0.25     # m/s
+

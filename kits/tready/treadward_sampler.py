@@ -1,30 +1,28 @@
-import sys
-from time import time, sleep
+from __future__ import annotations
+
+from time import time
 from enum import Enum, auto
 
 import numpy as np
-from scipy.spatial.transform import Rotation as R
 
 import hebi
-from hebi.util import create_mobile_io
 
-from hebi._internal.ffi._marshalling import CommandIoBankField, FeedbackIoBankField
+from hebi._internal.ffi._marshalling import CommandIoBankField
 
 import typing
 
-
 if typing.TYPE_CHECKING:
     from typing import Optional, Callable
-    import numpy.typing as npt
     from hebi._internal.group import Group
-    from hebi._internal.mobile_io import MobileIO
 
 
 class CoreSampler:
     MAST_DEPLOY_POS = [np.pi / 2]  # rad
     MAST_STOW_POS = [0.09]  # rad
     MAX_MAST_ROT = (np.pi / 2) / 22  # rad/s
-    MAST_TOLERANCE = 0.02  # The distance (in rad) we may be away from deployed/stowed target while still considering ourselves deployed/stowed
+    MAST_TOLERANCE = (
+        0.02  # The distance (in rad) we may be away from deployed/stowed target while still considering ourselves deployed/stowed
+    )
 
     CHAIN_MAX_POS = [31.05, 31.04]
     CHAIN_MIN_POS = [-0.05, -0.06]
@@ -37,9 +35,7 @@ class CoreSampler:
     CHAIN_SPROCKET_RADIUS = 0.044  # m
     MAX_CHAIN_ROT = MAX_CHAIN_SPEED / CHAIN_SPROCKET_RADIUS  # rad/s
 
-    CHAIN_VEL_SCALE_MARGIN = (
-        0.3  # The distance (in rad) away from the edges before reducing max speed
-    )
+    CHAIN_VEL_SCALE_MARGIN = 0.3  # The distance (in rad) away from the edges before reducing max speed
 
     MAX_STOW_WAIT_TIME = 2  # How long will we wait before giving up on stowing
     MAX_DEPLOY_WAIT_TIME = 2  # How long will we wait before giving up on deploying
@@ -47,7 +43,7 @@ class CoreSampler:
     WIGGLER_IO_BANK = CommandIoBankField.E
     WIGGLER_IO_PIN = 8
 
-    def __init__(self, group: "Group"):
+    def __init__(self, group: Group):
         self.group = group
 
         fbk = self.group.get_next_feedback()
@@ -106,44 +102,32 @@ class CoreSampler:
     @property
     def mast_stowed(self):
         if self.mast_cmd is not None:
-            return np.mean(self.MAST_STOW_POS) - self.MAST_TOLERANCE < np.mean(
-                self.mast_cmd.position
-            ) and np.mean(self.MAST_STOW_POS) + self.MAST_TOLERANCE > np.mean(
-                self.mast_cmd.position
-            )
-        return np.mean(self.MAST_STOW_POS) - self.MAST_TOLERANCE < np.mean(
-            self.mast_fbk.position
-        ) and np.mean(self.MAST_STOW_POS) + self.MAST_TOLERANCE > np.mean(
-            self.mast_fbk.position
-        )
+            return np.mean(self.MAST_STOW_POS) - self.MAST_TOLERANCE < np.mean(self.mast_cmd.position) and np.mean(
+                self.MAST_STOW_POS
+            ) + self.MAST_TOLERANCE > np.mean(self.mast_cmd.position)
+        return np.mean(self.MAST_STOW_POS) - self.MAST_TOLERANCE < np.mean(self.mast_fbk.position) and np.mean(
+            self.MAST_STOW_POS
+        ) + self.MAST_TOLERANCE > np.mean(self.mast_fbk.position)
 
     @property
     def mast_deployed(self):
         if self.mast_cmd is not None:
-            return np.mean(self.MAST_DEPLOY_POS) - self.MAST_TOLERANCE < np.mean(
-                self.mast_cmd.position
-            ) and np.mean(self.MAST_DEPLOY_POS) + self.MAST_TOLERANCE > np.mean(
-                self.mast_cmd.position
-            )
-        return np.mean(self.MAST_DEPLOY_POS) - self.MAST_TOLERANCE < np.mean(
-            self.mast_fbk.position
-        ) and np.mean(self.MAST_DEPLOY_POS) + self.MAST_TOLERANCE > np.mean(
-            self.mast_fbk.position
-        )
+            return np.mean(self.MAST_DEPLOY_POS) - self.MAST_TOLERANCE < np.mean(self.mast_cmd.position) and np.mean(
+                self.MAST_DEPLOY_POS
+            ) + self.MAST_TOLERANCE > np.mean(self.mast_cmd.position)
+        return np.mean(self.MAST_DEPLOY_POS) - self.MAST_TOLERANCE < np.mean(self.mast_fbk.position) and np.mean(
+            self.MAST_DEPLOY_POS
+        ) + self.MAST_TOLERANCE > np.mean(self.mast_fbk.position)
 
     @property
     def chain_stowed(self):
         if self.chain_cmd is not None:
-            return np.mean(self.CHAIN_STOW_POS) - self.CHAIN_TOLERANCE < np.mean(
-                self.chain_cmd.position
-            ) and np.mean(self.CHAIN_STOW_POS) + self.CHAIN_TOLERANCE > np.mean(
-                self.chain_cmd.position
-            )
-        return np.mean(self.CHAIN_STOW_POS) - self.CHAIN_TOLERANCE < np.mean(
-            self.chain_fbk.position
-        ) and np.mean(self.CHAIN_STOW_POS) + self.CHAIN_TOLERANCE > np.mean(
-            self.chain_fbk.position
-        )
+            return np.mean(self.CHAIN_STOW_POS) - self.CHAIN_TOLERANCE < np.mean(self.chain_cmd.position) and np.mean(
+                self.CHAIN_STOW_POS
+            ) + self.CHAIN_TOLERANCE > np.mean(self.chain_cmd.position)
+        return np.mean(self.CHAIN_STOW_POS) - self.CHAIN_TOLERANCE < np.mean(self.chain_fbk.position) and np.mean(
+            self.CHAIN_STOW_POS
+        ) + self.CHAIN_TOLERANCE > np.mean(self.chain_fbk.position)
 
     def update_feedback(self):
         self.group.get_next_feedback(reuse_fbk=self.fbk)
@@ -168,9 +152,7 @@ class CoreSampler:
                 self.chain_cmd.velocity = vel
                 self.chain_cmd.position = pos
 
-        self.tool_cmd.io.set_int(
-            self.WIGGLER_IO_BANK, self.WIGGLER_IO_PIN, int(self.wiggle)
-        )
+        self.tool_cmd.io.set_int(self.WIGGLER_IO_BANK, self.WIGGLER_IO_PIN, int(self.wiggle))
         self.t_prev = t_now
 
     def send(self):
@@ -200,9 +182,7 @@ class CoreSampler:
 
         if self.mast_traj is not None:
             t = min(t_now, self.mast_traj.end_time)
-            positions[:, 0], velocities[:, 0], accelerations[:, 0] = (
-                self.mast_traj.get_state(t)
-            )
+            positions[:, 0], velocities[:, 0], accelerations[:, 0] = self.mast_traj.get_state(t)
         else:
             positions[:, 0] = self.mast_fbk.position
             velocities[:, 0] = self.mast_fbk.velocity
@@ -212,13 +192,9 @@ class CoreSampler:
         velocities[:, 1] = 0.0 if v is None else v
         accelerations[:, 1] = 0.0
 
-        self.mast_traj = hebi.trajectory.create_trajectory(
-            times, positions, velocities, accelerations
-        )
+        self.mast_traj = hebi.trajectory.create_trajectory(times, positions, velocities, accelerations)
 
-    def set_chain_trajectory(
-        self, t_now: float, ramp_time: float, p=None, v=None, trans_v=None
-    ):
+    def set_chain_trajectory(self, t_now: float, ramp_time: float, p=None, v=None, trans_v=None):
         if ramp_time < 3:
             times = [t_now, t_now + ramp_time]
             positions = np.full((2, 2), np.nan)
@@ -248,9 +224,7 @@ class CoreSampler:
 
             accelerations[:, 1] = 0.0
 
-        self.chain_traj = hebi.trajectory.create_trajectory(
-            times, positions, velocities, accelerations
-        )
+        self.chain_traj = hebi.trajectory.create_trajectory(times, positions, velocities, accelerations)
 
     def set_chain_vel_trajectory(self, t_now: float, ramp_time: float, v=None):
         times = [t_now, t_now + ramp_time]
@@ -269,21 +243,15 @@ class CoreSampler:
         # Reduce velocity when driving towards edge of workspace
         if np.mean(v) > 0:
             distance_to_max = np.min(self.CHAIN_MAX_POS - positions[:, 0])
-            vel_scalar = float(
-                np.min([distance_to_max / self.CHAIN_VEL_SCALE_MARGIN, 1])
-            )
+            vel_scalar = float(np.min([distance_to_max / self.CHAIN_VEL_SCALE_MARGIN, 1]))
         elif np.mean(v) < 0:
             distance_to_min = np.min(positions[:, 0] - self.CHAIN_MIN_POS)
-            vel_scalar = float(
-                np.min([distance_to_min / self.CHAIN_VEL_SCALE_MARGIN, 1])
-            )
+            vel_scalar = float(np.min([distance_to_min / self.CHAIN_VEL_SCALE_MARGIN, 1]))
 
         positions[:, 1] = np.nan
         velocities[:, 1] = v * vel_scalar
 
-        self.chain_traj = hebi.trajectory.create_trajectory(
-            times, positions, velocities
-        )
+        self.chain_traj = hebi.trajectory.create_trajectory(times, positions, velocities)
         target_positions, _, _ = self.chain_traj.get_state(self.chain_traj.end_time)
 
         # Check trajectory outside of bounds
@@ -298,14 +266,10 @@ class CoreSampler:
 
         if below_min:
             positions[:, 1] = self.CHAIN_MIN_POS
-            self.chain_traj = hebi.trajectory.create_trajectory(
-                times, positions, velocities
-            )
+            self.chain_traj = hebi.trajectory.create_trajectory(times, positions, velocities)
         elif above_max:
             positions[:, 1] = self.CHAIN_MAX_POS
-            self.chain_traj = hebi.trajectory.create_trajectory(
-                times, positions, velocities
-            )
+            self.chain_traj = hebi.trajectory.create_trajectory(times, positions, velocities)
 
     def deploy_mast(self, t_now: float):
         if self.deploy_safe:
@@ -316,9 +280,7 @@ class CoreSampler:
             else:
                 mast_pos = self.mast_fbk.position
 
-            deploy_distance = float(
-                abs(np.mean(self.MAST_DEPLOY_POS) - np.mean(mast_pos))
-            )
+            deploy_distance = float(abs(np.mean(self.MAST_DEPLOY_POS) - np.mean(mast_pos)))
             deploy_time = deploy_distance / self.MAX_MAST_ROT + 2
 
             self.set_mast_trajectory(t_now, deploy_time, p=self.MAST_DEPLOY_POS)
@@ -361,14 +323,12 @@ class CoreSampler:
         stow_distance = abs(stow_distance)
         stow_time = stow_distance / self.MAX_CHAIN_ROT + 2
 
-        self.set_chain_trajectory(
-            t_now, stow_time, p=self.CHAIN_STOW_POS, trans_v=stow_vel
-        )
+        self.set_chain_trajectory(t_now, stow_time, p=self.CHAIN_STOW_POS, trans_v=stow_vel)
 
     def set_robot_model(self, hrdf_file: str):
         self.robot_model = hebi.robot_model.import_from_hrdf(hrdf_file)
 
-    def set_color(self, color: "hebi.Color | str"):
+    def set_color(self, color: hebi.Color | str):
         color_cmd = hebi.GroupCommand(self.group.size)
         color_cmd.led.color = color
         self.group.send_command(color_cmd)
@@ -449,8 +409,8 @@ class CoreSamplerControl:
         self.stow_timeout_time = 0.0
         self.deploy_timeout_time = 0.0
 
-        self._transition_handlers: "list[Callable[[CoreSamplerControl, CoreSamplerControlState], None]]" = []
-        self._update_handlers: "list[Callable[[CoreSamplerControl, CoreSamplerControlState], None]]" = []
+        self._transition_handlers: list[Callable[[CoreSamplerControl, CoreSamplerControlState], None]] = []
+        self._update_handlers: list[Callable[[CoreSamplerControl, CoreSamplerControlState], None]] = []
 
         self.last_cmd_t = time()
 
@@ -475,18 +435,14 @@ class CoreSamplerControl:
         self,
         t_now: float,
         m_update: bool,
-        sampler_input: "Optional[CoreSamplerInputs]" = None,
+        sampler_input: Optional[CoreSamplerInputs] = None,
     ):
         self.sampler.update_feedback()
 
         if self.state is self.state.EXIT:
             return
 
-        if (
-            self.sampler.mstop_pressed
-            and self.state is not self.state.EMERGENCY_STOP
-            and not self.sampler.ignore_estop
-        ):
+        if self.sampler.mstop_pressed and self.state is not self.state.EMERGENCY_STOP and not self.sampler.ignore_estop:
             self.transition_to(t_now, self.state.EMERGENCY_STOP)
 
         # This should never run. Just here to make the type checker happy.
@@ -560,11 +516,7 @@ class CoreSamplerControl:
 
         # Transition to stowed when startup complete
         elif self.state is self.state.STARTUP:
-            if (
-                (self.sampler.chain_stowed and self.sampler.mast_stowed)
-                or sampler_input.override_startup
-                or self.allow_base_startup
-            ):
+            if (self.sampler.chain_stowed and self.sampler.mast_stowed) or sampler_input.override_startup or self.allow_base_startup:
                 self.allow_base_startup = True
                 if sampler_input.allow_startup:
                     self.transition_to(t_now, self.state.STOWED)
@@ -589,9 +541,7 @@ class CoreSamplerControl:
                     self.sampler.wiggle = False
 
                 target_chain_vel = -sampler_input.chain * self.sampler.MAX_CHAIN_ROT
-                self.sampler.set_chain_vel_trajectory(
-                    t_now, self.sampler.CHAIN_RAMP_TIME, [target_chain_vel] * 2
-                )
+                self.sampler.set_chain_vel_trajectory(t_now, self.sampler.CHAIN_RAMP_TIME, [target_chain_vel] * 2)
 
                 self.base_drive_safe = self.sampler.chain_stowed
 

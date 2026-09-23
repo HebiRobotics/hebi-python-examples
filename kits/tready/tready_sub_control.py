@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from time import time, sleep
 import os
 
@@ -20,7 +22,7 @@ if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
 
 
-def setup_mobile_io(m: "MobileIO"):
+def setup_mobile_io(m: MobileIO):
     """Sets up mobileIO interface.
 
     Return a function that parses mobileIO feedback into the format
@@ -81,8 +83,8 @@ def setup_mobile_io(m: "MobileIO"):
     m.set_axis_label(pan_joy, "Pan")
     m.set_axis_label(tilt_joy, "Tilt")
 
-    def parse_mobile_io_feedback(m: "MobileIO"):
-        def change_to_torque_mode(m: "MobileIO"):
+    def parse_mobile_io_feedback(m: MobileIO):
+        def change_to_torque_mode(m: MobileIO):
             axis_vals = [0, -0.5, 1, 1]
             for i in range(3, 7):
                 if not m.set_snap(i, np.nan):
@@ -90,7 +92,7 @@ def setup_mobile_io(m: "MobileIO"):
                 if not m.set_axis_value(i, axis_vals[i - 3]):
                     print(f"Failed to set axis value for axis {i}")
 
-        def change_to_velocity_mode(m: "MobileIO"):
+        def change_to_velocity_mode(m: MobileIO):
             for i in range(3, 7):
                 if not m.set_snap(i, 0):
                     print(f"Failed to set snap for axis {i}")
@@ -138,9 +140,7 @@ def setup_mobile_io(m: "MobileIO"):
                     torque_toggle=abs(m.get_button_diff(torque_btn)) == 1,
                 )
             else:
-                chassis_velocity = ChassisVelocity(
-                    m.get_axis_state(forward_joy), m.get_axis_state(turn_joy)
-                )
+                chassis_velocity = ChassisVelocity(m.get_axis_state(forward_joy), m.get_axis_state(turn_joy))
                 height_up = m.get_button_state(height_up_btn)
                 height_down = m.get_button_state(height_down_btn)
                 height = height_up - height_down
@@ -200,9 +200,7 @@ if __name__ == "__main__":
         try:
             print("Waiting for Tready modules...")
             sleep(1)
-            base_group = lookup.get_group_from_names(
-                base_family, wheel_names + flipper_names
-            )
+            base_group = lookup.get_group_from_names(base_family, wheel_names + flipper_names)
         except KeyboardInterrupt:
             exit(0)
     print("Tready modules found.")
@@ -217,9 +215,7 @@ if __name__ == "__main__":
     # Leader Arm setup
     try:
         print("Looking for Leader Arm...", end=" ")
-        leader_cfg = hebi.config.load_config(
-            os.path.join(root_dir, "config/tready_sub_leader_arm.cfg.yaml")
-        )
+        leader_cfg = hebi.config.load_config(os.path.join(root_dir, "config/tready_sub_leader_arm.cfg.yaml"))
         leader_arm = hebi.arm.create_from_config(leader_cfg, lookup)
         print("Leader Arm found.")
     except Exception as e:
@@ -229,9 +225,7 @@ if __name__ == "__main__":
     # Follower Arm setup
     try:
         print("Looking for Follower Arm...", end=" ")
-        follower_cfg = hebi.config.load_config(
-            os.path.join(root_dir, "config/tready_sub_follower_arm.cfg.yaml")
-        )
+        follower_cfg = hebi.config.load_config(os.path.join(root_dir, "config/tready_sub_follower_arm.cfg.yaml"))
         follower_arm = hebi.arm.create_from_config(follower_cfg, lookup)
         print("Follower Arm found.")
 
@@ -247,9 +241,7 @@ if __name__ == "__main__":
         home_pose = [1.57, -1.3, 0.0, 0.0, 1.57, 1.0, 0.0]
         if leader_cfg.user_data and "home_pose" in leader_cfg.user_data:
             home_pose = leader_cfg.user_data["home_pose"]
-        leader_follower_control = LeaderFollowerControl(
-            leader_arm, follower_arm, home_pose=home_pose
-        )
+        leader_follower_control = LeaderFollowerControl(leader_arm, follower_arm, home_pose=home_pose)
         leader_follower_control.namespace = "[Arm] "
 
     # Create camera mast group
@@ -259,9 +251,7 @@ if __name__ == "__main__":
         mast_module_names = ["J1_pan", "J2_tilt"]
         mast_group = lookup.get_group_from_names(mast_family, mast_module_names)
         if mast_group is None:
-            raise RuntimeError(
-                "Could not find mast group. Check that family and names match actuators on the network."
-            )
+            raise RuntimeError("Could not find mast group. Check that family and names match actuators on the network.")
         else:
             mast = HebiCameraMast(mast_group)
             mast_control = MastControl(mast)
