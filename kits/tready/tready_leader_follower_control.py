@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 import os
 from time import time, sleep
@@ -89,16 +91,12 @@ if __name__ == "__main__":
     maps_group = lookup.get_group_from_names(["MAPS"], maps_modules)
     while maps_group is None:
         m.clear_text()
-        m.add_text(
-            "MAPS arm not found: Check connection and make sure all modules are blinking green"
-        )
+        m.add_text("MAPS arm not found: Check connection and make sure all modules are blinking green")
         sleep(1)
         maps_group = lookup.get_group_from_names(["MAPS"], maps_modules)
 
     # need these b/c MAPS joint zeros are in different locations
-    angle_offsets = np.array(
-        [0.0, np.pi / 2, -np.pi, -np.pi / 2, -np.pi / 2, -np.pi / 2, 0.0]
-    )
+    angle_offsets = np.array([0.0, np.pi / 2, -np.pi, -np.pi / 2, -np.pi / 2, -np.pi / 2, 0.0])
     input_arm = ContinuousAngleMaps(maps_group, angle_offsets)
 
     base_dir, _ = os.path.split(__file__)
@@ -155,16 +153,12 @@ if __name__ == "__main__":
     # allowed angular difference (°) per joint before starting align
     allowed_diff = np.array([30.0, 20.0, 30.0, 20.0, 45.0, 45.0, 360.0])
 
-    leader_follower_control = LeaderFollowerControl(
-        input_arm, output_arm, output_joints_home, allowed_diff
-    )
+    leader_follower_control = LeaderFollowerControl(input_arm, output_arm, output_joints_home, allowed_diff)
     gripper_control = GripperControl(gripper)
 
     # Update text/border color on state transitions
 
-    def update_ui(
-        controller: LeaderFollowerControl, new_state: LeaderFollowerControlState
-    ):
+    def update_ui(controller: LeaderFollowerControl, new_state: LeaderFollowerControlState):
         if controller.state == new_state:
             return
 
@@ -188,11 +182,7 @@ if __name__ == "__main__":
     demo_controller.start_logging()
     last_log_start_time = time()
     last_text_update = 0.0
-    while (
-        demo_controller.running
-        and gripper_control.running
-        and leader_follower_control.running
-    ):
+    while demo_controller.running and gripper_control.running and leader_follower_control.running:
         t = time()
         demo_inputs = None
         if m_tready.update(0.0):
@@ -213,9 +203,7 @@ if __name__ == "__main__":
                 if t - last_text_update > 0.1:
                     last_text_update = t
                     m.clear_text()
-                    m.add_text(
-                        f"Unaligned: {np.around(np.rad2deg(leader_follower_control.angle_diff), decimals=0)}"
-                    )
+                    m.add_text(f"Unaligned: {np.around(np.rad2deg(leader_follower_control.angle_diff), decimals=0)}")
 
         except KeyboardInterrupt:
             demo_controller.transition_to(t, TreadyControlState.EXIT)

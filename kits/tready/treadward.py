@@ -72,9 +72,7 @@ if __name__ == "__main__":
         sleep(1)
         base_group = try_create_base_group(lookup, family)
 
-    base = TreadedBase(
-        treadward_config, base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1
-    )
+    base = TreadedBase(treadward_config, base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1)
     base_control = TreadedBaseControl(base, max_base_speed=0.60)
 
     updater = MobileIOUpdater(m, mio_demo_config)
