@@ -3,11 +3,10 @@ from __future__ import annotations
 from enum import Enum, auto
 from time import time
 
-from kits.tready.treaded_base_core import (
+from .treaded_base_core import (
     ChassisVelocity,
-    TreadyControlState,
     TreadyInputs,
-    TreadedBaseControl,
+    TreadyControlState
 )
 from kits.tready.tready_utils import set_mobile_io_instructions
 
@@ -19,6 +18,7 @@ if TYPE_CHECKING:
     from typing import Callable, Mapping
     from pathlib import Path
     from hebi._internal.mobile_io import MobileIO
+    from .treaded_base import TreadedBaseControl
 
 
 class MobileIOModes(Enum):

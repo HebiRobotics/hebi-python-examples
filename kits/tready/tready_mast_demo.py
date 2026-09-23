@@ -5,6 +5,8 @@ import os
 import hebi
 import numpy as np
 from time import time, sleep
+from pathlib import Path
+import sys
 from scipy.spatial.transform import Rotation as R
 from hebi.util import create_mobile_io
 
@@ -20,11 +22,8 @@ from ..arms.joystick_control_sm import (
     ArmControlState,
     ArmJoystickInputs,
 )
-from .treaded_base_core import TreadyControlState, TreadyInputs, ChassisVelocity
-from .tready import (
-    TreadyBase,
-    TreadyControl,
-)
+from .treaded_base_core import ChassisVelocity, TreadyControlState, TreadyInputs, TreadedBaseConfig
+from .treaded_base import TreadedBase, TreadedBaseControl
 
 import typing
 
@@ -205,6 +204,7 @@ def parse_mobile_feedback(m: MobileIO):
     flipper4 = m.get_axis_state(6)
 
     base_inputs = TreadyInputs(
+        False,
         home,
         ChassisVelocity(base_x, base_rz),
         [flipper1, flipper1, flipper4, flipper4],
@@ -226,6 +226,9 @@ def parse_mobile_feedback(m: MobileIO):
 if __name__ == "__main__":
     lookup = hebi.Lookup()
     sleep(2)
+
+    config_dir = Path(__file__).absolute().parent / "config"
+    cfg = hebi.config.load_config(str(config_dir / sys.argv[1]))
 
     # Setup Camera Pan/Tilt
     family = "Mast"
@@ -275,8 +278,9 @@ if __name__ == "__main__":
         sleep(1)
         base_group = lookup.get_group_from_names("Tready", wheel_names + flipper_names)
 
-    base = TreadyBase(TreadedBase)(base_group, 0.25, 0.33)
-    base_control = TreadyControl(base)
+    base_cfg = TreadedBaseConfig.from_hebi_config(cfg)
+    base = TreadedBase(base_cfg, base_group, 0.25, 0.33)
+    base_control = TreadedBaseControl(base)
 
     # Setup MobileIO
     print("Looking for Mobile IO...")
@@ -289,7 +293,7 @@ if __name__ == "__main__":
     m.update()
     setup_mobile_io(m)
 
-    def update_mobile_ui(controller: TreadyControl, new_state: TreadyControlState):
+    def update_mobile_ui(controller: TreadedBaseControl, new_state: TreadyControlState):
         if controller.state == TreadyControlState.DISCONNECTED and new_state == TreadyControlState.TELEOP:
             setup_mobile_io(m)
 
@@ -305,7 +309,8 @@ if __name__ == "__main__":
         t = time()
         try:
             base_inputs, arm_inputs, mast_inputs = parse_mobile_feedback(m)
-            base_control.update(t, base_inputs)
+            if base_inputs:
+                base_control.receive_inputs(t, base_inputs)
             arm_control.update(t, arm_inputs)
             mast_control.update(t, mast_inputs)
             camera.update()
@@ -315,7 +320,7 @@ if __name__ == "__main__":
                 camera_angle_cmd.io.c.set_float(2, 0.0)
                 m._group.send_command(camera_angle_cmd)
         except KeyboardInterrupt:
-            base_control.transition_to(t, TreadyControlState.EXIT)
+            base_control.transition_to(TreadyControlState.EXIT)
             arm_control.transition_to(t, ArmControlState.EXIT)
             mast_control.transition_to(t, MastControlState.EXIT)
             m.set_led_color("red")
@@ -326,7 +331,6 @@ if __name__ == "__main__":
         else:
             camera.flood_light = 0.0
 
-        base_control.send()
         arm_control.send()
         mast_control.send()
         camera.send()
