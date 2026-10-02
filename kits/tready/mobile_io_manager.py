@@ -3,10 +3,12 @@ from __future__ import annotations
 from enum import Enum, auto
 from time import time
 
+from kits.tready.treaded_base import TreadyAligningState, TreadyCompliantFlippersState, TreadyEStopState, TreadyExitState, TreadyFlatteningState, TreadyHomingState, TreadyRearingState, TreadyStartupState, TreadyTeleopState
+
 from .treaded_base_core import (
     ChassisVelocity,
+    ControllerState,
     TreadyInputs,
-    TreadyControlState
 )
 from kits.tready.tready_utils import set_mobile_io_instructions
 
@@ -18,7 +20,7 @@ if TYPE_CHECKING:
     from typing import Callable, Mapping
     from pathlib import Path
     from hebi._internal.mobile_io import MobileIO
-    from .treaded_base import TreadedBaseControl
+    from .treaded_base import TreadedBaseController
 
 
 class MobileIOModes(Enum):
@@ -33,7 +35,7 @@ class MobileIOUpdater:
     def __init__(
         self,
         mobile_io: MobileIO,
-        demo_config: Mapping[MobileIOModes, tuple[str | Path, Callable[[MobileIO], tuple]]],
+        demo_config: Mapping[type[ControllerState], tuple[str | Path, Callable[[MobileIO], tuple]]],
     ):
 
         self.m = mobile_io
@@ -44,91 +46,65 @@ class MobileIOUpdater:
         self.last_msg = ""
         self.voltage = 0
         self.voltage_update_time = 0.0
-        self.io_mode = MobileIOModes.STARTUP
-
-    @property
-    def io_mode(self):
-        return self._io_mode
-
-    @io_mode.setter
-    def io_mode(self, value: MobileIOModes):
-        self._io_mode = value
-        print(f'Sending layout to Mobile IO: "{self.layouts[value]}"')
-        self.m.send_layout(layout_file=str(self.layouts[value]))
+        self.active_parser = None
 
     # Runs when base changes state
-    def base_transition_handler(self, controller: TreadedBaseControl, new_state: TreadyControlState):
+    def base_transition_handler(self, controller: TreadedBaseController, new_state: ControllerState):
         if controller.state == new_state:
             return
 
-        if new_state is TreadyControlState.HOMING:
-            controller.base.set_color("magenta")
-            self.base_msg = "Robot Homing Sequence\nPlease wait..."
-            self.color = "blue"
+        if new_state in self.layouts:
+            print(f'Sending layout to Mobile IO: "{self.layouts[new_state]}"')
+            self.m.send_layout(layout_file=str(self.layouts[new_state]))
+            self.active_parser = self.parsers[new_state]
 
-        elif new_state is TreadyControlState.ALIGNING:
-            controller.base.set_color("magenta")
-            self.base_msg = "Robot Flippers Centering\nPlease wait..."
-            self.color = "blue"
+        match new_state:
+            case TreadyHomingState():
+                self.base_msg = "Robot Homing Sequence\nPlease wait..."
+                self.color = "blue"
 
-        elif new_state is TreadyControlState.FLATTENING:
-            controller.base.set_color("magenta")
-            self.base_msg = "Robot Flippers Flattening\nPlease wait..."
-            self.color = "blue"
+            case TreadyAligningState():
+                self.base_msg = "Robot Flippers Centering\nPlease wait..."
+                self.color = "blue"
 
-        elif new_state is TreadyControlState.REARING:
-            controller.base.set_color("magenta")
-            self.base_msg = "Robot Rearing Up\nPlease wait..."
-            self.color = "blue"
+            case TreadyFlatteningState():
+                self.base_msg = "Robot Flippers Flattening\nPlease wait..."
+                self.color = "blue"
 
-        elif new_state is TreadyControlState.STARTUP:
-            controller.base.set_color("magenta")
-            self.io_mode = MobileIOModes.STARTUP
-            self.base_msg = ""
-            for i in range(4):
-                if controller.base.flipper_wound[i]:
-                    if self.base_msg == "":
-                        self.base_msg += "- Flipper " + str(i + 1) + " is wound \n"
-                    else:
-                        self.base_msg += "      - Flipper " + str(i + 1) + " is wound \n"
+            case TreadyRearingState():
+                self.base_msg = "Robot Rearing Up\nPlease wait..."
+                self.color = "blue"
 
-            self.color = "yellow"
+            case TreadyStartupState() as startup:
+                if len(startup.unlocked_flippers) > 0:
+                    self.color = "yellow"
+                    self.base_msg = "     ".join(f"- Flipper {i + 1} is wound \n" for i in startup.unlocked_flippers)
+                else:
+                    self.base_msg = ""
 
-        elif new_state is TreadyControlState.TELEOP:
-            controller.base.clear_color()
-            self.io_mode = MobileIOModes.DRIVE
-            # self.m.set_axis_label(
-            #    6, "BR"
-            # )  # TODO: this should not be needed but send layout has a bug
-            self.base_msg = "Robot Ready to Control"
-            self.color = "green"
+            case TreadyTeleopState():
+                self.base_msg = "Robot Ready to Control"
+                self.color = "green"
 
-        elif new_state is TreadyControlState.DISCONNECTED:
-            print("Lost connection to Controller. Please reconnect.")
-            controller.base.set_color("blue")
+            case TreadyEStopState():
+                self.base_msg = "Emergency Stop Activated"
+                self.color = "red"
 
-        elif new_state is TreadyControlState.EMERGENCY_STOP:
-            controller.base.set_color("yellow")
-            self.base_msg = "Emergency Stop Activated"
-            self.color = "red"
+            case TreadyExitState():
+                self.base_msg = "Demo Stopped"
+                self.payload_msg = ""
+                self.color = "red"
 
-        elif new_state is TreadyControlState.EXIT:
-            controller.base.set_color("red")
-            self.base_msg = "Demo Stopped"
-            self.payload_msg = ""
-            self.color = "red"
-
-        else:
-            self.base_msg = ""
+            case _:
+                self.base_msg = ""
 
         self.needs_update()
 
     # Called to update the message on the mobileIO display
     def needs_update(self):
+        msg = f"Battery: {self.voltage:.2f}V"
         if self.base_msg != "":
-            msg = f"Battery: {self.voltage:.2f}V\nBase: {self.base_msg}"
-        else:
-            msg = f"Battery: {self.voltage:.2f}V"
+            msg += f"\nBase: {self.base_msg}"
 
         if msg != self.last_msg:
             set_mobile_io_instructions(self.m, msg, self.color)
@@ -136,34 +112,24 @@ class MobileIOUpdater:
         self.last_msg = msg
 
     # Updates axis labels for torque mode sliders
-    def update_torque_mode(self, controller: TreadedBaseControl, state: TreadyControlState):
+    def update_torque_mode(self, controller: TreadedBaseController, state: ControllerState):
 
-        if controller.state is TreadyControlState.TELEOP:
-            if controller.torque_labels is not None:
-                if controller.torque_labels_changed:
-                    for i, label in enumerate(controller.torque_labels):
-                        self.m.set_axis_label(i + 3, label, blocking=False)
-            else:
-                self.m.set_axis_label(3, "FL", blocking=False)
-                self.m.set_axis_label(4, "FR", blocking=False)
-                self.m.set_axis_label(5, "BL", blocking=False)
-                self.m.set_axis_label(6, "BR", blocking=False)
+        if isinstance(state, TreadyCompliantFlippersState):
+            if state.torque_labels_changed:
+                for i, label in enumerate(state.torque_labels):
+                    self.m.set_axis_label(i + 3, label, blocking=False)
 
     # Updates the base startup message
-    def update_startup_msg_base(self, controller: TreadedBaseControl, state: TreadyControlState):
-        if state is TreadyControlState.STARTUP:
-            self.base_msg = ""
-            for i in range(4):
-                if controller.base.flipper_wound[i]:
-                    if self.base_msg == "":
-                        self.base_msg += "- Flipper " + str(i + 1) + " is wound \n"
-                    else:
-                        self.base_msg += "          - Flipper " + str(i + 1) + " is wound \n"
-
+    def update_startup_msg_base(self, controller: TreadedBaseController, state: ControllerState):
+        if isinstance(state, TreadyStartupState):
+            if len(state.unlocked_flippers) > 0:
+                self.base_msg = "     ".join(f"- Flipper {i + 1} is wound \n" for i in state.unlocked_flippers)
+            else:
+                self.base_msg = ""
             self.needs_update()
 
     # Updates the voltage reading
-    def update_voltage_reading(self, controller: TreadedBaseControl, state: TreadyControlState):
+    def update_voltage_reading(self, controller: TreadedBaseController, state: ControllerState):
         t_now = time()
         if t_now > self.voltage_update_time:
             self.voltage_update_time = t_now + 10.0  # update every 10 seconds
@@ -173,8 +139,8 @@ class MobileIOUpdater:
     def parse_mobile_io_feedback(self, m: MobileIO, timeout_ms=0.0):
 
         if m.update(timeout_ms):
-            if self.io_mode in self.parsers:
-                return self.parsers[self.io_mode](m)
+            if self.active_parser is not None:
+                return self.active_parser(m)
 
         return None
 

@@ -453,12 +453,12 @@ if __name__ == "__main__":
             if controller.state is TreadyControlState.TELEOP:
                 if controller.torque_labels is not None:
                     for i, label in enumerate(controller.torque_labels):
-                        m.set_axis_label(i + 3, label, blocking=False)
+                        self.m.set_axis_label(i + 3, label, blocking=False)
                 else:
-                    m.set_axis_label(3, "FL", blocking=False)
-                    m.set_axis_label(4, "FR", blocking=False)
-                    m.set_axis_label(5, "BL", blocking=False)
-                    m.set_axis_label(6, "BR", blocking=False)
+                    self.m.set_axis_label(3, "FL", blocking=False)
+                    self.m.set_axis_label(4, "FR", blocking=False)
+                    self.m.set_axis_label(5, "BL", blocking=False)
+                    self.m.set_axis_label(6, "BR", blocking=False)
 
         # Updates the base startup message
         def update_startup_msg_base(self, controller: TreadedBaseControl, state: TreadyControlState):
