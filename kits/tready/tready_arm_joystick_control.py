@@ -12,15 +12,16 @@ from kits.arms.joystick_control_sm import (
     ArmJoystickControl,
     ArmJoystickInputs,
 )
-from .treaded_base_core import ChassisVelocity, TreadyInputs
+from .treaded_base_core import ChassisVelocity, TreadedBaseController, TreadyEStopState, TreadyExitState, TreadyInputs
 from .treaded_base import (
     TreadedBase,
-    TreadedBaseControl,
+    TreadyInitialState,
+    TreadyStartupState,
+    TreadyTeleopState,
 )
 
 from .mobile_io_manager import (
     MobileIOUpdater,
-    MobileIOModes,
     update_startup_mode,
 )
 
@@ -174,13 +175,13 @@ if __name__ == "__main__":
 
     layout_dir = config_dir / "layouts"
     mio_demo_config = {
-        MobileIOModes.STARTUP: (layout_dir / "TreadwardStartupController.json", arm_update_startup_mode),
-        MobileIOModes.DRIVE: (layout_dir / "TreadwardJoystickArmController.json", arm_update_drive_mode),
+        TreadyStartupState: (layout_dir / "TreadwardStartupController.json", arm_update_startup_mode),
+        TreadyTeleopState: (layout_dir / "TreadwardJoystickArmController.json", arm_update_drive_mode),
     }
     updater = MobileIOUpdater(m, mio_demo_config)
 
     base = TreadedBase.from_config(base_cfg)
-    base_control = TreadedBaseControl(base, max_base_speed=base_cfg.user_data["max_base_speed"])
+    base_control = TreadedBaseController(base, TreadyInitialState, TreadyEStopState, TreadyExitState, max_base_speed=base_cfg.user_data["max_base_speed"])
     base_control.namespace = "[Base] "
 
     # Create Arm group
@@ -227,13 +228,12 @@ if __name__ == "__main__":
         try:
             inputs = updater.parse_mobile_io_feedback(m)
             if inputs is None:
-                base_inputs = None
                 arm_inputs = None
             else:
-                base_inputs = inputs[0]
                 arm_inputs = inputs[1]
 
-                base_control.receive_inputs(t, base_inputs)
+                base_inputs = inputs[0]
+                base_control.receive_inputs(base_inputs)
                 if base_inputs.quit:
                     break
 
@@ -243,8 +243,8 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             break
 
-    base_control.stop()
     arm_control.stop()
+    base_control.wait_for_shutdown(1)
 
     if logging:
         arm.group.stop_log()

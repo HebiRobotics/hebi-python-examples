@@ -12,15 +12,16 @@ import hebi
 
 from kits.arms.ar_control_sm import ArmMobileIOControl, ArmMobileIOInputs
 
-from .treaded_base_core import ChassisVelocity, TreadyInputs
+from .treaded_base_core import ChassisVelocity, TreadedBaseController, TreadyEStopState, TreadyExitState, TreadyInputs
 from .treaded_base import (
     TreadedBase,
-    TreadedBaseControl,
+    TreadyInitialState,
+    TreadyStartupState,
+    TreadyTeleopState,
 )
 
 from .mobile_io_manager import (
     MobileIOUpdater,
-    MobileIOModes,
     update_startup_mode,
 )
 
@@ -162,13 +163,13 @@ if __name__ == "__main__":
     updater = MobileIOUpdater(
         m,
         {
-            MobileIOModes.STARTUP: (layout_dir / "TreadwardStartupController.json", arm_update_startup_mode),
-            MobileIOModes.DRIVE: (layout_dir / "TreadwardARArmController.json", arm_update_drive_mode),
+            TreadyStartupState: (layout_dir / "TreadwardStartupController.json", arm_update_startup_mode),
+            TreadyTeleopState: (layout_dir / "TreadwardARArmController.json", arm_update_drive_mode),
         },
     )
 
     base = TreadedBase.from_config(base_cfg)
-    base_control = TreadedBaseControl(base, max_base_speed=base_cfg.user_data["max_base_speed"])
+    base_control = TreadedBaseController(base, TreadyInitialState, TreadyEStopState, TreadyExitState, max_base_speed=base_cfg.user_data["max_base_speed"])
     base_control.namespace = "[Base] "
 
     # Create Arm group
@@ -224,7 +225,7 @@ if __name__ == "__main__":
                 if base_inputs.quit:
                     break
 
-                base_control.receive_inputs(t, base_inputs)
+                base_control.receive_inputs(base_inputs)
 
             arm_control.update(t, arm_inputs)
             arm_control.send()
@@ -232,9 +233,9 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             break
 
-    base_control.stop()
     arm_control.stop()
+    base_control.wait_for_shutdown(1)
 
     if logging:
-        base.group.stop_log()
         arm.group.stop_log()
+        base.group.stop_log()
