@@ -13,12 +13,6 @@ import hebi
 
 from .treaded_base_core import TreadyEStopState, TreadyExitState, TreadyInputs, TreadedBase, TreadedBaseController, ControllerState
 
-from .mobile_io_manager import (
-    MobileIOUpdater,
-    update_startup_mode,
-    update_drive_mode,
-)
-
 from .tready_utils import wait_for_mobile_io
 
 
@@ -282,6 +276,12 @@ class TreadyCompliantFlippersState(ControllerState):
 
 
 if __name__ == "__main__":
+    from .mobile_io_manager import (
+        MobileIOUpdater,
+        update_startup_mode,
+        update_drive_mode,
+    )
+
     lookup = hebi.Lookup()
 
     config_dir = Path(__file__).absolute().parent / "config"
