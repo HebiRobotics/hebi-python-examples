@@ -169,7 +169,9 @@ if __name__ == "__main__":
     )
 
     base = TreadedBase.from_config(base_cfg)
-    base_control = TreadedBaseController(base, TreadyInitialState, TreadyEStopState, TreadyExitState, max_base_speed=base_cfg.user_data["max_base_speed"])
+    base_control = TreadedBaseController(
+        base, TreadyInitialState, TreadyEStopState, TreadyExitState, max_base_speed=base_cfg.user_data["max_base_speed"]
+    )
     base_control.namespace = "[Base] "
 
     # Create Arm group

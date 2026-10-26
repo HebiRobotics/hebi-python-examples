@@ -181,7 +181,9 @@ if __name__ == "__main__":
     updater = MobileIOUpdater(m, mio_demo_config)
 
     base = TreadedBase.from_config(base_cfg)
-    base_control = TreadedBaseController(base, TreadyInitialState, TreadyEStopState, TreadyExitState, max_base_speed=base_cfg.user_data["max_base_speed"])
+    base_control = TreadedBaseController(
+        base, TreadyInitialState, TreadyEStopState, TreadyExitState, max_base_speed=base_cfg.user_data["max_base_speed"]
+    )
     base_control.namespace = "[Base] "
 
     # Create Arm group
@@ -218,7 +220,7 @@ if __name__ == "__main__":
     logging = True
 
     if logging:
-        tready_log_dir = str(Path(__file__).parent /  "logs")
+        tready_log_dir = str(Path(__file__).parent / "logs")
         now = datetime.datetime.now()
         arm.group.start_log(tready_log_dir, f"arm_{now:%Y-%m-%d-%H:%M:%S}")
         base.group.start_log(tready_log_dir, f"base_{now:%Y-%m-%d-%H:%M:%S}")

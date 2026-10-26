@@ -44,8 +44,7 @@ def assert_range(val, infimum, supremum, what='index', l_inclusive=True, u_inclu
         in_range = in_range and val < supremum
 
     if not in_range:
-        raise IndexError('{0} ({5}) out of range {1}{2},{3}{4}'.format(
-            what, l_str, infimum, supremum, u_str, val))
+        raise IndexError(f'{what} ({val}) out of range {l_str}{infimum},{supremum}{u_str}')
 
 
 def assert_prange(val, supremum, what='index'):
