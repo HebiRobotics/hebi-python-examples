@@ -167,6 +167,7 @@ class TreadyDisconnectedState(ControllerState):
         print(self.controller.namespace + "Controller reconnected, demo continued.")
         self.controller.transition_to(self.prev_state)
 
+
 @dataclass
 class TreadyEStopState(ControllerState):
     def on_enter(self, from_state: ControllerState, **kwargs):
@@ -241,7 +242,7 @@ class TreadedBaseController:
             return False
         elif not self.state.can_transition_to(new_state):
             return False
-        elif type(self.state) == type(new_state):
+        elif isinstance(self.state, type(new_state)):
             return True
 
         print(f'{self.namespace} Transition {type(self.state)} -> {type(new_state)}')
@@ -340,6 +341,8 @@ class TreadedBase(GroupManager):
         # Create base group
         while (base_group := lookup.get_group_from_names(cfg.families, cfg.names, timeout_ms=1000)) is None:
             print(f"Looking for {cfg.families[0]} modules...")
+
+        assert cfg.user_data is not None
 
         return cls(
             TreadedBaseConfig.from_hebi_config(cfg),
