@@ -248,6 +248,10 @@ class TreadedBaseController:
         print(f'{self.namespace} Transition {type(self.state)} -> {type(new_state)}')
         self.state.on_exit(to_state=new_state, **kwargs)
         new_state.on_enter(from_state=self.state, **kwargs)
+
+        for handler in self._transition_handlers:
+            handler(self, new_state)
+        # This goes after the handlers, so they can use the "before" state also
         self.state = new_state
 
         return True
@@ -288,6 +292,8 @@ class TreadedBaseController:
                 return True
 
         self.state.update()
+        for handler in self._update_handlers:
+            handler(self, self.state)
         return True
 
 
