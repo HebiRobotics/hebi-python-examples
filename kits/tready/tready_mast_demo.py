@@ -42,6 +42,9 @@ if __name__ == "__main__":
         mast_inputs = MastInputs(pan, tilt, base_inputs.home, 1.0, True, 0.4)
         return base_inputs, mast_inputs
 
+    def update_camera_startup_mode(m: MobileIO):
+        return update_startup_mode(m)[0], MastInputs(0.0, 0.0, False, 1.0, False, 0.2)
+
     lookup = hebi.Lookup()
 
     config_dir = Path(__file__).absolute().parent / "config"
@@ -56,7 +59,7 @@ if __name__ == "__main__":
     updater = MobileIOUpdater(
         m,
         {
-            TreadyStartupState: (layout_dir / "TreadwardStartupController.json", update_startup_mode),
+            TreadyStartupState: (layout_dir / "TreadwardStartupController.json", update_camera_startup_mode),
             TreadyTeleopState: (layout_dir / "TreadwardCameraDriveController.json", update_camera_drive_mode),
         },
     )
@@ -100,7 +103,7 @@ if __name__ == "__main__":
 
     while base_control.running and mast_control.running:
         try:
-            inputs = updater.parse_mobile_io_feedback(m) #, timeout_ms=500)
+            inputs = updater.parse_mobile_io_feedback(m, timeout_ms=500)
             if inputs is not None:
                 base_inputs, mast_inputs = inputs
 
