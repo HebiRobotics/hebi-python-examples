@@ -60,13 +60,11 @@ class MobileIOUpdater:
 
     # Runs when base changes state
     def base_transition_handler(self, controller: TreadedBaseController, new_state: ControllerState):
-        if controller.state == new_state:
-            return
-
-        if new_state in self.layouts:
-            print(f'Sending layout to Mobile IO: "{self.layouts[new_state]}"')
-            self.m.send_layout(layout_file=str(self.layouts[new_state]))
-            self.active_parser = self.parsers[new_state]
+        if isinstance(new_state, tuple(self.layouts.keys())):
+            state_cls = type(new_state)
+            print(f'Sending layout to Mobile IO: "{self.layouts[state_cls]}"')
+            self.m.send_layout(layout_file=str(self.layouts[state_cls]))
+            self.active_parser = self.parsers[state_cls]
 
         match new_state:
             case TreadyHomingState():
