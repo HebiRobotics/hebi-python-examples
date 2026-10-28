@@ -1,265 +1,280 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 
-import os
-import hebi
+from dataclasses import dataclass
+
+from pathlib import Path
 import numpy as np
-from time import time, sleep
-from hebi.util import create_mobile_io
-from enum import Enum, auto
+import time
 from scipy.spatial.transform import Rotation as R
+
+import hebi
+from hebi.util import create_mobile_io
+from hebi._internal.group_manager import GroupManager
 
 from .camera import HebiCamera
 
 import typing
+from typing import override
+
 if typing.TYPE_CHECKING:
-    from typing import Sequence, Optional
-    import numpy.typing as npt
+    from typing import Sequence
     from hebi._internal.mobile_io import MobileIO
     from hebi._internal.group import Group
-    from hebi._internal.trajectory import Trajectory
     from hebi.robot_model import RobotModel
+    from typing import Self, Callable
 
 
-class HebiCameraMast:
-    def __init__(self, pan_tilt_group: 'Group', hrdf: 'RobotModel | str'=os.path.join(os.path.dirname(__file__), 'hrdf', 'pan_tilt_mast.hrdf')):
-        self.group = pan_tilt_group
-        self.fbk = self.group.get_next_feedback()
-        while self.fbk is None:
-            self.fbk = self.group.get_next_feedback()
-        self.cmd = hebi.GroupCommand(self.group.size)
-        self.trajectory: 'Optional[Trajectory]' = None
+class CameraMast(GroupManager):
+    def __init__(
+        self,
+        pan_tilt_group: Group,
+        hrdf: RobotModel | str = str(Path(__file__).parent / 'config' / 'hrdf' / 'pan_tilt_mast.hrdf'),
+    ):
+        super().__init__(time.time, pan_tilt_group)
 
         if isinstance(hrdf, str):
             self.robot_model = hebi.robot_model.import_from_hrdf(hrdf)
         else:
             self.robot_model = hrdf
 
-        self.output_frame = np.empty((4,4), dtype=np.float64)
+        self.output_frame = np.empty((4, 4), dtype=np.float64)
 
-    def update(self, t_now: float):
-        self.group.get_next_feedback(reuse_fbk=self.fbk)
-
-        wxyz = self.fbk[0].orientation
-        xyzw = [*wxyz[1:], wxyz[0]]
+    def _inner_update(self, t: float) -> bool:
+        res = super()._inner_update(t)
 
         base_frame = np.eye(4)
-        base_frame[:3, :3] = R.from_quat(xyzw).as_matrix()
+        base_frame[:3, :3] = R.from_quat(self.last_feedback[0].orientation, scalar_first=True).as_matrix()
         self.robot_model.base_frame = base_frame
-        self.robot_model.get_end_effector(self.fbk.position, output=self.output_frame)
+        self.robot_model.get_end_effector(self.last_feedback.position, output=self.output_frame)
+        return res
 
-        # execute current trajectory
-        if self.trajectory is not None:
-            p, v, _ = self.trajectory.get_state(t_now)
-            self.cmd.position = p
-            self.cmd.velocity = v
+    def set_velocity(self, duration: float, velocity: Sequence[float]):
+        g = hebi.Goal(2).add_waypoint(duration, np.full(2, np.nan), velocity)
+        self.set_goal(g)
 
-
-    def send(self):
-        self.group.send_command(self.cmd)
-
-    def set_velocity(self, t_now: float, duration: float, velocity: 'Sequence[float]'):
-
-        positions = np.empty((2,2))
-        velocities = np.empty((2,2))
-        accelerations = np.empty((2,2))
-
-        if self.trajectory is None:
-            positions[:, 0] = self.fbk.position
-            velocities[:, 0] = self.fbk.velocity
-            accelerations[:, 0] = 0
-        else:
-            p, v, a = self.trajectory.get_state(t_now)
-            positions[:, 0] = p
-            velocities[:, 0] = v
-            accelerations[:, 0] = a
-
-        positions[:, 1] = np.nan
-
-        velocities[0, 1] = velocity[0]
-        velocities[1, 1] = velocity[1]
-
-        accelerations[:, 1] = 0.0
-
-        self.trajectory = hebi.trajectory.create_trajectory([t_now, t_now+duration], positions, velocities, accelerations)
-
-    def set_position(self, t_now: float, duration: float, position: 'Sequence[float]'):
-        p = np.empty((2,2))
-        p[:, 0] = self.fbk.position
-        p[:, 1] = position
-        self.trajectory = hebi.trajectory.create_trajectory([t_now, t_now+duration], p)
+    def set_position(self, duration: float, position: Sequence[float]):
+        g = hebi.Goal(2).add_waypoint(duration, position)
+        self.set_goal(g)
 
 
-class MastControlState(Enum):
-    STARTUP = auto()
-    HOMING = auto()
-    TELEOP = auto()
-    DISCONNECTED = auto()
-    EXIT = auto()
-
+@dataclass
 class MastInputs:
     v_pan: float
     v_tilt: float
     home: bool
     zoom: float
-    flood_light: float
-    spot_light: float
-
-    def __init__(self, sliders: 'list[float]' = [0, 0], home: bool = False, zoom: float = 0.0, flood: float = 0.0, spot: float = 0.0):
-        self.pan = sliders[0]
-        self.tilt = sliders[1]
-        self.home = home
-        self.zoom = zoom
-        self.flood_light = flood
-        self.spot_light = spot
+    light_enable: bool
+    light_pwm: float
 
 
-class MastControl:
+@dataclass
+class ControllerState:
+    controller: MastController
+
+    def can_transition_to(self, state: ControllerState) -> bool:
+        return True
+
+    def can_transition_from(self, state: ControllerState) -> bool:
+        return True
+
+    def on_enter(self, from_state: ControllerState, **kwargs): ...
+
+    def update(self, **kwargs): ...
+
+    def receive_inputs(self, t_now: float, inputs, **kwargs): ...
+
+    def on_exit(self, to_state: ControllerState, **kwargs): ...
+
+
+@dataclass
+class CameraMastState(ControllerState):
+    controller: MastController
+
+    @override
+    def receive_inputs(self, t_now: float, inputs: MastInputs, **kwargs): ...
+
+
+@dataclass
+class CameraMastStartupState(ControllerState):
+    def update(self, **kwargs):
+        self.controller.transition_to(CameraMastHomingState(self.controller))
+
+
+@dataclass
+class CameraMastHomingState(ControllerState):
+    def on_enter(self, from_state: ControllerState, **kwargs):
+        self.controller.mast.set_position(3.0, [np.pi, np.pi / 2])
+
+    def update(self, **kwargs):
+        if self.controller.mast.at_goal:
+            self.controller.transition_to(CameraMastTeleopState(self.controller))
+
+
+@dataclass
+class CameraMastTeleopState(ControllerState):
     PAN_SCALING = 0.5
     TILT_SCALING = 0.5
 
-    def __init__(self, camera_mast: HebiCameraMast, zoom_camera: HebiCamera = None):
+    def receive_inputs(self, t_now: float, inputs: MastInputs, **kwargs):
+        self.controller.camera.zoom_level = inputs.zoom
+        self.controller.camera.light_enable = inputs.light_enable
+        self.controller.camera.light_pwm = inputs.light_pwm
+
+        if inputs.home:
+            self.controller.transition_to(CameraMastHomingState(self.controller))
+        else:
+            Δpan = inputs.v_pan * self.PAN_SCALING
+            Δtilt = inputs.v_tilt * self.TILT_SCALING
+            Δt = 0.25  # sec
+
+            self.controller.mast.set_velocity(Δt, [Δpan, Δtilt])
+
+
+@dataclass
+class CameraMastDisconnectedState(ControllerState):
+    def on_enter(self, from_state: ControllerState, **kwargs):
+        self.controller.mast.cancel_goal()
+
+    def update(self, **kwargs):
+        if (time.time() - self.controller.last_cmd_t) < 1.0:
+            self.controller.transition_to(CameraMastTeleopState(self.controller))
+
+
+@dataclass
+class CameraMastExitState(ControllerState): ...
+
+
+class MastController:
+    def __init__(
+        self,
+        mast: CameraMast,
+        camera: HebiCamera,
+        starting_state: type[ControllerState],
+        fault_state: type[ControllerState],
+        exit_state: type[ControllerState],
+    ):
+
+        self.mast = mast
+        self.camera = camera
+        self.state = starting_state(self)
+        self.fault_state = fault_state
+        self.exit_state = exit_state
+
         self.namespace = ""
+        # self._executer = futures.ThreadPoolExecutor(max_workers=1)
 
-        self.state = MastControlState.STARTUP
-        self.mast = camera_mast
-        self.camera = zoom_camera
+        self.last_cmd_t = time.time()
 
-        self.last_input_time = time()
+        self.payload_deploy_safe = False
+        self.payload_stow_safe = True
 
-        self.home_pose = [0, 0]
+        self._transition_handlers: list[Callable[[Self, ControllerState], None]] = []
+        self._update_handlers: list[Callable[[Self, ControllerState], None]] = []
+
+        self.mast.set_on_update_callback(self.on_mast_update)
+        self.mast.set_on_failed_update_callback(self.on_packet_loss)
+
+        if not self.mast.running:
+            self.mast.start()
+
+        if not self.camera.running:
+            self.camera.start()
 
     @property
     def running(self):
-        return self.state is not self.state.EXIT
+        return not isinstance(self.state, self.exit_state)
 
-    def send(self):
-        self.mast.send()
-        self.camera.send()
+    def receive_inputs(self, input: MastInputs):
+        t_now = time.time()
+        self.last_cmd_t = t_now
+        self.state.receive_inputs(t_now, input)
 
-    def update(self, t_now: float, inputs: 'Optional[MastInputs]'):
-        self.mast.update(t_now)
-        self.camera.update()
-        if not inputs:
-            if t_now - self.last_input_time > 1.0 and self.state is not self.state.DISCONNECTED:
-                print(self.namespace + "Warning, lost signal to Mobile IO, going into safety state!")
-                self.transition_to(t_now, self.state.DISCONNECTED)
-            return
+    def transition_to(self, new_state: ControllerState, **kwargs):
+        if not new_state.can_transition_from(self.state):
+            return False
+        elif not self.state.can_transition_to(new_state):
+            return False
+        elif isinstance(self.state, type(new_state)):
+            return True
 
-        self.last_input_time = t_now
-        if self.state is self.state.DISCONNECTED:
-            self.transition_to(t_now, self.state.TELEOP)
-
-        self.camera.zoom_level = inputs.zoom
-        self.camera.flood_light = inputs.flood_light
-        self.camera.spot_light = inputs.spot_light
-
-        if self.state is self.state.STARTUP:
-            self.transition_to(t_now, self.state.HOMING)
-
-        elif self.state is self.state.HOMING:
-            if t_now > self.mast.trajectory.end_time:
-                self.transition_to(t_now, self.state.TELEOP)
-
-        elif self.state is self.state.TELEOP:
-            if inputs.home:
-                self.transition_to(t_now, self.state.HOMING)
-            else:
-                Δpan  = inputs.pan * self.PAN_SCALING
-                Δtilt = inputs.tilt * self.TILT_SCALING
-                Δt = 0.25 # sec
-
-                self.mast.set_velocity(t_now, Δt, [Δpan, Δtilt])
-
-    def transition_to(self, t_now: float, new_state: MastControlState):
-        if new_state is self.state:
-            return
-
-        if new_state is self.state.DISCONNECTED:
-            print(self.namespace + "Transitioning to Disconnected")
-            self.mast.trajectory = None
-            self.mast.cmd.velocity = None
-
-        elif new_state is self.state.HOMING:
-            print(self.namespace + "Transitioning to Homing")
-            self.mast.set_position(t_now, 3.0, self.home_pose)
-
-        elif new_state is self.state.TELEOP:
-            print(self.namespace + "Transitioning to Manual Control")
-
-        elif new_state is self.state.EXIT:
-            print(self.namespace + "Transitioning to Exit")
-
+        print(f'{self.namespace} Transition {type(self.state)} -> {type(new_state)}')
+        self.state.on_exit(to_state=new_state, **kwargs)
+        new_state.on_enter(from_state=self.state, **kwargs)
         self.state = new_state
-    
-    def stop(self):
-        self.transition_to(time(), MastControlState.EXIT)
+
+        return True
+
+    def clear_leds(self):
+        self.mast.pending_command.led.color = 'transparent'
+
+    def wait_for_shutdown(self, timeout_s):
+        self.mast.stop()
+        self.camera.stop()
+        time.sleep(timeout_s)
+
+        if self.mast.running:
+            print("Warning: base did not shutdown cleanly")
+
+    def start_logging(self):
+        self.mast.group.start_log("logs", mkdirs=True)
+
+    def cycle_log(self):
+        self.mast.group.stop_log()
+        self.mast.group.start_log("logs", mkdirs=True)
+
+    def on_packet_loss(self):
+        print('WARNING: Failed to get next feedback!!!')
+
+    def on_mast_update(self):
+        if isinstance(self.state, self.exit_state):
+            return True
+
+        if self.mast.m_stopped:
+            if not isinstance(self.state, self.fault_state):
+                self.transition_to(self.fault_state(self))
+            return True
+
+        # Transition to disconnected if no mobile update recieved
+        if not isinstance(self.state, CameraMastDisconnectedState):
+            if (time.time() - self.last_cmd_t) > 1.0:
+                self.transition_to(CameraMastDisconnectedState(self))
+                return True
+
+        self.state.update()
+        return True
 
 
-def setup_mobile_io(m: 'MobileIO'):
-    m.set_button_label(1, '⟲')
-    m.set_button_label(2, 'wide')
-    m.set_button_mode(2, 1)
-    m.set_button_label(3, 'flood')
-    m.set_button_mode(3, 1)
-    m.set_button_label(4, 'spot')
-    m.set_button_mode(4, 1)
-
-    # Since these values are rescaled -1:1 -> 0:1, set them to their "0" position to start
-    m.set_axis_value(3, -1.0)
-    m.set_axis_value(4, -1.0)
-
-
-def parse_mobile_feedback(m: 'MobileIO'):
+def parse_mobile_feedback(m: MobileIO):
     if not m.update(0.0):
         return None
 
     # Update Camera zoom/lights
-    zoom  = (m.get_axis_state(3) + 1.0) / 2.0
+    zoom = 1 + (m.get_axis_state(3) + 1.0) / 2.0
     light = (m.get_axis_state(4) + 1.0) / 2.0
+    light_en = m.get_button_state(2)
 
-    flood_light = 0.0
-    if m.get_button_state(3):
-        flood_light = light
-
-    spot_light = 0.0
-    if m.get_button_state(4):
-        spot_light = light
-
-    pan  = -1.0 * m.get_axis_state(1)
+    pan = -1.0 * m.get_axis_state(1)
     tilt = m.get_axis_state(2)
 
-    return MastInputs([pan, tilt], m.get_button_state(1))
+    return MastInputs(pan, tilt, m.get_button_state(1), zoom, light_en, light)
 
 
 if __name__ == "__main__":
     lookup = hebi.Lookup()
-    sleep(2)
 
     # Setup Camera Pan/Tilt
     family = "Mast"
     module_names = ['J1_pan', 'J2_tilt']
 
-    group = lookup.get_group_from_names(family, module_names)
+    group = lookup.get_group_from_names(family, module_names, timeout_ms=2000)
     while group is None:
         print('Looking for pan/tilt modules...')
-        sleep(1)
-        group = lookup.get_group_from_names(family, module_names)
+        group = lookup.get_group_from_names(family, module_names, timeout_ms=1000)
 
-    zoom_group = lookup.get_group_from_names('C10', ['C10-0001'])
-    while zoom_group is None:
-        print('Looking for zoom camera...')
-        sleep(1)
-        zoom_group = lookup.get_group_from_names('C10', ['C10-0001'])
-
-    cam_group = lookup.get_group_from_names('CW1', ['CW1-0004'])
-    while cam_group is None:
-        print('Looking for camera...')
-        sleep(1)
-        cam_group = lookup.get_group_from_names('CW1', ['CW1-0004'])
-    
-    mast = HebiCameraMast(group)
-    zoom_camera = HebiCamera(zoom_group)
-    camera = HebiCamera(cam_group)
+    mast = CameraMast(group)
+    camera = HebiCamera.from_family('HEBI')
+    camera.set_overlay_text('HEBI Mast Control Demo')
 
     # Setup MobileIO
     print('Looking for Mobile IO...')
@@ -267,35 +282,31 @@ if __name__ == "__main__":
     while m is None:
         try:
             print('Waiting for Mobile IO device to come online...')
-            sleep(1)
+            time.sleep(1)
             m = create_mobile_io(lookup, family)
         except KeyboardInterrupt:
             exit(0)
 
     m.update()
-    setup_mobile_io(m)
-    
-    mast_control = MastControl(mast, zoom_camera)
+    m.send_layout(layout_file=str(Path(__file__).parent / 'config' / 'layouts' / 'CameraMastControl.json'))
+
+    mast_control = MastController(mast, camera, CameraMastStartupState, CameraMastDisconnectedState, CameraMastExitState)
 
     #######################
     ## Main Control Loop ##
     #######################
-    
-    while mast_control.running:
-        t = time()
-        inputs = parse_mobile_feedback(m)
-        mast_control.update(t, inputs)
-        # Update mobileIO stream angle
-        if inputs:
-            m._cmd.io.c.set_float(1, mast_control.camera.roll)
-            m._group.send_command(m._cmd)
 
-        camera.update()
-        # Update Camera zoom/lights
-        if m.get_button_state(2):
-            camera.flood_light = m.get_axis_state(4)
-        else:
-            camera.flood_light = 0.0
+    try:
+        while mast_control.running:
+            t = time.time()
+            inputs = parse_mobile_feedback(m)
+            if inputs:
+                if m.get_button_state(8):
+                    break
+                mast_control.receive_inputs(inputs)
+    except KeyboardInterrupt:
+        pass
 
-        mast_control.send()
-        camera.send()
+    print('Quitting')
+    camera.clear_overlay_text()
+    mast_control.wait_for_shutdown(2)

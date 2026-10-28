@@ -1,91 +1,101 @@
+from __future__ import annotations
+
+import numpy as np
+import time
+from scipy.spatial.transform import Rotation as R
 
 import hebi
-from scipy.spatial.transform import Rotation as R
-import numpy as np
+from hebi._internal.group_manager import GroupManager
 
 import typing
+
 if typing.TYPE_CHECKING:
     import numpy.typing as npt
     from hebi._internal.group import Group
 
 
-class HebiCamera:
-    def __init__(self, group: 'Group'):
-        self.group = group
-        self.fbk = self.group.get_next_feedback()
-        while self.fbk is None:
-            self.fbk = group.get_next_feedback()
+class HebiCamera(GroupManager):
+    def __init__(self, group: Group):
+        super().__init__(time.time, group)
 
-        self.roll: float = self.ea_zxz[0]
-        self.cmd = hebi.GroupCommand(self.group.size)
+        self.roll: float = np.nan #self.ea_zxz[0]
+        #self.set_on_update_callback(self.update_image_rotation)
 
-    def update(self):
-        self.group.get_next_feedback(reuse_fbk=self.fbk, timeout_ms=0.0)
-        self.update_image_rotation()
+    @staticmethod
+    def from_family(family: str):
+        lookup = hebi.Lookup()
+        group = lookup.get_group_from_names(family, ['toolhead', 'cam1'], timeout_ms=2000)
+        if group is None:
+            raise RuntimeError(f'Could not find HEBI Camera with family {family}')
+        return HebiCamera(group)
 
-    def send(self):
-        self.group.send_command(self.cmd)
+    #def update_image_rotation(self):
+    #    ea = self.ea_zxz
+    #    roll_imu = ea[0]
+    #    pitch_check = ea[1]
 
-    def update_image_rotation(self):
-        dt = 1.0 /self.group.feedback_frequency
+    #    roll_gyro = self.roll + self.last_feedback[0].gyro[2] * self.dt
 
-        ea = self.ea_zxz
-        roll_imu = ea[0]
-        pitch_check = ea[1]
+    #    # Singularity Check - Video Rotation
+    #    dead_zone_range = np.deg2rad(10)
+    #    smooth_zone_range = np.deg2rad(40)
+    #    alpha_range = smooth_zone_range - dead_zone_range
 
-        roll_gyro = self.roll + self.fbk[0].gyro[2] * dt
+    #    if pitch_check < dead_zone_range or pitch_check > np.pi - dead_zone_range:
+    #        self.roll = roll_gyro
 
-        # Singularity Check - Video Rotation
-        dead_zone_range = np.deg2rad(10)
-        smooth_zone_range = np.deg2rad(40)
-        alpha_range = smooth_zone_range - dead_zone_range
+    #    elif pitch_check <= smooth_zone_range or pitch_check >= np.pi - smooth_zone_range:
+    #        if pitch_check > np.pi / 2:
+    #            pitch_check = np.pi - pitch_check
 
-        if pitch_check < dead_zone_range or pitch_check > np.pi-dead_zone_range:
-            self.roll = roll_gyro
+    #        alpha = abs(pitch_check - dead_zone_range) / alpha_range
 
-        elif pitch_check <= smooth_zone_range or pitch_check >= np.pi-smooth_zone_range:
-            if pitch_check > np.pi/2:
-               pitch_check = np.pi - pitch_check
+    #        self.roll = alpha * roll_imu + (1 - alpha) * roll_gyro
 
-            alpha = abs(pitch_check - dead_zone_range) / alpha_range
+    #    else:
+    #        self.roll = roll_imu
 
-            self.roll = alpha*roll_imu + (1-alpha)*roll_gyro
+    #    return True
 
-        else:
-            self.roll = roll_imu
+    #@property
+    #def orientation(self):
+    #    wxyz = self.last_feedback.orientation[0]
+    #    xyzw = [*wxyz[1:], wxyz[0]]
+    #    return R.from_quat(xyzw).as_matrix()
+
+    #@property
+    #def ea_zxz(self) -> npt.NDArray[np.float64]:
+    #    wxyz = self.last_feedback.orientation[0]
+    #    return R.from_quat(wxyz, scalar_first=True).as_euler('zxz')
 
     @property
-    def orientation(self):
-        wxyz = self.fbk.orientation[0]
-        xyzw = [*wxyz[1:], wxyz[0]]
-        return R.from_quat(xyzw).as_matrix()
+    def light_enable(self):
+        return self.pending_command[0].io.e.get_int(1)
+
+    @light_enable.setter
+    def light_enable(self, value: bool):
+        self.pending_command[0].io.e.set_int(1, 1 if value else 0)
 
     @property
-    def ea_zxz(self) -> 'npt.NDArray[np.float64]':
-        wxyz = self.fbk.orientation[0]
-        xyzw = [*wxyz[1:], wxyz[0]]
-        return R.from_quat(xyzw).as_euler('zxz')
+    def light_pwm(self):
+        return self.pending_command[0].io.f.get_float(1)
+
+    @light_pwm.setter
+    def light_pwm(self, value: float):
+        self.pending_command[0].io.f.set_float(1, value)
 
     @property
     def zoom_level(self):
-        return self.cmd.io.f.get_float(1)
+        return self.pending_command[1].io.c.get_float(3)
 
     @zoom_level.setter
     def zoom_level(self, value):
-        self.cmd.io.f.set_float(1, value)
+        self.pending_command[1].io.c.set_float(3, value)
 
-    @property
-    def spot_light(self):
-        return self.cmd.io.f.get_float(2)
+    def set_overlay_text(self, txt: str):
+        overlay_cmd = hebi.GroupCommand(self.group.size)
+        overlay_cmd.append_log = txt
+        self.group.send_command(overlay_cmd)
 
-    @spot_light.setter
-    def spot_light(self, value):
-        self.cmd.io.f.set_float(2, value)
-
-    @property
-    def flood_light(self):
-        return self.cmd.io.f.get_float(3)
-
-    @flood_light.setter
-    def flood_light(self, value):
-        self.cmd.io.f.set_float(3, value)
+    def clear_overlay_text(self):
+        self.set_overlay_text('')
