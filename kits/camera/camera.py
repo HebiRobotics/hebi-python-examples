@@ -6,7 +6,7 @@ from scipy.spatial.transform import Rotation as R
 import socket
 
 import hebi
-from hebi._internal.group_manager import GroupManager
+from hebi.arm import GroupManager
 
 import typing
 
