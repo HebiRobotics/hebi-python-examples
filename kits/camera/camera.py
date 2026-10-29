@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import time
 from scipy.spatial.transform import Rotation as R
+import socket
 
 import hebi
 from hebi._internal.group_manager import GroupManager
@@ -10,7 +11,6 @@ from hebi._internal.group_manager import GroupManager
 import typing
 
 if typing.TYPE_CHECKING:
-    import numpy.typing as npt
     from hebi._internal.group import Group
 
 
@@ -28,6 +28,13 @@ class HebiCamera(GroupManager):
         if group is None:
             raise RuntimeError(f'Could not find HEBI Camera with family {family}')
         return HebiCamera(group)
+
+    def stream_to(self, target: str, bitrate_kbps: int | None = None):
+        ip_cmd = hebi.GroupCommand(self.group.size)
+        ip_cmd[1].ip_address = socket.gethostbyname(target)
+        if bitrate_kbps is not None:
+            ip_cmd[1].io.b.set_int(5, bitrate_kbps)
+        self.group.send_command(ip_cmd)
 
     #def update_image_rotation(self):
     #    ea = self.ea_zxz
