@@ -10,7 +10,7 @@ from scipy.spatial.transform import Rotation as R
 
 import hebi
 from hebi.util import create_mobile_io
-from hebi._internal.group_manager import GroupManager
+from hebi.arm import GroupManager
 
 from .camera import HebiCamera
 
