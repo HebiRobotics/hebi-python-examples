@@ -83,6 +83,7 @@ class ArmJoystickControl:
 
         if self.state is self.state.DISCONNECTED:
             self.last_cmd_t = t_now
+            self.arm.pending_command.led.color = "transparent"
             self.transition_to(t_now, self.state.TELEOP)
 
         elif self.state is self.state.HOMING:
@@ -123,6 +124,10 @@ class ArmJoystickControl:
             print(self.namespace + "TRANSITIONING TO TELEOP")
 
         elif state is self.state.DISCONNECTED:
+            g = hebi.arm.Goal(self.arm.size)
+            g.add_waypoint(t=0.1, position=self.arm_home)
+            self.arm.set_goal(g)
+            self.arm.pending_command.led.color = "blue"
             print(self.namespace + "TRANSITIONING TO DISCONNECTED")
 
         elif state is self.state.EXIT:
