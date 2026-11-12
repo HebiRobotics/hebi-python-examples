@@ -230,17 +230,19 @@ if __name__ == "__main__":
         try:
             inputs = updater.parse_mobile_io_feedback(m)
             if inputs is None:
+                base_inputs = None
                 arm_inputs = None
             else:
+                base_inputs = inputs[0]
                 arm_inputs = inputs[1]
                 if arm_inputs is None:
                     # Startup layout has no arm controls, but the Mobile IO is connected: don't time the arm out
                     arm_control.last_cmd_t = t
 
-                base_inputs = inputs[0]
-                base_control.receive_inputs(base_inputs)
                 if base_inputs.quit:
                     break
+
+                base_control.receive_inputs(base_inputs)
 
             arm_control.update(t, arm_inputs)
             arm_control.send()

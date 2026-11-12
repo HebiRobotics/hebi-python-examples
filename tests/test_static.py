@@ -64,7 +64,7 @@ def test_arm_demos_parse_before_python_3_12():
 
 def test_ar_arm_demo_works_with_older_scipy():
     """A15: Rotation.from_quat(scalar_first=...) needs scipy >= 1.14 and raises TypeError before that."""
-    assert "scalar_first" not in (KITS / "tready" / "tready_arm_io_control.py").read_text()
+    assert "scalar_first" not in (KITS / "tready" / "treaded_base_arm_io_control.py").read_text()
 
 
 def test_demo_selector_imports_sys_and_shows_demo_output():
