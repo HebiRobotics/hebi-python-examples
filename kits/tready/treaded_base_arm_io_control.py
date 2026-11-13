@@ -43,7 +43,8 @@ def update_ar_arm(m: MobileIO):
 
     try:
         # reorder quaternion components
-        rotation = R.from_quat(m.orientation, scalar_first=True).as_matrix()
+        wxyz = m.orientation
+        rotation = R.from_quat([*wxyz[1:], wxyz[0]]).as_matrix()
     except ValueError as e:
         print(f"Error getting orientation as matrix: {e}\n{m.orientation}")
         rotation = np.eye(3)
@@ -189,7 +190,7 @@ if __name__ == "__main__":
             families = cfg.families
         pairs = zip(families, cfg.names)
         modules = [f"{p[0]}/{p[1]}" for p in pairs]
-        raise RuntimeError(f"Could not find modules:\n{'\n'.join(modules)}")
+        raise RuntimeError("Could not find modules:\n" + "\n".join(modules))
 
     arm_control = ArmMobileIOControl(arm, gripper, traj_duration=0.5)
     arm_control.namespace = "[Arm] "
