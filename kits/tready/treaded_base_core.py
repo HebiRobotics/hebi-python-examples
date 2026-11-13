@@ -221,6 +221,9 @@ class TreadedBaseController:
         self.base.set_on_update_callback(self.on_base_update)
         self.base.set_on_failed_update_callback(self.on_packet_loss)
 
+    def start(self):
+        """Start the base's control thread. Call after registering handlers and finding all other hardware."""
+        self.last_cmd_t = time.time()
         if not self.base.running:
             self.base.start()
 
@@ -233,9 +236,11 @@ class TreadedBaseController:
         return self.max_base_speed / (self.base.config.wheel_base / 2)  # rad/s
 
     def receive_inputs(self, input: TreadyInputs):
-        t_now = time.time()
-        self.last_cmd_t = t_now
-        self.state.receive_inputs(t_now, input)
+        # The state machine also runs on the base's thread; don't run it from two threads at once
+        with self.base.lock:
+            t_now = time.time()
+            self.last_cmd_t = t_now
+            self.state.receive_inputs(t_now, input)
 
     def transition_to(self, new_state: ControllerState, **kwargs):
         if not new_state.can_transition_from(self.state):

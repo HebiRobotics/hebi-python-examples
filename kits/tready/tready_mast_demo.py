@@ -102,6 +102,7 @@ if __name__ == "__main__":
     ## Main Control Loop ##
     #######################
 
+    base_control.start()
     while base_control.running and mast_control.running:
         try:
             inputs = updater.parse_mobile_io_feedback(m, timeout_ms=500)
