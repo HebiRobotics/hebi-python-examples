@@ -108,7 +108,7 @@ class LeaderFollowerControl:
                 print(self.namespace +
                       "No position command, falling back to feedback position")
                 pos_curr = self.follower_arm.last_feedback.position
-            arm_goal.add_waypoint(position=pos_curr)
+            arm_goal.add_waypoint(t=0.1, position=pos_curr)
             self.follower_arm.set_goal(arm_goal)
 
         elif self.state is self.state.FOLLOW:
