@@ -189,6 +189,8 @@ class TreadedBase:
         track_rot_mat = frames[10, :3, :3]
 
         quat = self.fbk.orientation[1]
+        if np.any(np.isnan(quat)):  # no IMU orientation yet: report level
+            return np.zeros(3)
         q_track = np.array([quat[1], quat[2], quat[3], quat[0]])
         rot_mat_tready = R.from_quat(q_track).as_matrix()
         rot_mat_tready = rot_mat_tready @ track_rot_mat.T
@@ -537,6 +539,13 @@ class TreadedBaseControl:
     def running(self):
         return self.state is not self.state.EXIT
 
+    @property
+    def resume_state(self):
+        """State to return to after a disconnect or E-stop. Interrupted moves are not restarted."""
+        if self.prev_state in (self.state.HOMING, self.state.ALIGNING, self.state.FLATTENING, self.state.REARING):
+            return TreadyControlState.TELEOP
+        return self.prev_state
+
     def start_logging(self):
         self.base.group.start_log("logs", mkdirs=True)
 
@@ -583,13 +592,13 @@ class TreadedBaseControl:
         if self.state is self.state.EMERGENCY_STOP:
             if not self.base.mstop_pressed:
                 print(self.namespace + "Emergency Stop Released")
-                self.transition_to(t_now, self.prev_state)
+                self.transition_to(t_now, self.resume_state)
 
         # Transition to previous state if mobileIO is reconnected
         elif self.state is self.state.DISCONNECTED:
             self.last_cmd_t = t_now
             print(self.namespace + "Controller reconnected, demo continued.")
-            self.transition_to(t_now, self.prev_state)
+            self.transition_to(t_now, self.resume_state)
 
         # On first loop move to startup
         elif self.state is self.state.INITIAL:
@@ -785,7 +794,8 @@ class TreadedBaseControl:
         # self transitions are noop
         if state == self.state:
             return
-        self.prev_state = self.state
+        if not self.state.is_error_state:
+            self.prev_state = self.state
 
         if state is self.state.HOMING:
             print(self.namespace + "BASE TRANSITIONING TO HOMING")
@@ -837,12 +847,21 @@ class TreadedBaseControl:
             self.base.chassis_traj = None
             self.base.flipper_traj = None
             self.base.internal_drive_safe = False
+            # update() skips base.update() without inputs, so set the command that keeps being sent:
+            # stop the wheels, hold the flippers where they are
+            self.base.cmd.velocity = 0.0
+            self.base.cmd.effort = np.nan
+            self.base.flipper_cmd.position = self.base.flipper_fbk.position
 
         elif state is self.state.EMERGENCY_STOP:
             print(self.namespace + "BASE EMERGENCY_STOP")
             self.base.chassis_traj = None
             self.base.flipper_traj = None
             self.base.internal_drive_safe = False
+            # No position target: modules would drive back to it when the M-stop is released
+            self.base.cmd.position = np.nan
+            self.base.cmd.velocity = 0.0
+            self.base.cmd.effort = np.nan
 
         elif state is self.state.EXIT:
             print(self.namespace + "BASE EXIT")

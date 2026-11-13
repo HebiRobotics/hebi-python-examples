@@ -262,8 +262,9 @@ def parse_mobile_feedback(m: 'MobileIO'):
         home=user_home,
         phone_pos=np.copy(m.position),
         phone_rot=rotation,
-        lock_toggle=m.get_button_state(5),
-        locked=m.get_button_state(7))
+        lock_toggle=m.get_button_diff(5) != 0,
+        locked=m.get_button_state(5) == 0,
+        gripper_closed=m.get_button_state(7))
 
     return False, arm_input
 

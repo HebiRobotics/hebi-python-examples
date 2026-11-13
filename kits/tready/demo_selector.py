@@ -3,6 +3,7 @@
 from time import sleep
 import os
 import subprocess
+import sys
 
 import hebi
 from hebi.util import create_mobile_io
@@ -23,7 +24,7 @@ def launch_demo(demo):
     root = os.path.split(os.path.abspath(__file__))[0]
     kits_dir = root.split("kits")[0]
     os.chdir(kits_dir)
-    subprocess.check_output(["python3", "-m", f"{DEMOS[demo]}"])
+    subprocess.run(["python3", "-m", f"{DEMOS[demo]}"], check=False)
 
 
 def select_demo(mobile_io):

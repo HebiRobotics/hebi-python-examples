@@ -40,11 +40,11 @@ class HebiCameraMast:
         self.group.get_next_feedback(reuse_fbk=self.fbk)
 
         wxyz = self.fbk[0].orientation
-        xyzw = [*wxyz[1:], wxyz[0]]
-
-        base_frame = np.eye(4)
-        base_frame[:3, :3] = R.from_quat(xyzw).as_matrix()
-        self.robot_model.base_frame = base_frame
+        if not np.any(np.isnan(wxyz)):  # skip until the IMU reports an orientation
+            xyzw = [*wxyz[1:], wxyz[0]]
+            base_frame = np.eye(4)
+            base_frame[:3, :3] = R.from_quat(xyzw).as_matrix()
+            self.robot_model.base_frame = base_frame
         self.robot_model.get_end_effector(self.fbk.position, output=self.output_frame)
 
         # execute current trajectory

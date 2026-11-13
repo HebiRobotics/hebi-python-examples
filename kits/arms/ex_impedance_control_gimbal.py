@@ -97,7 +97,7 @@ while not mobile_io.get_button_state(quit_btn):
         if (mobile_io.get_button_diff(switch_btn) == 1):
 
             controller_on = True
-            arm.set_goal(goal.clear().add_waypoint(position=arm.last_feedback.position))
+            arm.set_goal(goal.clear().add_waypoint(t=0.1, position=arm.last_feedback.position))
 
         elif (mobile_io.get_button_diff(switch_btn) == -1):
             

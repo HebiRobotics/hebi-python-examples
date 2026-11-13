@@ -54,7 +54,8 @@ def update_ar_arm(m: "MobileIO"):
 
     try:
         # reorder quaternion components
-        rotation = R.from_quat(m.orientation, scalar_first=True).as_matrix()
+        wxyz = m.orientation
+        rotation = R.from_quat([*wxyz[1:], wxyz[0]]).as_matrix()
     except ValueError as e:
         print(f"Error getting orientation as matrix: {e}\n{m.orientation}")
         rotation = np.eye(3)
@@ -218,7 +219,7 @@ if __name__ == "__main__":
             families = cfg.families
         pairs = zip(families, cfg.names)
         modules = [f"{p[0]}/{p[1]}" for p in pairs]
-        raise RuntimeError(f"Could not find modules:\n{'\n'.join(modules)}")
+        raise RuntimeError("Could not find modules:\n" + "\n".join(modules))
 
     arm_control = ArmMobileIOControl(arm, gripper, traj_duration=0.5)
     arm_control.namespace = "[Arm] "
@@ -240,8 +241,8 @@ if __name__ == "__main__":
     if logging:
         tready_log_dir = join(dirname(__file__), "logs")
         now = datetime.datetime.now()
-        arm.group.start_log(tready_log_dir, f"arm_{now:%Y-%m-%d-%H:%M:%S}")
-        base.group.start_log(tready_log_dir, f"base_{now:%Y-%m-%d-%H:%M:%S}")
+        arm.group.start_log(tready_log_dir, f"arm_{now:%Y-%m-%d-%H-%M-%S}")
+        base.group.start_log(tready_log_dir, f"base_{now:%Y-%m-%d-%H-%M-%S}")
 
     while base_control.running and arm_control.running:
         t = time()
@@ -253,6 +254,9 @@ if __name__ == "__main__":
             else:
                 base_inputs = update_inputs(inputs[0])
                 arm_inputs = inputs[1]
+                if arm_inputs is None:
+                    # Startup layout has no arm controls, but the Mobile IO is connected: don't time the arm out
+                    arm_control.last_cmd_t = t
                 if base_inputs.quit:
                     break
 
