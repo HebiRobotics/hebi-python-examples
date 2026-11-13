@@ -41,5 +41,5 @@ plugins:
     type: DoubledJointMirror
     enabled: true
     group_family: ["Arm"]
-    group_name: [J2B_shoulder1"]
+    group_name: ["J2B_shoulder1"]
     index: 1
