@@ -537,6 +537,13 @@ class TreadedBaseControl:
     def running(self):
         return self.state is not self.state.EXIT
 
+    @property
+    def resume_state(self):
+        """State to return to after a disconnect or E-stop. Interrupted moves are not restarted."""
+        if self.prev_state in (self.state.HOMING, self.state.ALIGNING, self.state.FLATTENING, self.state.REARING):
+            return TreadyControlState.TELEOP
+        return self.prev_state
+
     def start_logging(self):
         self.base.group.start_log("logs", mkdirs=True)
 
@@ -583,13 +590,13 @@ class TreadedBaseControl:
         if self.state is self.state.EMERGENCY_STOP:
             if not self.base.mstop_pressed:
                 print(self.namespace + "Emergency Stop Released")
-                self.transition_to(t_now, self.prev_state)
+                self.transition_to(t_now, self.resume_state)
 
         # Transition to previous state if mobileIO is reconnected
         elif self.state is self.state.DISCONNECTED:
             self.last_cmd_t = t_now
             print(self.namespace + "Controller reconnected, demo continued.")
-            self.transition_to(t_now, self.prev_state)
+            self.transition_to(t_now, self.resume_state)
 
         # On first loop move to startup
         elif self.state is self.state.INITIAL:
@@ -785,7 +792,8 @@ class TreadedBaseControl:
         # self transitions are noop
         if state == self.state:
             return
-        self.prev_state = self.state
+        if not self.state.is_error_state:
+            self.prev_state = self.state
 
         if state is self.state.HOMING:
             print(self.namespace + "BASE TRANSITIONING TO HOMING")
