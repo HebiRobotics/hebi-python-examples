@@ -243,13 +243,13 @@ if __name__ == "__main__":
         now = datetime.datetime.now()
         base.group.start_log(
             os.path.join(rosie_dir, "logs"),
-            f"base_{now:%Y-%m-%d-%H:%M:%S}",
+            f"base_{now:%Y-%m-%d-%H-%M-%S}",
             mkdirs=True,
         )
         if arm:
             arm.group.start_log(
                 os.path.join(rosie_dir, "logs"),
-                f"arm_{now:%Y-%m-%d-%H:%M:%S}",
+                f"arm_{now:%Y-%m-%d-%H-%M-%S}",
                 mkdirs=True,
             )
 
