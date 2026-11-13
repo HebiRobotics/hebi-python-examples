@@ -136,10 +136,23 @@ class CameraMastTeleopState(ControllerState):
 @dataclass
 class CameraMastDisconnectedState(ControllerState):
     def on_enter(self, from_state: ControllerState, **kwargs):
-        self.controller.mast.cancel_goal()
+        # Hold where the mast is (cancel_goal() left it limp, so the tilt could sag)
+        hold = np.array(self.controller.mast.last_feedback.position)
+        self.controller.mast.set_position(0.25, hold)
 
     def update(self, **kwargs):
         if (time.time() - self.controller.last_cmd_t) < 1.0:
+            self.controller.transition_to(CameraMastTeleopState(self.controller))
+
+
+@dataclass
+class CameraMastFaultState(ControllerState):
+    # M-stop: drop the goal (a held target would be driven to on release); resume teleop once released
+    def on_enter(self, from_state: ControllerState, **kwargs):
+        self.controller.mast.cancel_goal()
+
+    def update(self, **kwargs):
+        if not self.controller.mast.m_stopped:
             self.controller.transition_to(CameraMastTeleopState(self.controller))
 
 
@@ -292,7 +305,7 @@ if __name__ == "__main__":
     m.update()
     m.send_layout(layout_file=str(Path(__file__).parent / 'config' / 'layouts' / 'CameraMastControl.json'))
 
-    mast_control = MastController(mast, camera, CameraMastStartupState, CameraMastDisconnectedState, CameraMastExitState)
+    mast_control = MastController(mast, camera, CameraMastStartupState, CameraMastFaultState, CameraMastExitState)
 
     #######################
     ## Main Control Loop ##
