@@ -1,140 +1,215 @@
-"""Treaded base controller (kits/tready/treaded_base_core.py) against an imitated Tready, plus Mobile IO parsing."""
+"""Threaded treaded base (kits/tready/treaded_base*.py) against an imitated Tready, with the real MobileIOUpdater."""
 
 import time
 from types import SimpleNamespace
 
+import hebi
 import numpy as np
 import pytest
 
 from conftest import REPO_ROOT, unique_family
 
-TREADY_NAMES = [f"T{n + 1}_J2_track" for n in range(4)] + [f"T{n + 1}_J1_flipper" for n in range(4)]
 CONFIG_DIR = REPO_ROOT / "kits" / "tready" / "config"
 
 
 @pytest.fixture
-def base_control(imitation, monkeypatch):
-    from kits.tready.treaded_base_core import TreadedBase, TreadedBaseConfig, TreadedBaseControl
+def tready(imitation, fake_mobile_io, monkeypatch):
+    """A TreadedBaseController wired to a MobileIOUpdater, not started. Yields (controller, updater, fake mobile io)."""
+    from kits.tready import treaded_base as tb
+    from kits.tready.mobile_io_manager import MobileIOUpdater, update_drive_mode, update_startup_mode
+    from kits.tready.treaded_base_core import TreadedBase, TreadedBaseController, TreadyEStopState, TreadyExitState
 
+    cfg = hebi.config.load_config(str(CONFIG_DIR / "tready.cfg.yaml"))
     family = unique_family("tready")
-    group = imitation([(family, name) for name in TREADY_NAMES])[family]
-    config = TreadedBaseConfig(
-        hrdf_file=str(CONFIG_DIR / "hrdf" / "Tready.hrdf"),
-        gains_file=str(CONFIG_DIR / "gains" / "smart-tready-gains.xml"),
-        wheel_diameter=0.125,
-        wheel_base=0.285,
-        torso_torque_scale=2.5,
-        torque_mode_max=25,
-    )
-    base = TreadedBase(config, group, chassis_ramp_time=0.5, flipper_ramp_time=0.1)
+    cfg.families = [family]
+    imitation([(family, name) for name in cfg.names])
+
     # Imitated modules report the M-stop as pressed; drive it from the test instead.
-    base.test_mstop = False
-    monkeypatch.setattr(TreadedBase, "mstop_pressed", property(lambda self: self.test_mstop))
-    return TreadedBaseControl(base, max_base_speed=0.25)
+    monkeypatch.setattr(TreadedBase, "m_stopped", property(lambda self: getattr(self, "test_mstop", False)))
+    base = TreadedBase.from_config(cfg)
+    ctrl = TreadedBaseController(base, tb.TreadyInitialState, TreadyEStopState, TreadyExitState, max_base_speed=0.25)
+
+    updater = MobileIOUpdater(
+        fake_mobile_io,
+        {
+            tb.TreadyStartupState: (CONFIG_DIR / "layouts" / "TreadwardStartupController.json", update_startup_mode),
+            tb.TreadyTeleopState: (CONFIG_DIR / "layouts" / "TreadwardDriveController.json", update_drive_mode),
+        },
+    )
+    ctrl._transition_handlers.append(updater.base_transition_handler)
+    ctrl._update_handlers.append(updater.update_voltage_reading)
+    ctrl._update_handlers.append(updater.update_torque_mode)
+    ctrl._update_handlers.append(updater.update_startup_msg_base)
+    yield ctrl, updater, fake_mobile_io
+    if base.running:
+        base.stop()
 
 
-def run(ctrl, seconds, make_input):
-    """Main-loop stand-in, as in kits/tready/tready.py. make_input() -> TreadyInputs or None (no Mobile IO sample)."""
-    from kits.tready.tready import update_inputs
-
+def pump(ctrl, updater, m, seconds, feed=True):
+    """Main-loop stand-in: poll the updater and forward base inputs (feed=False simulates a Mobile IO dropout)."""
     deadline = time.time() + seconds
     while time.time() < deadline:
-        inputs = make_input()
-        ctrl.update(time.time(), None if inputs is None else update_inputs(inputs))
-        ctrl.send()
+        if feed:
+            inputs = updater.parse_mobile_io_feedback(m)
+            if inputs is not None:
+                ctrl.receive_inputs(inputs[0])
+        time.sleep(0.02)
 
 
-def to_teleop(ctrl):
-    from kits.tready.treaded_base_core import TreadyControlState, TreadyInputs
-
-    run(ctrl, 0.5, lambda: TreadyInputs(override_startup=True))
-    assert ctrl.state is TreadyControlState.TELEOP, ctrl.state
-
-
-def test_disconnect_stops_the_base(base_control):
-    """A9: with no Mobile IO input, update() returned before base.update(), so the last wheel velocity kept being sent."""
-    from kits.tready.treaded_base_core import ChassisVelocity, TreadyControlState, TreadyInputs
-
-    ctrl, base = base_control, base_control.base
-    to_teleop(ctrl)
-    run(ctrl, 1.0, lambda: TreadyInputs(base_motion=ChassisVelocity(1.0, 0.0)))
-    assert np.any(np.abs(base.wheel_cmd.velocity) > 0.1), "test precondition: base is driving"
-
-    run(ctrl, 1.5, lambda: None)
-    assert ctrl.state is TreadyControlState.DISCONNECTED
-    assert np.allclose(base.wheel_cmd.velocity, 0.0)
-    assert np.allclose(base.flipper_cmd.velocity, 0.0)
+def wait_for(ctrl, updater, m, cls, timeout=5.0, feed=True):
+    deadline = time.time() + timeout
+    while time.time() < deadline and not isinstance(ctrl.state, cls):
+        pump(ctrl, updater, m, 0.05, feed)
+    return isinstance(ctrl.state, cls)
 
 
-def test_estop_leaves_no_position_target(base_control):
-    """A9: E-stop kept the last flipper position command; modules drive back to it when the M-stop is released."""
-    from kits.tready.treaded_base_core import ChassisVelocity, TreadyControlState, TreadyInputs
+def test_startup_layout_is_sent(tready):
+    """B1: the base thread started in the constructor, before handlers were registered, so the
+    Initial -> Startup transition was missed and the startup layout never sent (demo stuck)."""
+    from kits.tready import treaded_base as tb
 
-    ctrl, base = base_control, base_control.base
-    to_teleop(ctrl)
-    run(ctrl, 0.5, lambda: TreadyInputs(base_motion=ChassisVelocity(1.0, 0.0)))
-
-    base.test_mstop = True
-    run(ctrl, 0.2, lambda: TreadyInputs())
-    assert ctrl.state is TreadyControlState.EMERGENCY_STOP
-    assert np.all(np.isnan(base.flipper_cmd.position))
-    assert np.allclose(base.wheel_cmd.velocity, 0.0)
+    ctrl, updater, m = tready
+    assert not ctrl.base.running, "constructor must not start the control thread"
+    ctrl.start()
+    assert wait_for(ctrl, updater, m, tb.TreadyTeleopState), ctrl.state
+    assert any(name == "send_layout" for name, _ in m.calls), "startup layout never sent"
 
 
-def test_mstop_during_disconnect_recovers(base_control):
-    """A10: prev_state could become an error state, so ESTOP and DISCONNECTED handed control back and forth forever."""
-    from kits.tready.treaded_base_core import TreadyControlState, TreadyInputs
+def test_mobile_io_only_used_from_main_thread(tready):
+    """B3: handlers on the base thread called the Mobile IO directly (including a blocking send_layout)."""
+    from kits.tready import treaded_base as tb
 
-    ctrl, base = base_control, base_control.base
-    to_teleop(ctrl)
-    run(ctrl, 1.5, lambda: None)
-    assert ctrl.state is TreadyControlState.DISCONNECTED
-
-    base.test_mstop = True
-    run(ctrl, 0.2, lambda: None)
-    assert ctrl.state is TreadyControlState.EMERGENCY_STOP
-
-    base.test_mstop = False
-    run(ctrl, 0.5, lambda: TreadyInputs())
-    assert ctrl.state is TreadyControlState.TELEOP
+    ctrl, updater, m = tready
+    ctrl.start()
+    assert wait_for(ctrl, updater, m, tb.TreadyTeleopState)
+    pump(ctrl, updater, m, 0.3)
+    assert m.calls, "test precondition: the updater used the Mobile IO"
+    assert set(m.call_threads) == {"MainThread"}, set(m.call_threads)
 
 
-def test_reconnect_does_not_restart_homing(base_control):
-    """A10: reconnecting re-ran the previous state's entry action (here, a new homing move)."""
-    from kits.tready.treaded_base_core import TreadyControlState, TreadyInputs
+def test_reconnect_does_not_restart_homing(tready, monkeypatch):
+    """B5: reconnecting re-ran the interrupted state's on_enter, restarting the homing move."""
+    from kits.tready import treaded_base as tb
+    from kits.tready.treaded_base_core import TreadedBaseController, TreadyDisconnectedState
 
-    ctrl = base_control
-    to_teleop(ctrl)
-    ctrl.update(time.time(), None)
-    from kits.tready.tready import update_inputs
+    ctrl, updater, m = tready
+    homes = []
+    original_home = ctrl.base.home
+    monkeypatch.setattr(ctrl.base, "home", lambda *a, **k: (homes.append(1), original_home(*a, **k)))
+    ctrl.start()
+    assert wait_for(ctrl, updater, m, tb.TreadyTeleopState)
 
-    ctrl.update(time.time(), update_inputs(TreadyInputs(home=True)))
-    assert ctrl.state is TreadyControlState.HOMING
+    m.press(b1=1)  # home
+    assert wait_for(ctrl, updater, m, tb.TreadyHomingState, timeout=2)
+    m.press(b1=0)
+    assert wait_for(ctrl, updater, m, TreadyDisconnectedState, timeout=3, feed=False)
+    pump(ctrl, updater, m, 0.3)
+    assert not isinstance(ctrl.state, TreadyDisconnectedState)
+    assert len(homes) == 1, f"homing started {len(homes)} times"
 
-    run(ctrl, 1.5, lambda: None)
-    assert ctrl.state is TreadyControlState.DISCONNECTED
-    run(ctrl, 0.1, lambda: TreadyInputs())
-    assert ctrl.state is TreadyControlState.TELEOP
+
+def test_estop_drops_targets(tready):
+    """B6: E-stop held the flipper position from when it was pressed; modules drive back to it on release."""
+    from kits.tready import treaded_base as tb
+    from kits.tready.treaded_base_core import TreadyEStopState
+
+    ctrl, updater, m = tready
+    ctrl.start()
+    assert wait_for(ctrl, updater, m, tb.TreadyTeleopState)
+    ctrl.base.test_mstop = True
+    assert wait_for(ctrl, updater, m, TreadyEStopState, timeout=2)
+    assert ctrl.base.flipper_traj is None and ctrl.base.chassis_traj is None
 
 
-def test_torque_toggle_handled_on_reset_sample(fake_mobile_io):
-    """A12: update_drive_mode returned on the reset button before handling a torque-button toggle in the same sample."""
-    from kits.tready.mobile_io_manager import update_drive_mode
+def test_disconnect_stops_the_base(tready):
+    """A9: with no Mobile IO input the last wheel velocity kept being sent, so the base kept driving."""
+    from kits.tready import treaded_base as tb
+    from kits.tready.treaded_base_core import TreadyDisconnectedState
 
-    fake_mobile_io.press(b1=1, b2=1)
-    update_drive_mode(fake_mobile_io)
-    assert any(name == "set_snap" for name, _ in fake_mobile_io.calls)
+    ctrl, updater, m = tready
+    ctrl.start()
+    assert wait_for(ctrl, updater, m, tb.TreadyTeleopState)
+    m.axes[2] = 1.0  # drive forward (left pad up/down)
+    pump(ctrl, updater, m, 1.0)
+    with ctrl.base.lock:
+        assert np.any(np.abs(ctrl.base.wheel_cmd.velocity) > 0.1), "test precondition: base is driving"
+
+    assert wait_for(ctrl, updater, m, TreadyDisconnectedState, timeout=3, feed=False)
+    pump(ctrl, updater, m, 0.5, feed=False)
+    with ctrl.base.lock:
+        assert np.allclose(ctrl.base.wheel_cmd.velocity, 0.0)
+        assert np.allclose(ctrl.base.flipper_cmd.velocity, 0.0)
+
+
+def test_estop_released_resumes_teleop(tready):
+    """Releasing the M-stop returns to the state the E-stop interrupted, without any Mobile IO reconnect."""
+    from kits.tready import treaded_base as tb
+    from kits.tready.treaded_base_core import TreadyEStopState
+
+    ctrl, updater, m = tready
+    ctrl.start()
+    assert wait_for(ctrl, updater, m, tb.TreadyTeleopState)
+    ctrl.base.test_mstop = True
+    assert wait_for(ctrl, updater, m, TreadyEStopState, timeout=2)
+
+    ctrl.base.test_mstop = False
+    assert wait_for(ctrl, updater, m, tb.TreadyTeleopState, timeout=2), ctrl.state
+
+
+def test_mstop_during_disconnect_recovers(tready):
+    """A10: ESTOP and DISCONNECTED handed control back and forth forever, never returning to the interrupted state."""
+    from kits.tready import treaded_base as tb
+    from kits.tready.treaded_base_core import TreadyDisconnectedState, TreadyEStopState
+
+    ctrl, updater, m = tready
+    ctrl.start()
+    assert wait_for(ctrl, updater, m, tb.TreadyTeleopState)
+    assert wait_for(ctrl, updater, m, TreadyDisconnectedState, timeout=3, feed=False)
+
+    ctrl.base.test_mstop = True
+    assert wait_for(ctrl, updater, m, TreadyEStopState, timeout=2, feed=False)
+
+    ctrl.base.test_mstop = False
+    assert wait_for(ctrl, updater, m, tb.TreadyTeleopState, timeout=3), ctrl.state
+
+
+def test_compliant_mode_labels_are_sent(tready):
+    """B7: compliant mode's update handler read torque_labels_changed before any input set it (fault), and
+    two inputs between control ticks could hide a label change."""
+    from kits.tready import treaded_base as tb
+
+    ctrl, updater, m = tready
+    ctrl.start()
+    assert wait_for(ctrl, updater, m, tb.TreadyTeleopState)
+    m.press(b2=1)  # torque mode
+    assert wait_for(ctrl, updater, m, tb.TreadyCompliantFlippersState, timeout=2), ctrl.state
+    pump(ctrl, updater, m, 0.3)
+    assert isinstance(ctrl.state, tb.TreadyCompliantFlippersState), "compliant state faulted"
+    assert any(name == "set_axis_label" and "Max" in str(args) for name, args in m.calls)
+
+
+def test_stow_stops_driving(tready):
+    """B10: Deployed applied the stow sample's joystick velocity, and Stowing never updates the chassis."""
+    from kits.tready import treaded_base as tb
+    from kits.tready.treaded_base_core import ChassisVelocity, TreadyInputs
+
+    ctrl, updater, m = tready
+    ctrl.start()
+    assert wait_for(ctrl, updater, m, tb.TreadyTeleopState)
+    with ctrl.base.lock:
+        ctrl.transition_to(tb.TreadyDeployedState(ctrl))
+    ctrl.receive_inputs(TreadyInputs(stow=True, stow_safe=False, base_motion=ChassisVelocity(1.0, 0.0)))
+    assert isinstance(ctrl.state, tb.TreadyStowingState)
+    velocity = ctrl.base.chassis_traj.get_state(ctrl.base.chassis_traj.end_time)[1]
+    assert np.allclose(velocity, 0.0), velocity
 
 
 def test_base_pose_with_nan_orientation():
-    """A14: a NaN IMU quaternion (no orientation yet) made Rotation.from_quat raise inside the control loop."""
-    import hebi
-
+    """A NaN IMU quaternion (no orientation yet) made Rotation.from_quat raise in torque mode."""
     from kits.tready.treaded_base_core import TreadedBase
 
     stub = SimpleNamespace(
-        fbk=SimpleNamespace(position=np.zeros(8), orientation=np.full((8, 4), np.nan)),
+        last_feedback=SimpleNamespace(position=np.zeros(8), orientation=np.full((8, 4), np.nan)),
         robot_model=hebi.robot_model.import_from_hrdf(str(CONFIG_DIR / "hrdf" / "Tready.hrdf")),
     )
-    rpy = TreadedBase.pose.fget(stub)
-    assert np.all(np.isfinite(rpy))
+    assert np.all(np.isfinite(TreadedBase.pose.fget(stub)))
