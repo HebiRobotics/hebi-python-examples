@@ -265,6 +265,9 @@ if __name__ == "__main__":
             else:
                 base_inputs = update_inputs(inputs[0])
                 arm_inputs = inputs[1]
+                if arm_inputs is None:
+                    # Startup layout has no arm controls, but the Mobile IO is connected: don't time the arm out
+                    arm_control.last_cmd_t = t
                 if base_inputs.quit:
                     break
 
