@@ -119,9 +119,10 @@ class CameraMastTeleopState(ControllerState):
     TILT_SCALING = 0.5
 
     def receive_inputs(self, t_now: float, inputs: MastInputs, **kwargs):
-        self.controller.camera.zoom_level = inputs.zoom
-        self.controller.camera.light_enable = inputs.light_enable
-        self.controller.camera.light_pwm = inputs.light_pwm
+        with self.controller.camera.lock:  # the camera's own thread sends this command
+            self.controller.camera.zoom_level = inputs.zoom
+            self.controller.camera.light_enable = inputs.light_enable
+            self.controller.camera.light_pwm = inputs.light_pwm
 
         if inputs.home:
             self.controller.transition_to(CameraMastHomingState(self.controller))
