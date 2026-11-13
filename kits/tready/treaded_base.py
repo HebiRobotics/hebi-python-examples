@@ -276,6 +276,9 @@ class TreadyCompliantFlippersState(ControllerState):
 
 
 if __name__ == "__main__":
+    # This file is running as __main__, a second copy of the state classes above. Use the package's copies,
+    # which are the ones mobile_io_manager imports and matches on (otherwise status messages never match).
+    from kits.tready.treaded_base import TreadyInitialState, TreadyStartupState, TreadyTeleopState
     from .mobile_io_manager import (
         MobileIOUpdater,
         update_startup_mode,
