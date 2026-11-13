@@ -30,6 +30,10 @@ class HebiCamera:
         dt = 1.0 /self.group.feedback_frequency
 
         ea = self.ea_zxz
+        if np.any(np.isnan(ea)):  # no IMU orientation yet
+            return
+        if np.isnan(self.roll):
+            self.roll = ea[0]
         roll_imu = ea[0]
         pitch_check = ea[1]
 
@@ -63,6 +67,8 @@ class HebiCamera:
     @property
     def ea_zxz(self) -> 'npt.NDArray[np.float64]':
         wxyz = self.fbk.orientation[0]
+        if np.any(np.isnan(wxyz)):  # no IMU orientation yet
+            return np.full(3, np.nan)
         xyzw = [*wxyz[1:], wxyz[0]]
         return R.from_quat(xyzw).as_euler('zxz')
 
