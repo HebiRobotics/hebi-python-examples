@@ -239,6 +239,9 @@ class TreadedBaseController:
         if not self.base.running:
             self.base.start()
 
+        # Starting the base waits for the first feedback; don't count that wait as time without input
+        self.last_cmd_t = time.time()
+
     @property
     def running(self):
         return not isinstance(self.state, self.exit_state)
