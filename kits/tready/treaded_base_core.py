@@ -165,18 +165,22 @@ class TreadyDisconnectedState(ControllerState):
 
     def receive_inputs(self, t_now: float, tready_input: TreadyInputs, **kwargs):
         print(self.controller.namespace + "Controller reconnected, demo continued.")
-        self.controller.transition_to(self.prev_state)
+        # Return to the interrupted state without re-running its on_enter (which would restart e.g. homing)
+        controller = self.controller
+        controller.base.clear_color()
+        for handler in controller._transition_handlers:
+            handler(controller, self.prev_state)
+        controller.state = self.prev_state
 
 
 @dataclass
 class TreadyEStopState(ControllerState):
     def on_enter(self, from_state: ControllerState, **kwargs):
         self.controller.base.set_color("yellow")
-        flipper_pos = self.controller.base.flipper_fbk.position_command
-        if np.any(np.isnan(flipper_pos)):
-            flipper_pos = self.controller.base.flipper_fbk.position
-        self.controller.base.set_flipper_trajectory(0.2, flipper_pos)
-        self.controller.base.set_chassis_vel_trajectory(0.2, np.zeros(3))
+        # Drop all targets: modules would drive back to a held position when the M-stop is released
+        self.controller.base.flipper_traj = None
+        self.controller.base.chassis_traj = None
+        self.controller.base.user_flipper_torque[:] = np.nan
 
         return super().on_enter(from_state, **kwargs)
 
