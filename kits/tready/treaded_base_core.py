@@ -189,6 +189,8 @@ class TreadedBase:
         track_rot_mat = frames[10, :3, :3]
 
         quat = self.fbk.orientation[1]
+        if np.any(np.isnan(quat)):  # no IMU orientation yet: report level
+            return np.zeros(3)
         q_track = np.array([quat[1], quat[2], quat[3], quat[0]])
         rot_mat_tready = R.from_quat(q_track).as_matrix()
         rot_mat_tready = rot_mat_tready @ track_rot_mat.T
