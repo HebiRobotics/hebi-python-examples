@@ -54,6 +54,9 @@ class TreadyStartupState(ControllerState):
 
 @dataclass
 class TreadyHomingState(ControllerState):
+    def resume_state(self) -> ControllerState:
+        return TreadyTeleopState(self.controller)
+
     def on_enter(self, from_state: ControllerState, **kwargs):
         self.controller.base.set_color("magenta")
         self.controller.base.home()
@@ -65,6 +68,9 @@ class TreadyHomingState(ControllerState):
 
 @dataclass
 class TreadyFlatteningState(ControllerState):
+    def resume_state(self) -> ControllerState:
+        return TreadyTeleopState(self.controller)
+
     def on_enter(self, from_state: ControllerState, **kwargs):
         self.controller.base.set_color("magenta")
         self.controller.base.flatten_flippers()
@@ -76,6 +82,9 @@ class TreadyFlatteningState(ControllerState):
 
 @dataclass
 class TreadyRearingState(ControllerState):
+    def resume_state(self) -> ControllerState:
+        return TreadyTeleopState(self.controller)
+
     def on_enter(self, from_state: ControllerState, **kwargs):
         self.controller.base.set_color("magenta")
         self.controller.base.rear_up()
@@ -137,6 +146,9 @@ class TreadyStowingState(ControllerState):
 
 @dataclass
 class TreadyAligningState(ControllerState):
+    def resume_state(self) -> ControllerState:
+        return TreadyTeleopState(self.controller)
+
     def on_enter(self, from_state: ControllerState, **kwargs):
         self.controller.base.set_color("magenta")
         self.controller.base.align_flippers()

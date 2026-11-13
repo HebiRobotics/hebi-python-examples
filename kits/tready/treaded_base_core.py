@@ -142,6 +142,10 @@ class ControllerState:
     def can_transition_from(self, state: ControllerState) -> bool:
         return True
 
+    def resume_state(self) -> ControllerState:
+        """State to return to after a disconnect or E-stop interrupts this one. Interrupted moves are not restarted."""
+        return self
+
     def on_enter(self, from_state: ControllerState, **kwargs): ...
 
     def update(self, **kwargs): ...
@@ -155,13 +159,16 @@ class ControllerState:
 class TreadyDisconnectedState(ControllerState):
     def on_enter(self, from_state: ControllerState, **kwargs):
         self.controller.base.set_color("blue")
-        self.prev_state = from_state
+        self.prev_state = from_state.resume_state()
         flipper_pos = self.controller.base.flipper_fbk.position_command
         if np.any(np.isnan(flipper_pos)):
             flipper_pos = self.controller.base.flipper_fbk.position
 
         self.controller.base.set_flipper_trajectory(0.2, flipper_pos)
         self.controller.base.set_chassis_vel_trajectory(0.2, np.zeros(3))
+
+    def resume_state(self) -> ControllerState:
+        return self.prev_state
 
     def receive_inputs(self, t_now: float, tready_input: TreadyInputs, **kwargs):
         print(self.controller.namespace + "Controller reconnected, demo continued.")
@@ -172,13 +179,21 @@ class TreadyDisconnectedState(ControllerState):
 class TreadyEStopState(ControllerState):
     def on_enter(self, from_state: ControllerState, **kwargs):
         self.controller.base.set_color("yellow")
-        flipper_pos = self.controller.base.flipper_fbk.position_command
-        if np.any(np.isnan(flipper_pos)):
-            flipper_pos = self.controller.base.flipper_fbk.position
-        self.controller.base.set_flipper_trajectory(0.2, flipper_pos)
+        self.prev_state = from_state.resume_state()
+        # Hold where the flippers are, not at the last commanded position: the modules would drive back to a stale
+        # target when the M-stop is released
+        self.controller.base.set_flipper_trajectory(0.2, self.controller.base.flipper_fbk.position)
         self.controller.base.set_chassis_vel_trajectory(0.2, np.zeros(3))
 
         return super().on_enter(from_state, **kwargs)
+
+    def resume_state(self) -> ControllerState:
+        return self.prev_state
+
+    def update(self, **kwargs):
+        if not self.controller.base.m_stopped:
+            print(self.controller.namespace + "Emergency Stop Released")
+            self.controller.transition_to(self.prev_state)
 
 
 @dataclass
