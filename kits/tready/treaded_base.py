@@ -320,7 +320,7 @@ if __name__ == "__main__":
 
     if logging:
         log_dir = Path(__file__).parent / "logs"
-        base.group.start_log(str(log_dir), f"base_{datetime.datetime.now():%Y-%m-%d-%H:%M:%S}")
+        base.group.start_log(str(log_dir), f"base_{datetime.datetime.now():%Y-%m-%d-%H-%M-%S}")
 
     base_control.start()
     while base_control.running:

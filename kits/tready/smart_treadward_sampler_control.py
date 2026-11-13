@@ -498,8 +498,8 @@ if __name__ == "__main__":
     if logging:
         tready_dir = os.path.dirname(__file__)
         now = datetime.datetime.now()
-        base.group.start_log(os.path.join(tready_dir, "logs"), f"base_{now:%Y-%m-%d-%H:%M:%S}")
-        payload.group.start_log(os.path.join(tready_dir, "logs"), f"payload_{now:%Y-%m-%d-%H:%M:%S}")
+        base.group.start_log(os.path.join(tready_dir, "logs"), f"base_{now:%Y-%m-%d-%H-%M-%S}")
+        payload.group.start_log(os.path.join(tready_dir, "logs"), f"payload_{now:%Y-%m-%d-%H-%M-%S}")
 
     while base_control.running and payload_control.running:
         t = time()

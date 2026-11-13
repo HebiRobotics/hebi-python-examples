@@ -209,10 +209,10 @@ if __name__ == "__main__":
     logging = True
 
     if logging:
-        tready_log_dir = str(Path(__file__) / "logs")
+        tready_log_dir = str(Path(__file__).parent / "logs")
         now = datetime.datetime.now()
-        arm.group.start_log(tready_log_dir, f"arm_{now:%Y-%m-%d-%H:%M:%S}")
-        base.group.start_log(tready_log_dir, f"base_{now:%Y-%m-%d-%H:%M:%S}")
+        arm.group.start_log(tready_log_dir, f"arm_{now:%Y-%m-%d-%H-%M-%S}")
+        base.group.start_log(tready_log_dir, f"base_{now:%Y-%m-%d-%H-%M-%S}")
 
     base_control.start()
     while base_control.running and arm_control.running:
