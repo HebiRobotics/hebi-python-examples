@@ -11,7 +11,7 @@ from hebi.util import create_mobile_io
 DEMOS = {
     "Leader-Follower Ctrl": "advanced.demos.MAPS_control.MAPS_input_device_w_gripper_example",
     "Tready MAPS Control": "kits.tready.tready_leader_follower_control",
-    "Tready Joystick Arm": "kits.tready.tready_arm_joystick_control",
+    "Tready Joystick Arm": "kits.tready.treaded_base_arm_joystick_control",
 }
 
 
