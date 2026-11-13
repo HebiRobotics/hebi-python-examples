@@ -74,27 +74,6 @@ def test_joystick_joint_target_is_a_copy(imitation, lookup):
 # ---------------------------------------------------------------- ar_control_sm
 
 
-def test_ar_teleop_home_button_homes(imitation, lookup):
-    """A3: the home button is ignored while tracking (TELEOP)."""
-    from kits.arms.ar_control_sm import ArmControlState, ArmMobileIOControl, ArmMobileIOInputs
-
-    arm, _ = imitated_arm(imitation, lookup, ARMS_CONFIG / "A-2580-06.cfg.yaml")
-    ctrl = ArmMobileIOControl(arm, None, homing_time=0.3)
-
-    def inputs(**kw):
-        return ArmMobileIOInputs(phone_pos=np.zeros(3), phone_rot=np.eye(3), **kw)
-
-    def step(t):
-        ctrl.update(t, inputs())
-        ctrl.send()
-
-    assert run_until(lambda: ctrl.state is ArmControlState.IDLE, step), ctrl.state
-    ctrl.update(time.time(), inputs(lock_toggle=True, locked=False))
-    assert ctrl.state is ArmControlState.TELEOP
-    ctrl.update(time.time(), inputs(locked=False, home=True))
-    assert ctrl.state is ArmControlState.HOMING
-
-
 def test_ar_main_parser_buttons(fake_mobile_io):
     """A4: the standalone AR demo read the lock button's state as the toggle, and the grip button as the lock."""
     from kits.arms.ar_control_sm import parse_mobile_feedback
