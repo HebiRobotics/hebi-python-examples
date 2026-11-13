@@ -21,7 +21,7 @@ payloads = [
         "kits.tready.smart_treadward_sampler_control",
     ),
 ]
-default_controller = "kits.tready.smart_treadward_control"
+default_controller = "kits.tready.treadward"
 
 
 l = hebi.Lookup()

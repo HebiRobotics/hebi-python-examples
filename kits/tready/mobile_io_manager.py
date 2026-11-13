@@ -203,6 +203,10 @@ def update_drive_mode(m: MobileIO):
         m.set_axis_label(mapping["back_left_slider"], "BL", blocking=False)
         m.set_axis_label(mapping["back_right_slider"], "BR", blocking=False)
 
+    if m.get_button_diff(mapping["torque_btn"]) == 1:
+        change_to_torque_mode(m)
+    elif m.get_button_diff(mapping["torque_btn"]) == -1:
+        change_to_velocity_mode(m)
     if m.get_button_state(mapping["quit_demo_btn"]):
         return (TreadyInputs(quit=True),)
     if m.get_button_state(mapping["reset_pose_btn"]):
@@ -213,10 +217,6 @@ def update_drive_mode(m: MobileIO):
                 torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
             ),
         )
-    if m.get_button_diff(mapping["torque_btn"]) == 1:
-        change_to_torque_mode(m)
-    elif m.get_button_diff(mapping["torque_btn"]) == -1:
-        change_to_velocity_mode(m)
     if m.get_button_state(mapping["recenter_btn"]):
         return (
             TreadyInputs(

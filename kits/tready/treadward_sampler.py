@@ -186,7 +186,7 @@ class CoreSampler:
         else:
             positions[:, 0] = self.mast_fbk.position
             velocities[:, 0] = self.mast_fbk.velocity
-            accelerations[:, 0] = self.mast_fbk.effort_command
+            accelerations[:, 0] = 0.0
 
         positions[:, 1] = np.nan if p is None else p
         velocities[:, 1] = 0.0 if v is None else v

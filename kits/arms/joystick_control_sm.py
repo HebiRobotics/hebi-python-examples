@@ -53,7 +53,10 @@ class ArmJoystickControl:
 
         self.xyz_curr = np.empty(3)
         self.rot_curr = np.empty((3, 3))
-        self.joint_target = arm.last_feedback.position_command
+        # Copies: joint_target is modified in place, and must not alias the feedback buffer
+        self.joint_target = np.array(arm.last_feedback.position_command)
+        if np.any(np.isnan(self.joint_target)):
+            self.joint_target = np.array(arm.last_feedback.position)
 
         self.last_cmd_t = time()
 
@@ -85,7 +88,7 @@ class ArmJoystickControl:
 
         elif self.state is self.state.HOMING:
             if self.arm.at_goal:
-                self.joint_target = self.arm.last_feedback.position_command
+                self.joint_target = np.array(self.arm.last_feedback.position_command)
                 self.transition_to(t_now, self.state.TELEOP)
 
         elif self.state is self.state.TELEOP:
@@ -174,7 +177,7 @@ class ArmJoystickControl:
         if not out_of_bounds:
             self.joint_target = joint_target
 
-        arm_goal.add_waypoint(position=self.joint_target)
+        arm_goal.add_waypoint(t=0.5, position=self.joint_target)
         return arm_goal
 
     def stop(self):
