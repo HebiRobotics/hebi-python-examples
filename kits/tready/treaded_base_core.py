@@ -837,12 +837,21 @@ class TreadedBaseControl:
             self.base.chassis_traj = None
             self.base.flipper_traj = None
             self.base.internal_drive_safe = False
+            # update() skips base.update() without inputs, so set the command that keeps being sent:
+            # stop the wheels, hold the flippers where they are
+            self.base.cmd.velocity = 0.0
+            self.base.cmd.effort = np.nan
+            self.base.flipper_cmd.position = self.base.flipper_fbk.position
 
         elif state is self.state.EMERGENCY_STOP:
             print(self.namespace + "BASE EMERGENCY_STOP")
             self.base.chassis_traj = None
             self.base.flipper_traj = None
             self.base.internal_drive_safe = False
+            # No position target: modules would drive back to it when the M-stop is released
+            self.base.cmd.position = np.nan
+            self.base.cmd.velocity = 0.0
+            self.base.cmd.effort = np.nan
 
         elif state is self.state.EXIT:
             print(self.namespace + "BASE EXIT")
