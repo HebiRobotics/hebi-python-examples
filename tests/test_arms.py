@@ -71,6 +71,26 @@ def test_joystick_joint_target_is_a_copy(imitation, lookup):
     assert not np.shares_memory(ctrl.joint_target, arm.last_feedback.position_command)
 
 
+def test_joystick_disconnect_holds_position(imitation, lookup):
+    """B8: on Mobile IO disconnect the arm was sent to its home pose in 0.1 s."""
+    from kits.arms.joystick_control_sm import ArmControlState, ArmJoystickControl, ArmJoystickInputs
+
+    arm, _ = imitated_arm(imitation, lookup, ARMS_CONFIG / "A-2580-06.cfg.yaml")
+    ctrl = ArmJoystickControl(arm, HOME, homing_time=0.3)
+    idle = ArmJoystickInputs(False, [0, 0, 0], [0, 0, 0], False)
+
+    def step(t):
+        ctrl.update(t, idle)
+        ctrl.send()
+
+    assert run_until(lambda: ctrl.state is ArmControlState.TELEOP, step)
+    ctrl.update(time.time(), ArmJoystickInputs(False, [0.05, 0, 0], [0, 0, 0], False))
+    assert run_until(lambda: ctrl.state is ArmControlState.DISCONNECTED, lambda t: (ctrl.update(t, None), ctrl.send()), timeout_s=3)
+    traj = arm.trajectory
+    assert traj.end_time - traj.start_time > 0.2, "fast move on disconnect"
+    assert not np.allclose(traj.get_state(traj.end_time)[0], HOME, atol=1e-3), "moved to home on disconnect"
+
+
 # ---------------------------------------------------------------- ar_control_sm
 
 

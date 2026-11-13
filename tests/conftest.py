@@ -14,6 +14,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -99,6 +100,7 @@ class FakeMobileIO:
         self.position = [0.0, 0.0, 0.0]
         self.orientation = [1.0, 0.0, 0.0, 0.0]
         self.calls: list[tuple] = []
+        self.call_threads: list[str] = []  # thread name of each call in self.calls
 
     def press(self, **buttons):
         """Set button states, e.g. ``press(b1=1, b2=1)``; diffs are relative to the previous sample."""
@@ -122,6 +124,7 @@ class FakeMobileIO:
         # set_axis_label, set_snap, send_layout, add_text, ...: record and succeed
         def call(*args, **kwargs):
             self.calls.append((name, args))
+            self.call_threads.append(threading.current_thread().name)
             return True
 
         return call
