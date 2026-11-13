@@ -169,7 +169,7 @@ class ArmJoystickControl:
         if not out_of_bounds:
             self.joint_target = joint_target
 
-        arm_goal.add_waypoint(position=self.joint_target)
+        arm_goal.add_waypoint(t=0.5, position=self.joint_target)
         return arm_goal
 
     def stop(self):
