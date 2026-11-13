@@ -69,8 +69,8 @@ def setup_arm(cfg: "HebiConfig", lookup: "Lookup"):
         gripper_close_effort = -5
         gripper_open_effort = 1
         if user_data := cfg.user_data:
-            gripper_close_effort = user_data["gripper_open_effort"]
-            gripper_open_effort = user_data["gripper_close_effort"]
+            gripper_close_effort = user_data["gripper_close_effort"]
+            gripper_open_effort = user_data["gripper_open_effort"]
 
         gripper = hebi.arm.Gripper(
             gripper_group, gripper_close_effort, gripper_open_effort
