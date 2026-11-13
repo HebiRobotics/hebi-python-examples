@@ -104,6 +104,7 @@ class TreadyDeployedState(ControllerState):
     def receive_inputs(self, t_now: float, tready_input: TreadyInputs, **kwargs):
         if tready_input.stow:
             self.controller.transition_to(TreadyStowingState(self.controller))
+            return
 
         if tready_input.drive_safe:
             # Mobile Base Control
@@ -130,6 +131,10 @@ class TreadyDeployedState(ControllerState):
 
 @dataclass
 class TreadyStowingState(ControllerState):
+    def on_enter(self, from_state: ControllerState, **kwargs):
+        # Hold still while the payload stows
+        self.controller.base.set_chassis_vel_trajectory(0.2, np.zeros(3))
+
     def receive_inputs(self, t_now: float, tready_input: TreadyInputs, **kwargs):
         if tready_input.stow_safe:
             self.controller.transition_to(TreadyTeleopState(self.controller))
