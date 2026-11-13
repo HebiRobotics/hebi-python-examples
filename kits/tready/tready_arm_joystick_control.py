@@ -230,7 +230,7 @@ if __name__ == "__main__":
             families = cfg.families
         pairs = zip(families, cfg.names)
         modules = [f"{p[0]}/{p[1]}" for p in pairs]
-        raise RuntimeError(f"Could not find modules:\n{'\n'.join(modules)}")
+        raise RuntimeError("Could not find modules:\n" + "\n".join(modules))
 
     home_pose = np.array([0.3, 1.2, 2.2, 2.9, -1.57, 0])
     arm_control = ArmJoystickControl(
