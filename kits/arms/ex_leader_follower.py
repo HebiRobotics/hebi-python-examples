@@ -57,6 +57,7 @@ class LeaderFollowerControl:
 
         self.haptic_gains = haptic_gains
         self.haptic_limit = haptic_limit
+        self.mobile_last_fbk_t = time()
 
     @property
     def running(self):
@@ -232,6 +233,8 @@ if __name__ == "__main__":
     leader_arm = hebi.arm.create_from_config(cfg, lookup)
 
     # Follower Arm setup
+    # create_from_config consumes the config's plugin entries, so load it again
+    cfg = hebi.config.load_config('config/A-2085-06.cfg.yaml')
     cfg.families = ["Follower-Arm"]
     follower_arm = hebi.arm.create_from_config(cfg, lookup)
 
