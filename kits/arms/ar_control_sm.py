@@ -129,6 +129,10 @@ class ArmMobileIOControl:
 
         # Teleop mode
         elif self.state is self.state.TELEOP:
+            if arm_input.home:
+                self.transition_to(t_now, self.state.HOMING)
+                return
+
             if arm_input.lock_toggle and arm_input.locked:
                 g = hebi.arm.Goal(self.arm.size)
                 g.add_waypoint(t=0.3,
@@ -262,8 +266,9 @@ def parse_mobile_feedback(m: 'MobileIO'):
         home=user_home,
         phone_pos=np.copy(m.position),
         phone_rot=rotation,
-        lock_toggle=m.get_button_state(5),
-        locked=m.get_button_state(7))
+        lock_toggle=m.get_button_diff(5) != 0,
+        locked=m.get_button_state(5) == 0,
+        gripper_closed=m.get_button_state(7))
 
     return False, arm_input
 
