@@ -241,8 +241,8 @@ if __name__ == "__main__":
     if logging:
         tready_log_dir = join(dirname(__file__), "logs")
         now = datetime.datetime.now()
-        arm.group.start_log(tready_log_dir, f"arm_{now:%Y-%m-%d-%H:%M:%S}")
-        base.group.start_log(tready_log_dir, f"base_{now:%Y-%m-%d-%H:%M:%S}")
+        arm.group.start_log(tready_log_dir, f"arm_{now:%Y-%m-%d-%H-%M-%S}")
+        base.group.start_log(tready_log_dir, f"base_{now:%Y-%m-%d-%H-%M-%S}")
 
     while base_control.running and arm_control.running:
         t = time()
