@@ -43,9 +43,11 @@ class CameraMast(GroupManager):
     def _inner_update(self, t: float) -> bool:
         res = super()._inner_update(t)
 
-        base_frame = np.eye(4)
-        base_frame[:3, :3] = R.from_quat(self.last_feedback[0].orientation, scalar_first=True).as_matrix()
-        self.robot_model.base_frame = base_frame
+        wxyz = self.last_feedback[0].orientation
+        if not np.any(np.isnan(wxyz)):  # skip until the IMU reports an orientation (NaN would raise)
+            base_frame = np.eye(4)
+            base_frame[:3, :3] = R.from_quat([*wxyz[1:], wxyz[0]]).as_matrix()
+            self.robot_model.base_frame = base_frame
         self.robot_model.get_end_effector(self.last_feedback.position, output=self.output_frame)
         return res
 
