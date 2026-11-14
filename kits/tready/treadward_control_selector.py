@@ -21,7 +21,7 @@ payloads = [
         "kits.tready.smart_treadward_sampler_control",
     ),
 ]
-default_controller = "kits.tready.treadward"
+default_controller = "kits.tready.treaded_base"
 
 
 l = hebi.Lookup()
@@ -49,4 +49,4 @@ if payload_group is not None:
     subprocess.run([sys.executable, "-m", payload_controller])
 else:
     print(f"Running {default_controller}.py")
-    subprocess.run([sys.executable, "-m", default_controller])
+    subprocess.run([sys.executable, "-m", default_controller, "treadward.cfg.yaml"])

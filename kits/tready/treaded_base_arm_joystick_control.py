@@ -1,6 +1,9 @@
-from time import time, sleep
+from __future__ import annotations
+
+import time
 import datetime
-from os.path import join, dirname, abspath
+import sys
+from pathlib import Path
 
 import numpy as np
 import hebi
@@ -9,21 +12,20 @@ from kits.arms.joystick_control_sm import (
     ArmJoystickControl,
     ArmJoystickInputs,
 )
-from .treaded_base_core import (
+from .treaded_base_core import ChassisVelocity, TreadedBaseController, TreadyEStopState, TreadyExitState, TreadyInputs
+from .treaded_base import (
     TreadedBase,
-    TreadedBaseConfig,
-    TreadedBaseControl,
-    TreadyInputs,
-    ChassisVelocity,
+    TreadyInitialState,
+    TreadyStartupState,
+    TreadyTeleopState,
 )
 
 from .mobile_io_manager import (
     MobileIOUpdater,
-    MobileIOModes,
     update_startup_mode,
 )
 
-from .tready_utils import wait_for_mobile_io, try_create_base_group
+from .tready_utils import wait_for_mobile_io
 
 
 import typing
@@ -32,20 +34,15 @@ if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
 
 
-def update_inputs(base_inputs: "TreadyInputs | None" = None):
-    if base_inputs is None:
-        base_inputs = TreadyInputs()
-
-    base_inputs.deploy_safe = True
-    base_inputs.stow_safe = True
-    base_inputs.payload_deployed = False
-    base_inputs.allow_startup = True
-    base_inputs.drive_safe = True
-
-    return base_inputs
+def idle_arm_inputs():
+    # Inputs that cause no arm behavior; sent while the Mobile IO is connected but has no arm controls
+    return ArmJoystickInputs(home=False, delta_xyz=[0, 0, 0], delta_rot_xyz=[0, 0, 0], gripper_closed=False)
 
 
-def update_arm_labels(m: "MobileIO"):
+IDLE_ARM_INPUTS = idle_arm_inputs()
+
+
+def update_arm_labels(m: MobileIO):
     mapping = {
         "arm_layer": 3,
         "right_joystick": 2,
@@ -54,16 +51,16 @@ def update_arm_labels(m: "MobileIO"):
     layer_change = m.get_button_diff(mapping["arm_layer"])
 
     if layer_change == 1:
-        m.set_axis_label(mapping["right_joystick"], "rotate")
+        m.set_axis_label(mapping["right_joystick"], "rotate", blocking=False)
         m.set_axis_label(mapping["wrist_slider"], "wrist", blocking=False)
         m.set_snap(mapping["wrist_slider"], 0)
     elif layer_change == -1:
-        m.set_axis_label(mapping["right_joystick"], "drive")
+        m.set_axis_label(mapping["right_joystick"], "drive", blocking=False)
         m.set_axis_label(mapping["wrist_slider"], "", blocking=False)
         m.set_snap(mapping["wrist_slider"], np.nan)
 
 
-def update_joystick_arm(m: "MobileIO"):
+def update_joystick_arm(m: MobileIO):
     # Drive buttons, joysticks, and sliders
     mapping = {
         "reset_pose_btn": 1,
@@ -79,14 +76,18 @@ def update_joystick_arm(m: "MobileIO"):
 
     update_arm_labels(m)
 
-    arm_dx = 0.2 * m.get_axis_state(mapping["arm_dx_slider"])
-    arm_dy = -0.2 * m.get_axis_state(mapping["arm_dy_slider"])
-    arm_dz = 0.2 * m.get_axis_state(mapping["arm_dz_slider"])
+    # Axes can read NaN right after a layout is sent, before the phone reports them: treat that as no input
+    def axis(name):
+        return float(np.nan_to_num(m.get_axis_state(mapping[name]), nan=0.0, posinf=0.0, neginf=0.0))
+
+    arm_dx = 0.2 * axis("arm_dx_slider")
+    arm_dy = -0.2 * axis("arm_dy_slider")
+    arm_dz = 0.2 * axis("arm_dz_slider")
 
     if m.get_button_state(mapping["arm_mode"]):
-        arm_drx = 0.5 * m.get_axis_state(mapping["arm_drx_slider"])
-        arm_dry = -0.5 * m.get_axis_state(mapping["arm_dry_slider"])
-        arm_drz = 0.75 * m.get_axis_state(mapping["arm_drz_slider"])
+        arm_drx = 0.5 * axis("arm_drx_slider")
+        arm_dry = -0.5 * axis("arm_dry_slider")
+        arm_drz = 0.75 * axis("arm_drz_slider")
 
     else:
         arm_drx = 0.0
@@ -103,7 +104,7 @@ def update_joystick_arm(m: "MobileIO"):
     return arm_inputs
 
 
-def update_drive_mode(m: "MobileIO"):
+def update_drive_mode(m: MobileIO):
     # Drive buttons, joysticks, and sliders
     mapping = {
         "reset_pose_btn": 1,
@@ -162,38 +163,20 @@ def update_drive_mode(m: "MobileIO"):
 
 
 if __name__ == "__main__":
-    config_dir = join(dirname(abspath(__file__)), "config")
+    lookup = hebi.Lookup()
 
-    tready_config = TreadedBaseConfig(
-        hrdf_file=join(config_dir, "hrdf", "Tready.hrdf"),
-        gains_file=join(config_dir, "gains", "smart-tready-gains.xml"),
-        wheel_diameter=0.125,  # m
-        wheel_base=0.285,  # m
-        torso_torque_scale=2.5,  # Nm
-        torque_mode_max=25,  # Nm
-    )
-
-    layout_dir = join(config_dir, "layouts")
-    startup_layout = join(layout_dir, "TreadwardStartupController.json")
-    drive_layout = join(layout_dir, "TreadwardJoystickArmController.json")
+    config_dir = Path(__file__).absolute().parent / "config"
+    base_cfg = hebi.config.load_config(str(config_dir / sys.argv[1]))
 
     def arm_update_startup_mode(m):
-        return (update_startup_mode(m)[0], None)
+        return (update_startup_mode(m)[0], IDLE_ARM_INPUTS)
 
     def arm_update_drive_mode(m):
         base_input = update_drive_mode(m)
         arm_input = update_joystick_arm(m)
         return (base_input, arm_input)
 
-    mio_demo_config = {
-        MobileIOModes.STARTUP: (startup_layout, arm_update_startup_mode),
-        MobileIOModes.DRIVE: (drive_layout, arm_update_drive_mode),
-    }
-
-    lookup = hebi.Lookup()
-    sleep(2)
-
-    base_family = "Tready"
+    base_family = base_cfg.families[0]
 
     # mobileIO setup
     print("Looking for mobileIO device...")
@@ -202,33 +185,33 @@ if __name__ == "__main__":
     print("mobileIO device found.")
     m.update()
 
-    # Create base group
-    base_group = try_create_base_group(lookup, base_family)
-    while base_group is None:
-        print(f"Looking for {base_family} modules...")
-        sleep(1)
-        base_group = try_create_base_group(lookup, base_family)
+    layout_dir = config_dir / "layouts"
+    mio_demo_config = {
+        TreadyStartupState: (layout_dir / "TreadwardStartupController.json", arm_update_startup_mode),
+        TreadyTeleopState: (layout_dir / "TreadwardJoystickArmController.json", arm_update_drive_mode),
+    }
+    updater = MobileIOUpdater(m, mio_demo_config, idle_inputs=(None, IDLE_ARM_INPUTS))
 
-    base = TreadedBase(
-        tready_config, base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1
+    base = TreadedBase.from_config(base_cfg)
+    base_control = TreadedBaseController(
+        base, TreadyInitialState, TreadyEStopState, TreadyExitState, max_base_speed=base_cfg.user_data["max_base_speed"]
     )
-    base_control = TreadedBaseControl(base, max_base_speed=0.25)
     base_control.namespace = "[Base] "
 
     # Create Arm group
     arm_family = "Arm"
-    config_file = join(config_dir, "tready-arm-A-2240-06G.cfg.yaml")
-    cfg = hebi.config.load_config(config_file)
-    arm = hebi.arm.create_from_config(cfg, lookup)
+    config_file = config_dir / "tready-arm-A-2240-06G.cfg.yaml"
+    arm_cfg = hebi.config.load_config(str(config_file))
+    arm = hebi.arm.create_from_config(arm_cfg, lookup)
     gripper = None  # TODO: Reimplement the old behaviors for gripper loading
     # arm, gripper = setup_arm_6dof(lookup, arm_family, with_gripper=False)
 
     if arm is None:
-        if len(cfg.families) == 1:
-            families = [cfg.families[0]] * len(cfg.names)
+        if len(arm_cfg.families) == 1:
+            families = [arm_cfg.families[0]] * len(arm_cfg.names)
         else:
-            families = cfg.families
-        pairs = zip(families, cfg.names)
+            families = arm_cfg.families
+        pairs = zip(families, arm_cfg.names)
         modules = [f"{p[0]}/{p[1]}" for p in pairs]
         raise RuntimeError("Could not find modules:\n" + "\n".join(modules))
 
@@ -240,7 +223,6 @@ if __name__ == "__main__":
     )
     arm_control.namespace = "[Arm] "
 
-    updater = MobileIOUpdater(m, mio_demo_config)
     base_control._transition_handlers.append(updater.base_transition_handler)
 
     base_control._update_handlers.append(updater.update_voltage_reading)
@@ -250,38 +232,37 @@ if __name__ == "__main__":
     logging = True
 
     if logging:
-        tready_log_dir = join(dirname(__file__), "logs")
+        tready_log_dir = str(Path(__file__).parent / "logs")
         now = datetime.datetime.now()
         arm.group.start_log(tready_log_dir, f"arm_{now:%Y-%m-%d-%H-%M-%S}")
         base.group.start_log(tready_log_dir, f"base_{now:%Y-%m-%d-%H-%M-%S}")
 
+    base_control.start()
     while base_control.running and arm_control.running:
-        t = time()
+        t = time.time()
         try:
             inputs = updater.parse_mobile_io_feedback(m)
             if inputs is None:
                 base_inputs = None
                 arm_inputs = None
             else:
-                base_inputs = update_inputs(inputs[0])
+                base_inputs = inputs[0]
                 arm_inputs = inputs[1]
-                if arm_inputs is None:
-                    # Startup layout has no arm controls, but the Mobile IO is connected: don't time the arm out
-                    arm_control.last_cmd_t = t
-                if base_inputs.quit:
-                    break
 
-            base_control.update(t, base_inputs)
+                if base_inputs is not None:
+                    if base_inputs.quit:
+                        break
+
+                    base_control.receive_inputs(base_inputs)
+
             arm_control.update(t, arm_inputs)
-            base_control.send()
             arm_control.send()
 
         except KeyboardInterrupt:
             break
 
-    base_control.stop()
     arm_control.stop()
+    base_control.wait_for_shutdown(1)
 
     if logging:
-        base.group.stop_log()
         arm.group.stop_log()

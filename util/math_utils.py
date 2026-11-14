@@ -141,6 +141,7 @@ def quat2rot(quaternion, output=None):
 
     return output
 
+
 def rot2ea(R, output=None):
     """Retrieve the Euler angle from the input rotation matrix.
 

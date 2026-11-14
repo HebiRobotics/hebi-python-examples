@@ -59,6 +59,8 @@ class ArmJoystickControl:
             self.joint_target = np.array(arm.last_feedback.position)
 
         self.last_cmd_t = time()
+        # Feedback buffers are empty (NaN or zeros) until the modules first answer: don't command from them
+        self.have_feedback = False
 
     @property
     def running(self):
@@ -68,7 +70,8 @@ class ArmJoystickControl:
         self.arm.send()
 
     def update(self, t_now: float, demo_input: 'Optional[ArmJoystickInputs]' = None):
-        self.arm.update()
+        if self.arm.update():
+            self.have_feedback = True
 
         if self.state is self.state.EXIT:
             return
@@ -96,6 +99,9 @@ class ArmJoystickControl:
                 return
 
             arm_goal = self.compute_arm_goal(demo_input)
+            if arm_goal is None:
+                arm_goal = self.hold_position_goal()
+
             self.arm.set_goal(arm_goal)
 
             if self.use_gripper:
@@ -106,7 +112,17 @@ class ArmJoystickControl:
                     self.arm.end_effector.open()
 
         elif self.state is self.state.STARTUP:
-            self.transition_to(t_now, self.state.HOMING)
+            # Wait for real feedback: holding at an empty buffer's position drives the arm somewhere else
+            if not self.have_feedback:
+                return
+
+            # clear any existing color on the arm from before
+            self.arm.pending_command.led.color = "transparent"
+            # Hold where the arm is; homing only happens on the home input
+            goal = self.hold_position_goal()
+            self.joint_target = self._current_position()
+            self.arm.set_goal(goal)
+            self.transition_to(t_now, self.state.TELEOP)
 
     def transition_to(self, t_now: float, state: ArmControlState):
         # self transitions are noop
@@ -115,14 +131,18 @@ class ArmJoystickControl:
 
         if state is self.state.HOMING:
             print(self.namespace + "TRANSITIONING TO HOMING")
+            self.arm.pending_command.led.color = "magenta"
             g = hebi.arm.Goal(self.arm.size)
             g.add_waypoint(t=self.homing_time, position=self.arm_home)
             self.arm.set_goal(g)
 
         elif state is self.state.TELEOP:
             print(self.namespace + "TRANSITIONING TO TELEOP")
+            self.arm.pending_command.led.color = "transparent"
 
         elif state is self.state.DISCONNECTED:
+            self.arm.set_goal(self.hold_position_goal())
+            self.arm.pending_command.led.color = "blue"
             print(self.namespace + "TRANSITIONING TO DISCONNECTED")
 
         elif state is self.state.EXIT:
@@ -130,13 +150,29 @@ class ArmJoystickControl:
 
         self.state = state
 
+    def _current_position(self):
+        pos = np.array(self.arm.last_feedback.position_command)
+        if np.any(np.isnan(pos)):
+            pos = np.array(self.arm.last_feedback.position)
+        return pos
+
+    def hold_position_goal(self):
+        hold = self._current_position()
+        g = hebi.arm.Goal(self.arm.size)
+        g.add_waypoint(t=0.25, position=hold, velocity=np.zeros(self.arm.size))
+        return g
+
     def compute_arm_goal(self, arm_inputs: ArmJoystickInputs):
         arm_goal = hebi.arm.Goal(self.arm.size)
         pos_curr = self.arm.last_feedback.position_command
 
         if np.any(np.isnan(pos_curr)):
-            print(self.namespace + 'No position command, falling back to feedback position')
-            pos_curr = self.arm.last_feedback.position
+            print(self.namespace + 'No position command, skipping goal')
+            return None
+
+        if not np.all(np.isfinite(pos_curr)):
+            print(self.namespace + 'No valid arm feedback yet, skipping goal')
+            return None
 
         try:
             self.arm.FK(pos_curr, xyz_out=self.xyz_curr, orientation_out=self.rot_curr)
@@ -144,7 +180,14 @@ class ArmJoystickControl:
             print(self.namespace + f'ERROR: Cannot compute FK with input position: {pos_curr}')
             exit()
 
+        # joint_target can be invalid if it was read before the first feedback arrived: resync it
+        if not np.all(np.isfinite(self.joint_target)):
+            self.joint_target = np.array(pos_curr)
+
         arm_xyz_target = self.xyz_curr + arm_inputs.delta_xyz
+        if not (np.all(np.isfinite(arm_xyz_target)) and np.all(np.isfinite(arm_inputs.delta_rot_xyz))):
+            print(self.namespace + f'Non-finite target (xyz={arm_xyz_target}, rot={arm_inputs.delta_rot_xyz}), skipping goal')
+            return None
 
         r_x = R.from_euler('x', arm_inputs.delta_rot_xyz[0])
         r_y = R.from_euler('y', arm_inputs.delta_rot_xyz[1])
@@ -159,10 +202,14 @@ class ArmJoystickControl:
             diff = abs(self.joint_target[2] - self.shoulder_flip_angle)
             self.joint_target[2] = self.shoulder_flip_angle + diff
 
-        joint_target = self.arm.ik_target_xyz_so3(
-            self.joint_target,
-            arm_xyz_target,
-            arm_rot_target.as_matrix())
+        try:
+            joint_target = self.arm.ik_target_xyz_so3(
+                self.joint_target,
+                arm_xyz_target,
+                arm_rot_target.as_matrix())
+        except Exception as e:
+            print(self.namespace + f'IK failed ({e}), holding position')
+            return None
 
         out_of_bounds = False
         for idx, joint in enumerate(joint_target):
