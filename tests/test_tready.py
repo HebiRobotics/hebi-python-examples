@@ -213,3 +213,12 @@ def test_base_pose_with_nan_orientation():
         robot_model=hebi.robot_model.import_from_hrdf(str(CONFIG_DIR / "hrdf" / "Tready.hrdf")),
     )
     assert np.all(np.isfinite(TreadedBase.pose.fget(stub)))
+
+
+def test_updater_idle_inputs_before_a_layout_is_active(fake_mobile_io):
+    """No parser yet but the Mobile IO is sending: return the idle inputs, not None (None means a disconnect)."""
+    from kits.tready.mobile_io_manager import MobileIOUpdater
+
+    idle = (None, object())
+    assert MobileIOUpdater(fake_mobile_io, {}, idle_inputs=idle).parse_mobile_io_feedback(fake_mobile_io) is idle
+    assert MobileIOUpdater(fake_mobile_io, {}).parse_mobile_io_feedback(fake_mobile_io) is None

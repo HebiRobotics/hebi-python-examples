@@ -33,6 +33,14 @@ if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
 
 
+def idle_arm_inputs():
+    # Inputs that cause no arm behavior; sent while the Mobile IO is connected but has no arm controls
+    return ArmMobileIOInputs(phone_pos=np.zeros(3), phone_rot=np.eye(3))
+
+
+IDLE_ARM_INPUTS = idle_arm_inputs()
+
+
 def update_ar_arm(m: MobileIO):
     # Drive buttons, joysticks, and sliders
     mapping = {
@@ -47,7 +55,8 @@ def update_ar_arm(m: MobileIO):
         rotation = R.from_quat([*wxyz[1:], wxyz[0]]).as_matrix()
     except ValueError as e:
         print(f"Error getting orientation as matrix: {e}\n{m.orientation}")
-        rotation = np.eye(3)
+        # Invalid pose: the arm holds position rather than tracking a made-up orientation
+        rotation = np.full((3, 3), np.nan)
 
     arm_inputs = ArmMobileIOInputs(
         phone_pos=np.copy(m.position),
@@ -146,7 +155,7 @@ if __name__ == "__main__":
     base_cfg = hebi.config.load_config(str(config_dir / sys.argv[1]))
 
     def arm_update_startup_mode(m):
-        return (update_startup_mode(m)[0], None)
+        return (update_startup_mode(m)[0], IDLE_ARM_INPUTS)
 
     def arm_update_drive_mode(m):
         base_input = update_drive_mode(m)
@@ -167,6 +176,7 @@ if __name__ == "__main__":
             TreadyStartupState: (layout_dir / "TreadwardStartupController.json", arm_update_startup_mode),
             TreadyTeleopState: (layout_dir / "TreadwardARArmController.json", arm_update_drive_mode),
         },
+        idle_inputs=(None, IDLE_ARM_INPUTS),
     )
 
     base = TreadedBase.from_config(base_cfg)
@@ -225,14 +235,12 @@ if __name__ == "__main__":
             else:
                 base_inputs = inputs[0]
                 arm_inputs = inputs[1]
-                if arm_inputs is None:
-                    # Startup layout has no arm controls, but the Mobile IO is connected: don't time the arm out
-                    arm_control.last_cmd_t = t
 
-                if base_inputs.quit:
-                    break
+                if base_inputs is not None:
+                    if base_inputs.quit:
+                        break
 
-                base_control.receive_inputs(base_inputs)
+                    base_control.receive_inputs(base_inputs)
 
             arm_control.update(t, arm_inputs)
             arm_control.send()

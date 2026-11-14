@@ -91,6 +91,87 @@ def test_joystick_disconnect_holds_position(imitation, lookup):
     assert not np.allclose(traj.get_state(traj.end_time)[0], HOME, atol=1e-3), "moved to home on disconnect"
 
 
+def test_joystick_idle_input_in_startup_does_not_home(imitation, lookup):
+    """Idle inputs keep the arm connected and still: no homing, no timeout. None still times out and holds."""
+    from kits.arms.joystick_control_sm import ArmControlState, ArmJoystickControl, ArmJoystickInputs
+
+    arm, _ = imitated_arm(imitation, lookup, ARMS_CONFIG / "A-2580-06.cfg.yaml")
+    ctrl = ArmJoystickControl(arm, HOME, homing_time=0.3)
+    idle = ArmJoystickInputs(False, [0, 0, 0], [0, 0, 0], False)
+
+    ctrl.update(time.time(), idle)
+    assert ctrl.state is not ArmControlState.HOMING
+    assert ctrl.state is not ArmControlState.DISCONNECTED
+
+    # Idle input for over a second, no disconnect
+    t0 = time.time()
+    while time.time() - t0 < 1.2:
+        ctrl.update(time.time(), idle)
+        ctrl.send()
+        time.sleep(0.01)
+    assert ctrl.state is ArmControlState.TELEOP
+
+    # No feedback at all is still a disconnect
+    assert run_until(lambda: ctrl.state is ArmControlState.DISCONNECTED, lambda t: (ctrl.update(t, None), ctrl.send()), timeout_s=3)
+
+
+def test_ar_idle_input_in_startup_does_not_home(imitation, lookup):
+    from kits.arms.ar_control_sm import ArmControlState, ArmMobileIOControl, ArmMobileIOInputs
+
+    arm, _ = imitated_arm(imitation, lookup, ARMS_CONFIG / "A-2580-06.cfg.yaml")
+    ctrl = ArmMobileIOControl(arm, None, homing_time=0.3)
+    idle = ArmMobileIOInputs(phone_pos=np.zeros(3), phone_rot=np.eye(3))
+
+    t0 = time.time()
+    while time.time() - t0 < 1.2:
+        ctrl.update(time.time(), idle)
+        ctrl.send()
+        time.sleep(0.01)
+    assert ctrl.state is ArmControlState.IDLE
+
+    ctrl.update(time.time(), ArmMobileIOInputs(phone_pos=np.zeros(3), phone_rot=np.eye(3), home=True))
+    assert ctrl.state is ArmControlState.HOMING
+
+
+def test_ar_pose_and_ik_failures_hold_position(imitation, lookup, monkeypatch):
+    """Invalid AR pose or an IK failure must hold position, not raise (the command stream would stop)."""
+    from kits.arms.ar_control_sm import ArmControlState, ArmMobileIOControl, ArmMobileIOInputs
+
+    arm, _ = imitated_arm(imitation, lookup, ARMS_CONFIG / "A-2580-06.cfg.yaml")
+    ctrl = ArmMobileIOControl(arm, None, homing_time=0.3)
+    good = ArmMobileIOInputs(phone_pos=np.zeros(3), phone_rot=np.eye(3))
+    run_until(lambda: False, lambda t: (ctrl.update(t, good), ctrl.send()), timeout_s=0.5)
+    ctrl.update(time.time(), ArmMobileIOInputs(phone_pos=np.zeros(3), phone_rot=np.eye(3), lock_toggle=True, locked=False))
+    assert ctrl.state is ArmControlState.TELEOP
+
+    nan_rot = ArmMobileIOInputs(phone_pos=np.zeros(3), phone_rot=np.full((3, 3), np.nan), locked=False)
+    goal = ctrl.compute_arm_goal(nan_rot)
+    assert goal is not None
+
+    def fail(*a, **k):
+        raise RuntimeError("no solution")
+
+    monkeypatch.setattr(arm, "ik_target_xyz_so3", fail)
+    assert ctrl.compute_arm_goal(good) is not None
+    ctrl.update(time.time(), good)  # must not raise
+
+
+def test_ar_startup_commands_current_position(imitation, lookup):
+    """With no goal the arm floats (gravity compensation only): startup must command the current position."""
+    from kits.arms.ar_control_sm import ArmControlState, ArmMobileIOControl, ArmMobileIOInputs
+
+    arm, _ = imitated_arm(imitation, lookup, ARMS_CONFIG / "A-2580-06.cfg.yaml")
+    ctrl = ArmMobileIOControl(arm, None, homing_time=0.3)
+    idle = ArmMobileIOInputs(phone_pos=np.zeros(3), phone_rot=np.full((3, 3), np.nan))
+
+    def step(t):
+        ctrl.update(t, idle)
+        ctrl.send()
+
+    assert run_until(lambda: ctrl.state is ArmControlState.IDLE and arm.trajectory is not None, step), ctrl.state
+    assert ctrl.state is ArmControlState.IDLE
+
+
 # ---------------------------------------------------------------- ar_control_sm
 
 

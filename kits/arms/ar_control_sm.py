@@ -105,9 +105,13 @@ class ArmMobileIOControl:
             print(self.namespace + 'Controller reconnected, demo continued.')
             self.transition_to(t_now, self.state.IDLE)
 
-        # After startup, transition to homing
+        # After startup, hold position; homing only happens on the home input
         elif self.state is self.state.STARTUP:
-            self.transition_to(t_now, self.state.HOMING)
+            # Command the current position so the arm doesn't float. Wait for feedback if there isn't any yet.
+            goal = self.hold_goal()
+            if goal is not None:
+                self.arm.set_goal(goal)
+                self.transition_to(t_now, self.state.IDLE)
 
         # If homing is complete, transition to teleop
         elif self.state is self.state.HOMING:
@@ -158,16 +162,20 @@ class ArmMobileIOControl:
 
         if state is self.state.HOMING:
             print(self.namespace + "TRANSITIONING TO HOMING")
+            self.arm.pending_command.led.color = "magenta"
             self.home(self.homing_time)
 
         elif state is self.state.IDLE:
             print(self.namespace + "TRANSITIONING TO IDLE")
+            self.arm.pending_command.led.color = "transparent"
 
         elif state is self.state.TELEOP:
             print(self.namespace + "TRANSITIONING TO TELEOP")
+            self.arm.pending_command.led.color = "transparent"
 
         elif state is self.state.DISCONNECTED:
             print(self.namespace + "mobileIO timeout, disabling motion")
+            self.arm.pending_command.led.color = "blue"
 
         elif state is self.state.EXIT:
             print(self.namespace + "TRANSITIONING TO EXIT")
@@ -187,10 +195,21 @@ class ArmMobileIOControl:
         self.last_locked_xyz = xyz
         self.last_locked_rot = orientation
 
+    def hold_goal(self):
+        """A goal at the current commanded position with zero velocity, stopping any motion in progress."""
+        hold = np.array(self.arm.last_feedback.position_command)
+        if np.any(np.isnan(hold)):
+            hold = np.array(self.arm.last_feedback.position)
+        if np.any(np.isnan(hold)):
+            return None
+        goal = hebi.arm.Goal(self.arm.size)
+        goal.add_waypoint(t=0.3, position=hold, velocity=np.zeros(self.arm.size))
+        return goal
+
     def compute_arm_goal(self, arm_input: ArmMobileIOInputs):
         if np.any(np.isnan(arm_input.phone_pos)) or np.any(np.isnan(arm_input.phone_rot)):
             print(f'NaN detected in pose from AR device:\n{arm_input.phone_pos}\n{arm_input.phone_rot}')
-            return None
+            return self.hold_goal()
 
         phone_offset = arm_input.phone_pos - self.phone_xyz_home
         rot_mat = self.phone_rot_home
@@ -210,14 +229,12 @@ class ArmMobileIOControl:
                 arm_xyz_target,
                 arm_rot_target)
         except Exception as e:
-            print('-----------------')
-            print(arm_xyz_target)
-            print('-----------------')
-            print(self.last_locked_seed)
-            print('-----------------')
-            print(arm_rot_target)
-            print('-----------------')
-            raise e
+            # Don't let an IK failure stop the command stream (the arm would go limp): hold position
+            print(self.namespace + f'IK failed ({e}), holding position')
+            print(f'target xyz: {arm_xyz_target}')
+            print(f'seed: {self.last_locked_seed}')
+            print(f'target rot:\n{arm_rot_target}')
+            return self.hold_goal()
 
         arm_goal = hebi.arm.Goal(self.arm.size)
         arm_goal.add_waypoint(t=self.traj_duration, position=joint_target)
@@ -256,7 +273,8 @@ def parse_mobile_feedback(m: 'MobileIO'):
         rotation = R.from_quat(xyzw).as_matrix()
     except ValueError as e:
         print(f'Error getting orientation as matrix: {e}\n{m.orientation}')
-        rotation = np.eye(3)
+        # Invalid pose: the arm holds position rather than tracking a made-up orientation
+        rotation = np.full((3, 3), np.nan)
 
     arm_input = ArmMobileIOInputs(
         home=user_home,

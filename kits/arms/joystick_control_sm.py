@@ -83,7 +83,6 @@ class ArmJoystickControl:
 
         if self.state is self.state.DISCONNECTED:
             self.last_cmd_t = t_now
-            self.arm.pending_command.led.color = "transparent"
             self.transition_to(t_now, self.state.TELEOP)
 
         elif self.state is self.state.HOMING:
@@ -97,7 +96,8 @@ class ArmJoystickControl:
                 return
 
             arm_goal = self.compute_arm_goal(demo_input)
-            self.arm.set_goal(arm_goal)
+            if arm_goal is not None:
+                self.arm.set_goal(arm_goal)
 
             if self.use_gripper:
                 gripper_closed = self.arm.end_effector.state == 1.0
@@ -107,7 +107,11 @@ class ArmJoystickControl:
                     self.arm.end_effector.open()
 
         elif self.state is self.state.STARTUP:
-            self.transition_to(t_now, self.state.HOMING)
+            # clear any existing color on the arm from before
+            self.arm.pending_command.led.color = "transparent"
+            # Hold where the arm is; homing only happens on the home input
+            # (compute_arm_goal syncs joint_target from feedback if it isn't valid yet)
+            self.transition_to(t_now, self.state.TELEOP)
 
     def transition_to(self, t_now: float, state: ArmControlState):
         # self transitions are noop
@@ -116,12 +120,14 @@ class ArmJoystickControl:
 
         if state is self.state.HOMING:
             print(self.namespace + "TRANSITIONING TO HOMING")
+            self.arm.pending_command.led.color = "magenta"
             g = hebi.arm.Goal(self.arm.size)
             g.add_waypoint(t=self.homing_time, position=self.arm_home)
             self.arm.set_goal(g)
 
         elif state is self.state.TELEOP:
             print(self.namespace + "TRANSITIONING TO TELEOP")
+            self.arm.pending_command.led.color = "transparent"
 
         elif state is self.state.DISCONNECTED:
             # Hold where the arm is (not a fast move to home)
@@ -147,13 +153,24 @@ class ArmJoystickControl:
             print(self.namespace + 'No position command, falling back to feedback position')
             pos_curr = self.arm.last_feedback.position
 
+        if not np.all(np.isfinite(pos_curr)):
+            print(self.namespace + 'No valid arm feedback yet, skipping goal')
+            return None
+
         try:
             self.arm.FK(pos_curr, xyz_out=self.xyz_curr, orientation_out=self.rot_curr)
         except ValueError:
             print(self.namespace + f'ERROR: Cannot compute FK with input position: {pos_curr}')
             exit()
 
+        # joint_target can be invalid if it was read before the first feedback arrived: resync it
+        if not np.all(np.isfinite(self.joint_target)):
+            self.joint_target = np.array(pos_curr)
+
         arm_xyz_target = self.xyz_curr + arm_inputs.delta_xyz
+        if not (np.all(np.isfinite(arm_xyz_target)) and np.all(np.isfinite(arm_inputs.delta_rot_xyz))):
+            print(self.namespace + f'Non-finite target (xyz={arm_xyz_target}, rot={arm_inputs.delta_rot_xyz}), skipping goal')
+            return None
 
         r_x = R.from_euler('x', arm_inputs.delta_rot_xyz[0])
         r_y = R.from_euler('y', arm_inputs.delta_rot_xyz[1])
@@ -168,10 +185,17 @@ class ArmJoystickControl:
             diff = abs(self.joint_target[2] - self.shoulder_flip_angle)
             self.joint_target[2] = self.shoulder_flip_angle + diff
 
-        joint_target = self.arm.ik_target_xyz_so3(
-            self.joint_target,
-            arm_xyz_target,
-            arm_rot_target.as_matrix())
+        try:
+            joint_target = self.arm.ik_target_xyz_so3(
+                self.joint_target,
+                arm_xyz_target,
+                arm_rot_target.as_matrix())
+        except Exception as e:
+            # Don't let an IK failure stop the command stream (the arm would go limp): hold position
+            print(self.namespace + f'IK failed ({e}), holding position')
+            g = hebi.arm.Goal(self.arm.size)
+            g.add_waypoint(t=0.3, position=pos_curr, velocity=np.zeros(self.arm.size))
+            return g
 
         out_of_bounds = False
         for idx, joint in enumerate(joint_target):

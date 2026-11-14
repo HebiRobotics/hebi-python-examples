@@ -47,6 +47,7 @@ class MobileIOUpdater:
         self,
         mobile_io: MobileIO,
         demo_config: Mapping[type[ControllerState], tuple[str | Path, Callable[[MobileIO], tuple]]],
+        idle_inputs: tuple | None = None,
     ):
 
         self.m = mobile_io
@@ -58,6 +59,9 @@ class MobileIOUpdater:
         self.voltage = 0
         self.voltage_update_time = 0.0
         self.active_parser = None
+        # Returned while the Mobile IO is sending feedback but no layout/parser is active yet, so callers can tell
+        # "connected, nothing to do" apart from "no feedback" (None)
+        self.idle_inputs = idle_inputs
         self._last_torque_labels = None
         # The handlers below run on the base's control thread. They queue their Mobile IO calls,
         # and parse_mobile_io_feedback() makes them on the main thread.
@@ -171,6 +175,7 @@ class MobileIOUpdater:
         if m.update(timeout_ms):
             if self.active_parser is not None:
                 return self.active_parser(m)
+            return self.idle_inputs
 
         return None
 

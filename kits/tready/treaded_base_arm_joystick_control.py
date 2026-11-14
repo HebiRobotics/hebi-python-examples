@@ -34,6 +34,14 @@ if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
 
 
+def idle_arm_inputs():
+    # Inputs that cause no arm behavior; sent while the Mobile IO is connected but has no arm controls
+    return ArmJoystickInputs(home=False, delta_xyz=[0, 0, 0], delta_rot_xyz=[0, 0, 0], gripper_closed=False)
+
+
+IDLE_ARM_INPUTS = idle_arm_inputs()
+
+
 def update_arm_labels(m: MobileIO):
     mapping = {
         "arm_layer": 3,
@@ -68,14 +76,18 @@ def update_joystick_arm(m: MobileIO):
 
     update_arm_labels(m)
 
-    arm_dx = 0.2 * m.get_axis_state(mapping["arm_dx_slider"])
-    arm_dy = -0.2 * m.get_axis_state(mapping["arm_dy_slider"])
-    arm_dz = 0.2 * m.get_axis_state(mapping["arm_dz_slider"])
+    # Axes can read NaN right after a layout is sent, before the phone reports them: treat that as no input
+    def axis(name):
+        return float(np.nan_to_num(m.get_axis_state(mapping[name]), nan=0.0, posinf=0.0, neginf=0.0))
+
+    arm_dx = 0.2 * axis("arm_dx_slider")
+    arm_dy = -0.2 * axis("arm_dy_slider")
+    arm_dz = 0.2 * axis("arm_dz_slider")
 
     if m.get_button_state(mapping["arm_mode"]):
-        arm_drx = 0.5 * m.get_axis_state(mapping["arm_drx_slider"])
-        arm_dry = -0.5 * m.get_axis_state(mapping["arm_dry_slider"])
-        arm_drz = 0.75 * m.get_axis_state(mapping["arm_drz_slider"])
+        arm_drx = 0.5 * axis("arm_drx_slider")
+        arm_dry = -0.5 * axis("arm_dry_slider")
+        arm_drz = 0.75 * axis("arm_drz_slider")
 
     else:
         arm_drx = 0.0
@@ -157,7 +169,7 @@ if __name__ == "__main__":
     base_cfg = hebi.config.load_config(str(config_dir / sys.argv[1]))
 
     def arm_update_startup_mode(m):
-        return (update_startup_mode(m)[0], None)
+        return (update_startup_mode(m)[0], IDLE_ARM_INPUTS)
 
     def arm_update_drive_mode(m):
         base_input = update_drive_mode(m)
@@ -178,7 +190,7 @@ if __name__ == "__main__":
         TreadyStartupState: (layout_dir / "TreadwardStartupController.json", arm_update_startup_mode),
         TreadyTeleopState: (layout_dir / "TreadwardJoystickArmController.json", arm_update_drive_mode),
     }
-    updater = MobileIOUpdater(m, mio_demo_config)
+    updater = MobileIOUpdater(m, mio_demo_config, idle_inputs=(None, IDLE_ARM_INPUTS))
 
     base = TreadedBase.from_config(base_cfg)
     base_control = TreadedBaseController(
@@ -236,14 +248,12 @@ if __name__ == "__main__":
             else:
                 base_inputs = inputs[0]
                 arm_inputs = inputs[1]
-                if arm_inputs is None:
-                    # Startup layout has no arm controls, but the Mobile IO is connected: don't time the arm out
-                    arm_control.last_cmd_t = t
 
-                if base_inputs.quit:
-                    break
+                if base_inputs is not None:
+                    if base_inputs.quit:
+                        break
 
-                base_control.receive_inputs(base_inputs)
+                    base_control.receive_inputs(base_inputs)
 
             arm_control.update(t, arm_inputs)
             arm_control.send()
