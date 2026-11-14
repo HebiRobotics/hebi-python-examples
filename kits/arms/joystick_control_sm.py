@@ -59,6 +59,8 @@ class ArmJoystickControl:
             self.joint_target = np.array(arm.last_feedback.position)
 
         self.last_cmd_t = time()
+        # Feedback buffers are empty (NaN or zeros) until the modules first answer: don't command from them
+        self.have_feedback = False
 
     @property
     def running(self):
@@ -68,7 +70,8 @@ class ArmJoystickControl:
         self.arm.send()
 
     def update(self, t_now: float, demo_input: 'Optional[ArmJoystickInputs]' = None):
-        self.arm.update()
+        if self.arm.update():
+            self.have_feedback = True
 
         if self.state is self.state.EXIT:
             return
@@ -96,8 +99,10 @@ class ArmJoystickControl:
                 return
 
             arm_goal = self.compute_arm_goal(demo_input)
-            if arm_goal is not None:
-                self.arm.set_goal(arm_goal)
+            if arm_goal is None:
+                arm_goal = self.hold_position_goal()
+
+            self.arm.set_goal(arm_goal)
 
             if self.use_gripper:
                 gripper_closed = self.arm.end_effector.state == 1.0
@@ -107,10 +112,16 @@ class ArmJoystickControl:
                     self.arm.end_effector.open()
 
         elif self.state is self.state.STARTUP:
+            # Wait for real feedback: holding at an empty buffer's position drives the arm somewhere else
+            if not self.have_feedback:
+                return
+
             # clear any existing color on the arm from before
             self.arm.pending_command.led.color = "transparent"
             # Hold where the arm is; homing only happens on the home input
-            # (compute_arm_goal syncs joint_target from feedback if it isn't valid yet)
+            goal = self.hold_position_goal()
+            self.joint_target = self._current_position()
+            self.arm.set_goal(goal)
             self.transition_to(t_now, self.state.TELEOP)
 
     def transition_to(self, t_now: float, state: ArmControlState):
@@ -130,13 +141,7 @@ class ArmJoystickControl:
             self.arm.pending_command.led.color = "transparent"
 
         elif state is self.state.DISCONNECTED:
-            # Hold where the arm is (not a fast move to home)
-            hold = np.array(self.arm.last_feedback.position_command)
-            if np.any(np.isnan(hold)):
-                hold = np.array(self.arm.last_feedback.position)
-            g = hebi.arm.Goal(self.arm.size)
-            g.add_waypoint(t=0.25, position=hold, velocity=np.zeros(self.arm.size))
-            self.arm.set_goal(g)
+            self.arm.set_goal(self.hold_position_goal())
             self.arm.pending_command.led.color = "blue"
             print(self.namespace + "TRANSITIONING TO DISCONNECTED")
 
@@ -145,13 +150,25 @@ class ArmJoystickControl:
 
         self.state = state
 
+    def _current_position(self):
+        pos = np.array(self.arm.last_feedback.position_command)
+        if np.any(np.isnan(pos)):
+            pos = np.array(self.arm.last_feedback.position)
+        return pos
+
+    def hold_position_goal(self):
+        hold = self._current_position()
+        g = hebi.arm.Goal(self.arm.size)
+        g.add_waypoint(t=0.25, position=hold, velocity=np.zeros(self.arm.size))
+        return g
+
     def compute_arm_goal(self, arm_inputs: ArmJoystickInputs):
         arm_goal = hebi.arm.Goal(self.arm.size)
         pos_curr = self.arm.last_feedback.position_command
 
         if np.any(np.isnan(pos_curr)):
-            print(self.namespace + 'No position command, falling back to feedback position')
-            pos_curr = self.arm.last_feedback.position
+            print(self.namespace + 'No position command, skipping goal')
+            return None
 
         if not np.all(np.isfinite(pos_curr)):
             print(self.namespace + 'No valid arm feedback yet, skipping goal')
@@ -191,11 +208,8 @@ class ArmJoystickControl:
                 arm_xyz_target,
                 arm_rot_target.as_matrix())
         except Exception as e:
-            # Don't let an IK failure stop the command stream (the arm would go limp): hold position
             print(self.namespace + f'IK failed ({e}), holding position')
-            g = hebi.arm.Goal(self.arm.size)
-            g.add_waypoint(t=0.3, position=pos_curr, velocity=np.zeros(self.arm.size))
-            return g
+            return None
 
         out_of_bounds = False
         for idx, joint in enumerate(joint_target):

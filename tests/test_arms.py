@@ -151,7 +151,7 @@ def test_ar_pose_and_ik_failures_hold_position(imitation, lookup, monkeypatch):
     def fail(*a, **k):
         raise RuntimeError("no solution")
 
-    monkeypatch.setattr(arm, "ik_target_xyz_so3", fail)
+    monkeypatch.setattr(type(arm), "ik_target_xyz_so3", fail)
     assert ctrl.compute_arm_goal(good) is not None
     ctrl.update(time.time(), good)  # must not raise
 

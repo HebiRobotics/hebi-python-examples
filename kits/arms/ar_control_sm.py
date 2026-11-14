@@ -65,6 +65,8 @@ class ArmMobileIOControl:
         self._transition_handlers: 'list[Callable[[ArmMobileIOControl, ArmControlState], None]]' = [
         ]
         self.last_cmd_t = time()
+        # Feedback buffers are empty (NaN or zeros) until the modules first answer: don't command from them
+        self.have_feedback = False
 
     @property
     def running(self):
@@ -83,7 +85,8 @@ class ArmMobileIOControl:
             self.gripper.send()
 
     def update(self, t_now: float, arm_input: 'ArmMobileIOInputs | None'):
-        self.arm.update()
+        if self.arm.update():
+            self.have_feedback = True
 
         if self.state is self.state.EXIT:
             return
@@ -107,8 +110,9 @@ class ArmMobileIOControl:
 
         # After startup, hold position; homing only happens on the home input
         elif self.state is self.state.STARTUP:
-            # Command the current position so the arm doesn't float. Wait for feedback if there isn't any yet.
-            goal = self.hold_goal()
+            # Command the current position so the arm doesn't float. Wait for real feedback first: holding at
+            # an empty buffer's position drives the arm somewhere else.
+            goal = self.hold_goal() if self.have_feedback else None
             if goal is not None:
                 self.arm.set_goal(goal)
                 self.transition_to(t_now, self.state.IDLE)
