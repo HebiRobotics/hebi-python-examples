@@ -1,22 +1,29 @@
-import hebi
-from hebi.util import create_mobile_io
+from pathlib import Path
+
 from time import time, sleep
 import datetime
+import numpy as np
 import os
 from os.path import join
+
+import hebi
+from hebi.util import create_mobile_io
 from .tready_utils import load_gains, set_mobile_io_instructions
-from .treaded_base_core import TreadyControlState, TreadyInputs, ChassisVelocity
-from .treadward import (
-    TreadwardBase,
-    TreadwardControl,
+
+from .treaded_base_core import ChassisVelocity, TreadyInputs, TreadyControlState
+from .treaded_base import (
+    TreadedBase,
+    TreadedBaseControl,
 )
+
 from .treadward_sampler import (
     CoreSampler,
     CoreSamplerControl,
     CoreSamplerControlState,
     CoreSamplerInputs,
 )
-import numpy as np
+
+from .mobile_io_manager import MobileIOModes
 
 import typing
 
@@ -29,9 +36,6 @@ drive_layout = "TreadwardSamplerDriveController.json"
 deployed_layout = "TreadwardSamplerDeployedController.json"
 deploying_layout = "TreadwardSamplerDeployingController.json"
 startup_layout = "TreadwardSamplerStartupController.json"
-
-
-from mobile_io_manager import MobileIOModes
 
 
 mobileIO_mode = MobileIOModes.DRIVE
@@ -237,8 +241,8 @@ def update_inputs(
     base_inputs.allow_startup = payload_control.allow_base_startup
     base_inputs.drive_safe = bool(payload_control.base_drive_safe)
 
-    payload_inputs.deploy_safe = base_control.base.payload_deploy_safe
-    payload_inputs.stow_safe = base_control.base.payload_stow_safe
+    payload_inputs.deploy_safe = base_control.payload_deploy_safe
+    payload_inputs.stow_safe = base_control.payload_stow_safe
     payload_inputs.base_deployed = base_control.state == TreadyControlState.DEPLOYED
     payload_inputs.allow_startup = base_control.allow_payload_startup
 
@@ -248,6 +252,9 @@ def update_inputs(
 if __name__ == "__main__":
     lookup = hebi.Lookup()
     sleep(2)
+
+    config_dir = Path(__file__).absolute().parent / "config"
+    cfg = hebi.config.load_config(str(config_dir / 'treadward.cfg.yaml'))
 
     # Treaded base family & names
     family = "Treadward"
@@ -279,9 +286,9 @@ if __name__ == "__main__":
     root_dir, _ = os.path.split(os.path.abspath(__file__))
     load_gains(base_group, os.path.join(root_dir, "gains", "smart-treadward-gains.xml"))
 
-    base = TreadwardBase(base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1)
+    base = TreadedBase.from_config(cfg)
     base.set_robot_model(os.path.join(root_dir, "hrdf", "Treadward.hrdf"))
-    base_control = TreadwardControl(base)
+    base_control = TreadedBaseControl(base)
 
     # Create payload group
     payload_group = lookup.get_group_from_names(payload_family, payload_names)
@@ -308,7 +315,7 @@ if __name__ == "__main__":
             self.last_msg = ""
 
         # Runs when base changes state
-        def base_transition_handler(self, controller: TreadwardControl, new_state: TreadyControlState):
+        def base_transition_handler(self, controller: TreadedBaseControl, new_state: TreadyControlState):
             global mobileIO_mode
             if controller.state == new_state:
                 return
@@ -442,19 +449,19 @@ if __name__ == "__main__":
             self.last_msg = msg
 
         # Updates axis labels for torque mode sliders
-        def update_torque_mode(self, controller: TreadwardControl, state: TreadyControlState):
+        def update_torque_mode(self, controller: TreadedBaseControl, state: TreadyControlState):
             if controller.state is TreadyControlState.TELEOP:
                 if controller.torque_labels is not None:
                     for i, label in enumerate(controller.torque_labels):
-                        m.set_axis_label(i + 3, label, blocking=False)
+                        self.m.set_axis_label(i + 3, label, blocking=False)
                 else:
-                    m.set_axis_label(3, "FL", blocking=False)
-                    m.set_axis_label(4, "FR", blocking=False)
-                    m.set_axis_label(5, "BL", blocking=False)
-                    m.set_axis_label(6, "BR", blocking=False)
+                    self.m.set_axis_label(3, "FL", blocking=False)
+                    self.m.set_axis_label(4, "FR", blocking=False)
+                    self.m.set_axis_label(5, "BL", blocking=False)
+                    self.m.set_axis_label(6, "BR", blocking=False)
 
         # Updates the base startup message
-        def update_startup_msg_base(self, controller: TreadwardControl, state: TreadyControlState):
+        def update_startup_msg_base(self, controller: TreadedBaseControl, state: TreadyControlState):
             if state is TreadyControlState.STARTUP:
                 self.base_msg = ""
                 for i in range(4):
@@ -502,8 +509,8 @@ if __name__ == "__main__":
                 break
             base_inputs, payload_inputs = update_inputs(base_inputs, payload_inputs)
 
-            base_control.update(t, m_update, base_inputs)
-            base_control.send()
+            if m_update:
+                base_control.receive_inputs(t, base_inputs)
             payload_control.update(t, m_update, payload_inputs)
             payload_control.send()
 

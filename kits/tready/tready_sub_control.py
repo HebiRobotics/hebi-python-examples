@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from time import time, sleep
 import os
 
@@ -20,7 +22,7 @@ if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
 
 
-def setup_mobile_io(m: "MobileIO"):
+def setup_mobile_io(m: MobileIO):
     """Sets up mobileIO interface.
 
     Return a function that parses mobileIO feedback into the format
@@ -81,8 +83,8 @@ def setup_mobile_io(m: "MobileIO"):
     m.set_axis_label(pan_joy, "Pan")
     m.set_axis_label(tilt_joy, "Tilt")
 
-    def parse_mobile_io_feedback(m: "MobileIO"):
-        def change_to_torque_mode(m: "MobileIO"):
+    def parse_mobile_io_feedback(m: MobileIO):
+        def change_to_torque_mode(m: MobileIO):
             axis_vals = [0, -0.5, 1, 1]
             for i in range(3, 7):
                 if not m.set_snap(i, np.nan):
@@ -90,7 +92,7 @@ def setup_mobile_io(m: "MobileIO"):
                 if not m.set_axis_value(i, axis_vals[i - 3]):
                     print(f"Failed to set axis value for axis {i}")
 
-        def change_to_velocity_mode(m: "MobileIO"):
+        def change_to_velocity_mode(m: MobileIO):
             for i in range(3, 7):
                 if not m.set_snap(i, 0):
                     print(f"Failed to set snap for axis {i}")

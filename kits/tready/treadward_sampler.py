@@ -1,23 +1,19 @@
-import sys
-from time import time, sleep
+from __future__ import annotations
+
+from time import time
 from enum import Enum, auto
 
 import numpy as np
-from scipy.spatial.transform import Rotation as R
 
 import hebi
-from hebi.util import create_mobile_io
 
-from hebi._internal.ffi._marshalling import CommandIoBankField, FeedbackIoBankField
+from hebi._internal.ffi._marshalling import CommandIoBankField
 
 import typing
 
-
 if typing.TYPE_CHECKING:
     from typing import Optional, Callable
-    import numpy.typing as npt
     from hebi._internal.group import Group
-    from hebi._internal.mobile_io import MobileIO
 
 
 class CoreSampler:
@@ -47,7 +43,7 @@ class CoreSampler:
     WIGGLER_IO_BANK = CommandIoBankField.E
     WIGGLER_IO_PIN = 8
 
-    def __init__(self, group: "Group"):
+    def __init__(self, group: Group):
         self.group = group
 
         fbk = self.group.get_next_feedback()
@@ -332,7 +328,7 @@ class CoreSampler:
     def set_robot_model(self, hrdf_file: str):
         self.robot_model = hebi.robot_model.import_from_hrdf(hrdf_file)
 
-    def set_color(self, color: "hebi.Color | str"):
+    def set_color(self, color: hebi.Color | str):
         color_cmd = hebi.GroupCommand(self.group.size)
         color_cmd.led.color = color
         self.group.send_command(color_cmd)
@@ -413,8 +409,8 @@ class CoreSamplerControl:
         self.stow_timeout_time = 0.0
         self.deploy_timeout_time = 0.0
 
-        self._transition_handlers: "list[Callable[[CoreSamplerControl, CoreSamplerControlState], None]]" = []
-        self._update_handlers: "list[Callable[[CoreSamplerControl, CoreSamplerControlState], None]]" = []
+        self._transition_handlers: list[Callable[[CoreSamplerControl, CoreSamplerControlState], None]] = []
+        self._update_handlers: list[Callable[[CoreSamplerControl, CoreSamplerControlState], None]] = []
 
         self.last_cmd_t = time()
 
@@ -439,7 +435,7 @@ class CoreSamplerControl:
         self,
         t_now: float,
         m_update: bool,
-        sampler_input: "Optional[CoreSamplerInputs]" = None,
+        sampler_input: Optional[CoreSamplerInputs] = None,
     ):
         self.sampler.update_feedback()
 
