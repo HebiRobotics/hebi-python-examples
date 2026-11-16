@@ -31,17 +31,12 @@ def mio_layout_updater(mio: "MobileIO"):
             return
 
         if new_state is new_state.HOMING:
-            controller.arm.pending_command.led.color = "magenta"
             msg = "Robot Homing Sequence\nPlease wait..."
             set_mobile_io_instructions(mio, msg)
 
         elif new_state is new_state.TELEOP:
-            controller.arm.pending_command.led.color = "transparent"
             # Print Instructions
             set_mobile_io_instructions(mio, "Robot Ready to Control", color="green")
-
-        elif new_state is new_state.DISCONNECTED:
-            controller.arm.pending_command.led.color = "blue"
 
         elif new_state is new_state.EXIT:
             print("TRANSITIONING TO EXIT")
@@ -145,7 +140,8 @@ def setup_mobile_io(m: "MobileIO"):
                 rotation = R.from_quat(xyzw).as_matrix()
             except ValueError as e:
                 print(f"Error getting orientation as matrix: {e}\n{m.orientation}")
-                rotation = np.eye(3)
+                # Invalid pose: the arm holds position rather than tracking a made-up orientation
+                rotation = np.full((3, 3), np.nan)
 
             if m.get_button_diff(arm_lock) != 0:
                 if not m.get_button_state(arm_lock):
