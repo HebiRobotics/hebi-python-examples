@@ -1,0 +1,21 @@
+# 7-DoF double-shoulder follower arm with gripper for the Tready MAPS demo
+version: 1.1
+families: ["Arm"]
+names: ["J1_base", "J2A_shoulder1", "J3_shoulder2", "J4_elbow1", "J5_elbow2", "J6_wrist1", "J7_wrist2"]
+hrdf: "../../arms/config/hrdf/A-2303-01.hrdf"
+
+gains:
+  default: "../../arms/config/gains/A-2303-01.xml"
+  gripper: "../../arms/config/gains/gripper_spool_gains.xml"
+
+user_data:
+  home_position: [0.0, -1.0, 0.0, -0.6, -1.5707963, 1.0, 0.0]  # rad
+  mobile_io_family: "Arm"     # Mobile IO that controls this arm's gripper
+
+  # Second shoulder module, mirrored from joint index 1 (J2A_shoulder1)
+  mirror_module: "J2B_shoulder1"
+  mirror_gains: "../../arms/config/gains/mirror_shoulder.xml"
+
+  has_gripper: true
+  gripper_close_effort: -5.0  # Nm
+  gripper_open_effort: 1.0    # Nm

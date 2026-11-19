@@ -1,0 +1,8 @@
+# MAPS input device (leader) for the Tready MAPS demo
+version: 1.1
+families: ["MAPS"]
+names: ["J1-A", "J2-B", "J2-A", "J3-B", "J3-A", "J4-B", "J4-A"]
+
+user_data:
+  # MAPS joint zeros are in different locations than the follower arm's (rad)
+  angle_offsets: [0.0, 1.5707963, -3.1415927, -1.5707963, -1.5707963, -1.5707963, 0.0]

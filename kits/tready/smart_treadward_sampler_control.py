@@ -1,525 +1,193 @@
-from pathlib import Path
+"""Treadward base with a core sampler payload, driven from one Mobile IO.
 
-from time import time, sleep
-import datetime
-import numpy as np
-import os
-from os.path import join
+    python -m kits.tready.smart_treadward_sampler_control treadward.cfg.yaml treadward-core-sampler.cfg.yaml
 
-import hebi
-from hebi.util import create_mobile_io
-from .tready_utils import load_gains, set_mobile_io_instructions
+Drive layout: "Deploy" stops the base and deploys the mast. Deployed layout:
+the chain slider drives the sampler, "Wiggle" toggles the wiggler, and the
+base may drive only while the chain is retracted. "Stow" retracts the chain,
+stows the mast, then returns to driving.
 
-from .treaded_base_core import ChassisVelocity, TreadyInputs, TreadyControlState
-from .treaded_base import (
-    TreadedBase,
-    TreadedBaseControl,
-)
+Base and payload gate each other. ``couple()`` fills in each side's safety
+inputs from the other controller's current state on every Mobile IO sample.
+"""
 
-from .treadward_sampler import (
-    CoreSampler,
-    CoreSamplerControl,
-    CoreSamplerControlState,
-    CoreSamplerInputs,
-)
-
-from .mobile_io_manager import MobileIOModes
+from __future__ import annotations
 
 import typing
 
+import hebi
+
+from kits.common.state_machine import wait_for_group
+
+from .demo_runner import LAYOUT_DIR, create_base_controller, load_config, parse_args, run
+from .mobile_io_manager import MobileIOUpdater, handle_torque_toggle, parse_flippers, torque_inputs
+from .treaded_base import (
+    TreadyDeployedState,
+    TreadyDeployingState,
+    TreadyInitialState,
+    TreadyStartupState,
+    TreadyStowingState,
+    TreadyTeleopState,
+)
+from .treaded_base_core import ChassisVelocity, TreadedBaseController, TreadyInputs
+from .treadward_sampler import (
+    CoreSampler,
+    CoreSamplerController,
+    CoreSamplerInputs,
+    SamplerDeployedState,
+    SamplerDeployingState,
+    SamplerFaultState,
+    SamplerStartupState,
+    SamplerStowedState,
+    SamplerStowingState,
+)
+from .tready_utils import load_gains, wait_for_mobile_io
+
 if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
-    from typing import Optional
-
-layout_dir = join(os.path.dirname(__file__), "config", "layouts")
-drive_layout = "TreadwardSamplerDriveController.json"
-deployed_layout = "TreadwardSamplerDeployedController.json"
-deploying_layout = "TreadwardSamplerDeployingController.json"
-startup_layout = "TreadwardSamplerStartupController.json"
 
 
-mobileIO_mode = MobileIOModes.DRIVE
-
-
-# returns (quit, base_inputs, payload_inputs, m_update)
-def parse_mobile_io_feedback(m: "MobileIO", io_mode: "MobileIOModes"):
-
-    def update_startup_mode(m: "MobileIO"):
-        # Startup buttons, joysticks, and sliders
-        mapping = {
-            "override_base_btn": 1,
-            "override_payload_btn": 2,
-            "unlock_flippers_btn": 3,
-            "quit_demo_btn": 8,
-        }
-
-        if m.get_button_state(mapping["quit_demo_btn"]):
-            return True, None, None, True
-
-        return (
-            False,
-            TreadyInputs(override_startup=m.get_button_state(mapping["override_base_btn"])),
-            CoreSamplerInputs(override_startup=m.get_button_state(mapping["override_payload_btn"])),
-            True,
-        )
-
-    def update_drive_mode(m: "MobileIO"):
-        # Drive buttons, joysticks, and sliders
-        mapping = {
-            "reset_pose_btn": 1,
-            "torque_btn": 2,
-            "deploy_btn": 3,
-            "flatten_btn": 4,
-            "height_up_btn": 5,
-            "recenter_btn": 6,
-            "height_down_btn": 7,
-            "quit_demo_btn": 8,
-            "turn_joy": 1,
-            "forward_joy": 2,
-            "front_left_slider": 3,
-            "front_right_slider": 4,
-            "back_left_slider": 5,
-            "back_right_slider": 6,
-        }
-
-        def change_to_torque_mode(m: "MobileIO"):
-            axis_vals = [0, -0.5, 1, 1]
-            for i in range(3, 7):
-                if not m.set_snap(i, np.nan):
-                    print(f"Failed to set snap for axis {i}")
-                if not m.set_axis_value(i, axis_vals[i - 3]):
-                    print(f"Failed to set axis value for axis {i}")
-
-        def change_to_velocity_mode(m: "MobileIO"):
-            for i in range(3, 7):
-                if not m.set_snap(i, 0):
-                    print(f"Failed to set snap for axis {i}")
-            m.set_axis_label(mapping["front_left_slider"], "FL", blocking=False)
-            m.set_axis_label(mapping["front_right_slider"], "FR", blocking=False)
-            m.set_axis_label(mapping["back_left_slider"], "BL", blocking=False)
-            m.set_axis_label(mapping["back_right_slider"], "BR", blocking=False)
-
-        if m.get_button_state(mapping["quit_demo_btn"]):
-            return True, None, None, True
-        if m.get_button_state(mapping["reset_pose_btn"]):
-            return (
-                False,
-                TreadyInputs(
-                    home=True,
-                    torque_mode=m.get_button_state(mapping["torque_btn"]),
-                    torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
-                ),
-                None,
-                True,
-            )
-        if m.get_button_diff(mapping["torque_btn"]) == 1:
-            change_to_torque_mode(m)
-        elif m.get_button_diff(mapping["torque_btn"]) == -1:
-            change_to_velocity_mode(m)
-        if m.get_button_state(mapping["recenter_btn"]):
-            return (
-                False,
-                TreadyInputs(
-                    align_flippers=True,
-                    torque_mode=m.get_button_state(mapping["torque_btn"]),
-                    torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
-                ),
-                None,
-                True,
-            )
-        if m.get_button_state(mapping["deploy_btn"]):
-            b_inputs = TreadyInputs(
-                deploy=True,
-                torque_mode=m.get_button_state(mapping["torque_btn"]),
-                torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
-            )
-            p_inputs = CoreSamplerInputs(deploy=True)
-            return False, b_inputs, p_inputs, True
-        if m.get_button_state(mapping["flatten_btn"]):
-            return (
-                False,
-                TreadyInputs(
-                    flatten_flippers=True,
-                    torque_mode=m.get_button_state(mapping["torque_btn"]),
-                    torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
-                ),
-                None,
-                True,
-            )
-
-        chassis_velocity = ChassisVelocity(
-            m.get_axis_state(mapping["forward_joy"]),
-            m.get_axis_state(mapping["turn_joy"]),
-        )
-        height_up = m.get_button_state(mapping["height_up_btn"])
-        height_down = m.get_button_state(mapping["height_down_btn"])
-        height = height_up - height_down
-        if height != 0:
-            flippers = [-height / 2] * 4
-        else:
-            flippers = [
-                m.get_axis_state(mapping["front_left_slider"]),
-                m.get_axis_state(mapping["front_right_slider"]),
-                m.get_axis_state(mapping["back_left_slider"]),
-                m.get_axis_state(mapping["back_right_slider"]),
-            ]
-
-        return (
-            False,
-            TreadyInputs(
-                base_motion=chassis_velocity,
-                flippers=flippers,
-                torque_mode=m.get_button_state(mapping["torque_btn"]),
-                torque_toggle=(m.get_button_diff(mapping["torque_btn"]) != 0.0),
-            ),
-            None,
-            True,
-        )
-
-    def update_deployed_mode(m: "MobileIO"):
-        # Deployed buttons and sliders
-        mapping = {
-            "stow_btn": 3,
-            "quit_demo_btn": 8,
-            "chain_slider": 6,
-            "wiggle_btn": 2,
-            "turn_joy": 1,
-            "forward_joy": 2,
-        }
-
-        if m.get_button_state(mapping["quit_demo_btn"]):
-            return True, None, None, True
-
-        chassis_velocity = ChassisVelocity(
-            m.get_axis_state(mapping["forward_joy"]),
-            m.get_axis_state(mapping["turn_joy"]),
-        )
-
-        b_inputs = TreadyInputs(stow=m.get_button_state(mapping["stow_btn"]), base_motion=chassis_velocity)
-        p_inputs = CoreSamplerInputs(
-            stow=m.get_button_state(mapping["stow_btn"]),
-            chain=m.get_axis_state(mapping["chain_slider"]),
-            wiggle_mode=m.get_button_state(mapping["wiggle_btn"]),
-            wiggle_toggle=(m.get_button_diff(mapping["wiggle_btn"]) != 0),
-        )
-        return False, b_inputs, p_inputs, True
-
-    def update_deploying_mode(m: "MobileIO"):
-        # Deploying buttons and sliders
-        mapping = {"quit_demo_btn": 8}
-
-        if m.get_button_state(mapping["quit_demo_btn"]):
-            return True, None, None, True
-        else:
-            return False, None, None, True
-
-    if m.update(0.0):
-        if io_mode == MobileIOModes.DRIVE:
-            return update_drive_mode(m)
-        elif io_mode == MobileIOModes.DEPLOYED:
-            return update_deployed_mode(m)
-        elif io_mode == MobileIOModes.DEPLOYING:
-            return update_deploying_mode(m)
-        elif io_mode == MobileIOModes.STARTUP:
-            return update_startup_mode(m)
-
-    return False, None, None, False
-
-
-def update_inputs(
-    base_inputs: "Optional[TreadyInputs]" = None,
-    payload_inputs: "Optional[CoreSamplerInputs]" = None,
+def couple(
+    base_control: TreadedBaseController, payload_control: CoreSamplerController, base_in: TreadyInputs, payload_in: CoreSamplerInputs
 ):
-    if base_inputs is None:
-        base_inputs = TreadyInputs()
-    if payload_inputs is None:
-        payload_inputs = CoreSamplerInputs()
+    """Fill in the safety inputs each side needs from the other's current state."""
+    base_state = base_control.state
+    if isinstance(base_state, TreadyInitialState):
+        base_allows_startup = False
+    elif isinstance(base_state, TreadyStartupState):
+        base_allows_startup = base_state.allow_payload_startup
+    else:
+        base_allows_startup = True
 
-    base_inputs.deploy_safe = payload_control.sampler.base_deploy_safe
-    base_inputs.stow_safe = payload_control.sampler.base_stow_safe
-    base_inputs.payload_deployed = payload_control.state == CoreSamplerControlState.DEPLOYED
-    base_inputs.allow_startup = payload_control.allow_base_startup
-    base_inputs.drive_safe = bool(payload_control.base_drive_safe)
+    payload_in.deploy_safe = isinstance(base_state, TreadyDeployedState)
+    payload_in.stow_safe = isinstance(base_state, (TreadyDeployedState, TreadyStowingState))
+    payload_in.allow_startup = base_allows_startup
 
-    payload_inputs.deploy_safe = base_control.payload_deploy_safe
-    payload_inputs.stow_safe = base_control.payload_stow_safe
-    payload_inputs.base_deployed = base_control.state == TreadyControlState.DEPLOYED
-    payload_inputs.allow_startup = base_control.allow_payload_startup
+    base_in.stow_safe = isinstance(payload_control.state, SamplerStowedState)
+    base_in.allow_startup = payload_control.allow_base_startup
+    base_in.drive_safe = payload_control.base_drive_safe
+    return base_in, payload_in
 
-    return base_inputs, payload_inputs
+
+def parse_startup(m: MobileIO):
+    base_in = TreadyInputs(quit=bool(m.get_button_state(8)), override_startup=bool(m.get_button_state(1)))
+    return base_in, CoreSamplerInputs(override_startup=bool(m.get_button_state(2)))
+
+
+def parse_drive(m: MobileIO):
+    buttons = {"reset": 1, "torque": 2, "deploy": 3, "flatten": 4, "height_up": 5, "recenter": 6, "height_down": 7, "quit": 8}
+    handle_torque_toggle(m, buttons["torque"])
+    torque = torque_inputs(m, buttons["torque"])
+
+    if m.get_button_state(buttons["quit"]):
+        return TreadyInputs(quit=True), CoreSamplerInputs()
+    if m.get_button_state(buttons["reset"]):
+        return TreadyInputs(home=True, **torque), CoreSamplerInputs()
+    if m.get_button_state(buttons["recenter"]):
+        return TreadyInputs(align_flippers=True, **torque), CoreSamplerInputs()
+    if m.get_button_state(buttons["deploy"]):
+        return TreadyInputs(deploy=True, **torque), CoreSamplerInputs(deploy=True)
+    if m.get_button_state(buttons["flatten"]):
+        return TreadyInputs(flatten_flippers=True, **torque), CoreSamplerInputs()
+
+    base_in = TreadyInputs(
+        base_motion=ChassisVelocity(m.get_axis_state(2), m.get_axis_state(1)),
+        flippers=parse_flippers(m, buttons["height_up"], buttons["height_down"]),
+        **torque,
+    )
+    return base_in, CoreSamplerInputs()
+
+
+def parse_deploying(m: MobileIO):
+    # Only quit is active while deploying/stowing.
+    return TreadyInputs(quit=bool(m.get_button_state(8))), CoreSamplerInputs()
+
+
+def parse_deployed(m: MobileIO):
+    stow = bool(m.get_button_state(3))
+    base_in = TreadyInputs(
+        quit=bool(m.get_button_state(8)),
+        stow=stow,
+        base_motion=ChassisVelocity(m.get_axis_state(2), m.get_axis_state(1)),
+    )
+    payload_in = CoreSamplerInputs(
+        stow=stow,
+        chain=m.get_axis_state(6),
+        wiggle_mode=bool(m.get_button_state(2)),
+        wiggle_toggle=m.get_button_diff(2) != 0,
+    )
+    return base_in, payload_in
+
+
+class SamplerStatus:
+    """Payload status line on the Mobile IO. Handlers run on the payload's control thread."""
+
+    def __init__(self, updater: MobileIOUpdater):
+        self.updater = updater
+
+    def on_transition(self, controller: CoreSamplerController, new_state):
+        match new_state:
+            case SamplerDeployingState():
+                self.updater.set_payload_status("Payload Deploying\nPlease wait...")
+            case SamplerDeployedState():
+                self.updater.set_payload_status("Robot Ready to Control", "green")
+            case SamplerStowingState():
+                self.updater.set_payload_status("Payload Stowing\nPlease wait...", "blue")
+            case SamplerStartupState():
+                self.updater.set_payload_status(self.startup_msg(controller))
+            case SamplerFaultState():
+                self.updater.set_payload_status("Emergency Stop Activated", "red")
+            case _:
+                self.updater.set_payload_status("")
+
+    def on_update(self, controller: CoreSamplerController, state):
+        if isinstance(state, SamplerStartupState):
+            self.updater.set_payload_status(self.startup_msg(controller))
+
+    @staticmethod
+    def startup_msg(controller: CoreSamplerController) -> str:
+        problems = []
+        if not controller.sampler.mast_stowed:
+            problems.append("- Mast not stowed")
+        if not controller.sampler.chain_stowed:
+            problems.append("- Chain not stowed")
+        return "\n".join(problems)
 
 
 if __name__ == "__main__":
+    args = parse_args("Treadward base with a core sampler payload", payload_config="Payload config, e.g. treadward-core-sampler.cfg.yaml")
+    cfg = load_config(args.base_config)
+    payload_cfg = load_config(args.payload_config)
     lookup = hebi.Lookup()
-    sleep(2)
 
-    config_dir = Path(__file__).absolute().parent / "config"
-    cfg = hebi.config.load_config(str(config_dir / 'treadward.cfg.yaml'))
-
-    # Treaded base family & names
-    family = "Treadward"
-    flipper_names = [f"T{n + 1}_J1_flipper" for n in range(4)]
-    wheel_names = [f"T{n + 1}_J2_track" for n in range(4)]
-
-    # Payload family & names
-    payload_family = "Treadward"
-    payload_names = ["Mast_Pivot", "Chain_Upper", "Chain_Lower", "Wiggly-IO"]
-
-    # mobileIO setup
-    print("Looking for mobileIO device...")
-    m = create_mobile_io(lookup, family)
-    while m is None:
-        print("Waiting for mobileIO device to come online...")
-        sleep(1)
-        m = create_mobile_io(lookup, family)
-
+    # Find all hardware before anything starts moving
+    m = wait_for_mobile_io(lookup, cfg.families[0])
     print("mobileIO device found.")
-    m.update()
+    base_control = create_base_controller(cfg, lookup)
+    payload_group = wait_for_group(lookup, payload_cfg.families, payload_cfg.names)
+    load_gains(payload_group, payload_cfg.gains["default"])
+    payload_control = CoreSamplerController(CoreSampler(payload_group))
 
-    # Create base group
-    base_group = lookup.get_group_from_names(family, wheel_names + flipper_names)
-    while base_group is None:
-        print("Looking for Treadward modules...")
-        sleep(1)
-        base_group = lookup.get_group_from_names(family, wheel_names + flipper_names)
+    def coupled(parser):
+        def parse(m: MobileIO):
+            return couple(base_control, payload_control, *parser(m))
 
-    root_dir, _ = os.path.split(os.path.abspath(__file__))
-    load_gains(base_group, os.path.join(root_dir, "gains", "smart-treadward-gains.xml"))
+        return parse
 
-    base = TreadedBase.from_config(cfg)
-    base.set_robot_model(os.path.join(root_dir, "hrdf", "Treadward.hrdf"))
-    base_control = TreadedBaseControl(base)
+    updater = MobileIOUpdater(
+        m,
+        {
+            TreadyStartupState: (LAYOUT_DIR / "TreadwardSamplerStartupController.json", coupled(parse_startup)),
+            TreadyTeleopState: (LAYOUT_DIR / "TreadwardSamplerDriveController.json", coupled(parse_drive)),
+            TreadyDeployingState: (LAYOUT_DIR / "TreadwardSamplerDeployingController.json", coupled(parse_deploying)),
+            SamplerStowingState: (LAYOUT_DIR / "TreadwardSamplerDeployingController.json", coupled(parse_deploying)),
+            SamplerDeployedState: (LAYOUT_DIR / "TreadwardSamplerDeployedController.json", coupled(parse_deployed)),
+        },
+    )
+    updater.attach(base_control)
+    status = SamplerStatus(updater)
+    payload_control.add_transition_handler(updater.layout_transition_handler)
+    payload_control.add_transition_handler(status.on_transition)
+    payload_control.add_update_handler(status.on_update)
 
-    # Create payload group
-    payload_group = lookup.get_group_from_names(payload_family, payload_names)
-    while payload_group is None:
-        print("Looking for payload modules...")
-        sleep(1)
-        payload_group = lookup.get_group_from_names(payload_family, payload_names)
-
-    root_dir, _ = os.path.split(os.path.abspath(__file__))
-    load_gains(payload_group, os.path.join(root_dir, "gains", "core-sampling-gains.xml"))
-
-    payload = CoreSampler(payload_group)
-    # payload.set_robot_model(os.path.join(root_dir, 'hrdf', '')) #TODO: add payload hrdf if/when it exists
-    payload_control = CoreSamplerControl(payload)
-
-    # Update mobile io interface
-    class MobileIOUpdater:
-        def __init__(self, mobile_io: "MobileIO"):
-
-            self.m = mobile_io
-            self.base_msg = ""
-            self.payload_msg = ""
-            self.color = ""
-            self.last_msg = ""
-
-        # Runs when base changes state
-        def base_transition_handler(self, controller: TreadedBaseControl, new_state: TreadyControlState):
-            global mobileIO_mode
-            if controller.state == new_state:
-                return
-
-            if new_state is TreadyControlState.HOMING:
-                controller.base.set_color("magenta")
-                self.base_msg = "Robot Homing Sequence\nPlease wait..."
-                self.color = "blue"
-
-            elif new_state is TreadyControlState.ALIGNING:
-                controller.base.set_color("magenta")
-                self.base_msg = "Robot Flippers Centering\nPlease wait..."
-                self.color = "blue"
-
-            elif new_state is TreadyControlState.FLATTENING:
-                controller.base.set_color("magenta")
-                self.base_msg = "Robot Flippers Flattening\nPlease wait..."
-                self.color = "blue"
-
-            elif new_state is TreadyControlState.STARTUP:
-                controller.base.set_color("magenta")
-                mobileIO_mode = MobileIOModes.STARTUP
-                self.m.send_layout(layout_file=join(layout_dir, startup_layout))
-                self.base_msg = ""
-                for i in range(4):
-                    if controller.base.flipper_wound[i]:
-                        if self.base_msg == "":
-                            self.base_msg += "- Flipper " + str(i + 1) + " is wound \n"
-                        else:
-                            self.base_msg += "      - Flipper " + str(i + 1) + " is wound \n"
-
-                self.color = "yellow"
-
-            elif new_state is TreadyControlState.DEPLOYING:
-                controller.base.set_color("magenta")
-                mobileIO_mode = MobileIOModes.DEPLOYING
-                self.m.send_layout(layout_file=join(layout_dir, deploying_layout))
-                self.base_msg = "Robot Deploying\nPlease wait...\n"
-                self.color = "blue"
-
-            elif new_state is TreadyControlState.TELEOP:
-                controller.base.clear_color()
-                mobileIO_mode = MobileIOModes.DRIVE
-                self.m.send_layout(layout_file=join(layout_dir, drive_layout))
-                self.m.set_axis_label(6, "BR")  # TODO: this should not be needed but send layout has a bug
-                self.base_msg = "Robot Ready to Control"
-                self.color = "green"
-
-            elif new_state is TreadyControlState.DISCONNECTED:
-                print("Lost connection to Controller. Please reconnect.")
-                controller.base.set_color("blue")
-
-            elif new_state is TreadyControlState.EMERGENCY_STOP:
-                controller.base.set_color("yellow")
-                self.base_msg = "Emergency Stop Activated"
-                self.color = "red"
-
-            elif new_state is TreadyControlState.EXIT:
-                controller.base.set_color("red")
-                self.base_msg = "Demo Stopped"
-                self.payload_msg = ""
-                self.color = "red"
-
-            elif new_state is TreadyControlState.DEPLOYED:
-                controller.base.clear_color()
-                self.base_msg = ""
-
-            else:
-                self.base_msg = ""
-
-            self.needs_update()
-
-        # Runs when payload changes state
-        def payload_transition_handler(self, controller: CoreSamplerControl, new_state: CoreSamplerControlState):
-            global mobileIO_mode
-            if controller.state == new_state:
-                return
-
-            elif new_state is CoreSamplerControlState.DEPLOYING:
-                controller.sampler.set_color("magenta")
-                self.payload_msg = "Payload Deploying\nPlease wait..."
-
-            elif new_state is CoreSamplerControlState.DEPLOYED:
-                controller.sampler.clear_color()
-                mobileIO_mode = MobileIOModes.DEPLOYED
-                self.m.send_layout(layout_file=join(layout_dir, deployed_layout))
-                self.m.set_axis_label(6, "Chain Drive")  # TODO: this should not be needed but send layout has a bug
-                self.payload_msg = "Robot Ready to Control"
-                self.color = "green"
-
-            elif new_state is CoreSamplerControlState.STOWING:
-                controller.sampler.set_color("magenta")
-                mobileIO_mode = MobileIOModes.DEPLOYING
-                self.m.send_layout(layout_file=join(layout_dir, deploying_layout))
-                self.payload_msg = "Payload Stowing\nPlease wait..."
-                self.color = "blue"
-
-            elif new_state is CoreSamplerControlState.STOWED:
-                controller.sampler.clear_color()
-                self.payload_msg = ""
-
-            elif new_state is CoreSamplerControlState.STARTUP:
-                self.payload_msg = ""
-                if not controller.sampler.mast_stowed:
-                    self.payload_msg += "- Mast not stowed \n"
-                if not controller.sampler.chain_stowed:
-                    if self.payload_msg == "":
-                        self.payload_msg += "- Chain not stowed "
-                    else:
-                        self.payload_msg += "               - Chain not stowed "
-
-            else:
-                self.payload_msg = ""
-
-            self.needs_update()
-
-        # Called to update the message on the mobileIO display
-        def needs_update(self):
-            if self.base_msg != "" and self.payload_msg != "":
-                msg = f"Base: {self.base_msg}\nPayload: {self.payload_msg}"
-            elif self.base_msg != "":
-                msg = f"Base: {self.base_msg}"
-            elif self.payload_msg != "":
-                msg = f"Payload: {self.payload_msg}"
-            else:
-                msg = ""
-
-            if msg != self.last_msg:
-                set_mobile_io_instructions(self.m, msg, self.color)
-
-            self.last_msg = msg
-
-        # Updates axis labels for torque mode sliders
-        def update_torque_mode(self, controller: TreadedBaseControl, state: TreadyControlState):
-            if controller.state is TreadyControlState.TELEOP:
-                if controller.torque_labels is not None:
-                    for i, label in enumerate(controller.torque_labels):
-                        self.m.set_axis_label(i + 3, label, blocking=False)
-                else:
-                    self.m.set_axis_label(3, "FL", blocking=False)
-                    self.m.set_axis_label(4, "FR", blocking=False)
-                    self.m.set_axis_label(5, "BL", blocking=False)
-                    self.m.set_axis_label(6, "BR", blocking=False)
-
-        # Updates the base startup message
-        def update_startup_msg_base(self, controller: TreadedBaseControl, state: TreadyControlState):
-            if state is TreadyControlState.STARTUP:
-                self.base_msg = ""
-                for i in range(4):
-                    if controller.base.flipper_wound[i]:
-                        if self.base_msg == "":
-                            self.base_msg += "- Flipper " + str(i + 1) + " is wound \n"
-                        else:
-                            self.base_msg += "          - Flipper " + str(i + 1) + " is wound \n"
-
-                self.needs_update()
-
-        # Updates the payload startup message
-        def update_startup_msg_payload(self, controller: CoreSamplerControl, state: CoreSamplerControlState):
-            if state is TreadyControlState.STARTUP:
-                self.payload_msg = ""
-                if not controller.sampler.mast_stowed:
-                    self.payload_msg += "- Mast not stowed "
-                if not controller.sampler.chain_stowed:
-                    self.payload_msg += "- Chain not stowed "
-
-                self.needs_update()
-
-    updater = MobileIOUpdater(m)
-    base_control._transition_handlers.append(updater.base_transition_handler)
-    payload_control._transition_handlers.append(updater.payload_transition_handler)
-
-    base_control._update_handlers.append(updater.update_torque_mode)
-    base_control._update_handlers.append(updater.update_startup_msg_base)
-    payload_control._update_handlers.append(updater.update_startup_msg_payload)
-
-    # can enable start logging here
-    logging = True
-
-    if logging:
-        tready_dir = os.path.dirname(__file__)
-        now = datetime.datetime.now()
-        base.group.start_log(os.path.join(tready_dir, "logs"), f"base_{now:%Y-%m-%d-%H-%M-%S}")
-        payload.group.start_log(os.path.join(tready_dir, "logs"), f"payload_{now:%Y-%m-%d-%H-%M-%S}")
-
-    while base_control.running and payload_control.running:
-        t = time()
-        try:
-            quit, base_inputs, payload_inputs, m_update = parse_mobile_io_feedback(m, mobileIO_mode)
-            if quit:
-                break
-            base_inputs, payload_inputs = update_inputs(base_inputs, payload_inputs)
-
-            if m_update:
-                base_control.receive_inputs(t, base_inputs)
-            payload_control.update(t, m_update, payload_inputs)
-            payload_control.send()
-
-        except KeyboardInterrupt:
-            break
-
-    base_control.stop()
-    payload_control.stop()
-
-    if logging:
-        base.group.stop_log()
-        payload.group.stop_log()
+    run(updater, [base_control, payload_control], log=not args.no_log)
