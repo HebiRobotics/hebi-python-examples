@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from time import time
 import datetime
 from pathlib import Path
@@ -9,7 +10,6 @@ import hebi
 from .treaded_base_core import (
     TreadedBase,
     TreadedBaseControl,
-    TreadyInputs,
 )
 from .mobile_io_manager import (
     MobileIOUpdater,
@@ -21,24 +21,11 @@ from .mobile_io_manager import (
 from .tready_utils import wait_for_mobile_io
 
 
-def update_inputs(base_inputs: TreadyInputs | None = None):
-    if base_inputs is None:
-        base_inputs = TreadyInputs()
-
-    base_inputs.deploy_safe = True
-    base_inputs.stow_safe = True
-    base_inputs.payload_deployed = False
-    base_inputs.allow_startup = True
-    base_inputs.drive_safe = True
-
-    return base_inputs
-
-
 if __name__ == "__main__":
     lookup = hebi.Lookup()
 
     config_dir = Path(__file__).absolute().parent / "config"
-    cfg = hebi.config.load_config(str(config_dir / 'tready.cfg.yaml'))
+    cfg = hebi.config.load_config(str(config_dir / sys.argv[1]))
 
     m = wait_for_mobile_io(lookup, cfg.families[0])
 
@@ -67,22 +54,19 @@ if __name__ == "__main__":
     logging = True
 
     if logging:
-        tready_log_dir = Path(__file__).parent / "logs"
-        base.group.start_log(str(tready_log_dir), f"base_{datetime.datetime.now():%Y-%m-%d-%H:%M:%S}")
+        log_dir = Path(__file__).parent / "logs"
+        base.group.start_log(str(log_dir), f"base_{datetime.datetime.now():%Y-%m-%d-%H:%M:%S}")
 
     while base_control.running:
         try:
             inputs = updater.parse_mobile_io_feedback(m, timeout_ms=500)
             if inputs is not None:
-                base_inputs = update_inputs(inputs[0])
+                base_inputs = inputs[0]
                 if base_inputs.quit:
                     break
-                base_control.update(time(), base_inputs)
+                base_control.receive_inputs(time(), base_inputs)
 
         except KeyboardInterrupt:
             break
 
     base_control.stop()
-
-    if logging:
-        base.group.stop_log()
