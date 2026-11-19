@@ -3,7 +3,17 @@ from __future__ import annotations
 from enum import Enum, auto
 from time import time
 
-from kits.tready.treaded_base import TreadyAligningState, TreadyCompliantFlippersState, TreadyEStopState, TreadyExitState, TreadyFlatteningState, TreadyHomingState, TreadyRearingState, TreadyStartupState, TreadyTeleopState
+from kits.tready.treaded_base import (
+    TreadyAligningState,
+    TreadyCompliantFlippersState,
+    TreadyEStopState,
+    TreadyExitState,
+    TreadyFlatteningState,
+    TreadyHomingState,
+    TreadyRearingState,
+    TreadyStartupState,
+    TreadyTeleopState,
+)
 
 from .treaded_base_core import (
     ChassisVelocity,
