@@ -1,7 +1,6 @@
-# Update mobile io interface
+from __future__ import annotations
 
 from enum import Enum, auto
-from typing import Callable
 from time import time
 
 from kits.tready.treaded_base_core import (
@@ -13,7 +12,13 @@ from kits.tready.treaded_base_core import (
 from kits.tready.tready_utils import set_mobile_io_instructions
 
 import numpy as np
-from hebi._internal.mobile_io import MobileIO
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Callable, Mapping
+    from pathlib import Path
+    from hebi._internal.mobile_io import MobileIO
 
 
 class MobileIOModes(Enum):
@@ -27,8 +32,8 @@ class MobileIOModes(Enum):
 class MobileIOUpdater:
     def __init__(
         self,
-        mobile_io: "MobileIO",
-        demo_config: dict[MobileIOModes, tuple[str, Callable[[MobileIO], tuple]]],
+        mobile_io: MobileIO,
+        demo_config: Mapping[MobileIOModes, tuple[str | Path, Callable[[MobileIO], tuple]]],
     ):
 
         self.m = mobile_io
@@ -49,12 +54,10 @@ class MobileIOUpdater:
     def io_mode(self, value: MobileIOModes):
         self._io_mode = value
         print(f'Sending layout to Mobile IO: "{self.layouts[value]}"')
-        self.m.send_layout(layout_file=self.layouts[value])
+        self.m.send_layout(layout_file=str(self.layouts[value]))
 
     # Runs when base changes state
-    def base_transition_handler(
-        self, controller: TreadedBaseControl, new_state: TreadyControlState
-    ):
+    def base_transition_handler(self, controller: TreadedBaseControl, new_state: TreadyControlState):
         if controller.state == new_state:
             return
 
@@ -87,9 +90,7 @@ class MobileIOUpdater:
                     if self.base_msg == "":
                         self.base_msg += "- Flipper " + str(i + 1) + " is wound \n"
                     else:
-                        self.base_msg += (
-                            "      - Flipper " + str(i + 1) + " is wound \n"
-                        )
+                        self.base_msg += "      - Flipper " + str(i + 1) + " is wound \n"
 
             self.color = "yellow"
 
@@ -135,9 +136,7 @@ class MobileIOUpdater:
         self.last_msg = msg
 
     # Updates axis labels for torque mode sliders
-    def update_torque_mode(
-        self, controller: TreadedBaseControl, state: TreadyControlState
-    ):
+    def update_torque_mode(self, controller: TreadedBaseControl, state: TreadyControlState):
 
         if controller.state is TreadyControlState.TELEOP:
             if controller.torque_labels is not None:
@@ -151,9 +150,7 @@ class MobileIOUpdater:
                 self.m.set_axis_label(6, "BR", blocking=False)
 
     # Updates the base startup message
-    def update_startup_msg_base(
-        self, controller: TreadedBaseControl, state: TreadyControlState
-    ):
+    def update_startup_msg_base(self, controller: TreadedBaseControl, state: TreadyControlState):
         if state is TreadyControlState.STARTUP:
             self.base_msg = ""
             for i in range(4):
@@ -161,32 +158,28 @@ class MobileIOUpdater:
                     if self.base_msg == "":
                         self.base_msg += "- Flipper " + str(i + 1) + " is wound \n"
                     else:
-                        self.base_msg += (
-                            "          - Flipper " + str(i + 1) + " is wound \n"
-                        )
+                        self.base_msg += "          - Flipper " + str(i + 1) + " is wound \n"
 
             self.needs_update()
 
     # Updates the voltage reading
-    def update_voltage_reading(
-        self, controller: TreadedBaseControl, state: TreadyControlState
-    ):
+    def update_voltage_reading(self, controller: TreadedBaseControl, state: TreadyControlState):
         t_now = time()
         if t_now > self.voltage_update_time:
             self.voltage_update_time = t_now + 10.0  # update every 10 seconds
-            self.voltage = np.mean(controller.base.fbk.voltage)
+            self.voltage = np.mean(controller.base.last_feedback.voltage)
             self.needs_update()
 
-    def parse_mobile_io_feedback(self, m: "MobileIO"):
+    def parse_mobile_io_feedback(self, m: MobileIO, timeout_ms=0.0):
 
-        if m.update(0.0):
+        if m.update(timeout_ms):
             if self.io_mode in self.parsers:
                 return self.parsers[self.io_mode](m)
 
         return None
 
 
-def update_startup_mode(m: "MobileIO"):
+def update_startup_mode(m: MobileIO):
     # Startup buttons, joysticks, and sliders
     mapping = {
         "override_base_btn": 1,
@@ -200,7 +193,7 @@ def update_startup_mode(m: "MobileIO"):
     return (TreadyInputs(quit=quit, override_startup=override_startup),)
 
 
-def update_drive_mode(m: "MobileIO"):
+def update_drive_mode(m: MobileIO):
     # Drive buttons, joysticks, and sliders
     mapping = {
         "reset_pose_btn": 1,
@@ -219,7 +212,7 @@ def update_drive_mode(m: "MobileIO"):
         "back_right_slider": 6,
     }
 
-    def change_to_torque_mode(m: "MobileIO"):
+    def change_to_torque_mode(m: MobileIO):
         axis_vals = [0, -0.5, 1, 1]
         for i in range(3, 7):
             if not m.set_snap(i, np.nan):
@@ -227,7 +220,7 @@ def update_drive_mode(m: "MobileIO"):
             if not m.set_axis_value(i, axis_vals[i - 3]):
                 print(f"Failed to set axis value for axis {i}")
 
-    def change_to_velocity_mode(m: "MobileIO"):
+    def change_to_velocity_mode(m: MobileIO):
         for i in range(3, 7):
             if not m.set_snap(i, 0):
                 print(f"Failed to set snap for axis {i}")

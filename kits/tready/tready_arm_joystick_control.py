@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from time import time, sleep
 import datetime
 from os.path import join, dirname, abspath
@@ -32,7 +34,7 @@ if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
 
 
-def update_inputs(base_inputs: "TreadyInputs | None" = None):
+def update_inputs(base_inputs: TreadyInputs | None = None):
     if base_inputs is None:
         base_inputs = TreadyInputs()
 
@@ -45,7 +47,7 @@ def update_inputs(base_inputs: "TreadyInputs | None" = None):
     return base_inputs
 
 
-def update_arm_labels(m: "MobileIO"):
+def update_arm_labels(m: MobileIO):
     mapping = {
         "arm_layer": 3,
         "right_joystick": 2,
@@ -63,7 +65,7 @@ def update_arm_labels(m: "MobileIO"):
         m.set_snap(mapping["wrist_slider"], np.nan)
 
 
-def update_joystick_arm(m: "MobileIO"):
+def update_joystick_arm(m: MobileIO):
     # Drive buttons, joysticks, and sliders
     mapping = {
         "reset_pose_btn": 1,
@@ -103,7 +105,7 @@ def update_joystick_arm(m: "MobileIO"):
     return arm_inputs
 
 
-def update_drive_mode(m: "MobileIO"):
+def update_drive_mode(m: MobileIO):
     # Drive buttons, joysticks, and sliders
     mapping = {
         "reset_pose_btn": 1,
@@ -209,9 +211,7 @@ if __name__ == "__main__":
         sleep(1)
         base_group = try_create_base_group(lookup, base_family)
 
-    base = TreadedBase(
-        tready_config, base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1
-    )
+    base = TreadedBase(tready_config, base_group, chassis_ramp_time=0.5, flipper_ramp_time=0.1)
     base_control = TreadedBaseControl(base, max_base_speed=0.25)
     base_control.namespace = "[Base] "
 
