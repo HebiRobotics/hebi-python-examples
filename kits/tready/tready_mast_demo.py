@@ -14,7 +14,7 @@ from ..camera.pan_tilt_mast import (
     CameraMast,
     MastController,
     CameraMastStartupState,
-    CameraMastDisconnectedState,
+    CameraMastFaultState,
     CameraMastExitState,
     MastInputs,
 )
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     camera.stream_to('10.10.2.1', 1000)
     camera.set_overlay_text('HEBI Mast Control Demo')
 
-    mast_control = MastController(mast, camera, CameraMastStartupState, CameraMastDisconnectedState, CameraMastExitState)
+    mast_control = MastController(mast, camera, CameraMastStartupState, CameraMastFaultState, CameraMastExitState)
 
     base = TreadedBase.from_config(cfg)
     base_control = TreadedBaseController(
