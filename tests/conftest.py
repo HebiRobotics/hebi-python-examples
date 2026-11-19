@@ -7,6 +7,11 @@ never look up (or command) real robots that may be on the same network.
 
 Only one ``hebi imitation`` process can run at a time (it binds UDP port
 16665), so each test starts a single process holding all the devices it needs.
+
+NOTE: tests that use ``imitation`` must never run at the same time as each other
+or as another copy of the suite (no pytest-xdist, no overlapping runs): it is
+like running two programs on the same robot. Running them one at a time (each
+test in its own pytest process) is the most reliable way to run them.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -99,6 +105,7 @@ class FakeMobileIO:
         self.position = [0.0, 0.0, 0.0]
         self.orientation = [1.0, 0.0, 0.0, 0.0]
         self.calls: list[tuple] = []
+        self.call_threads: list[str] = []  # thread name of each call in self.calls
 
     def press(self, **buttons):
         """Set button states, e.g. ``press(b1=1, b2=1)``; diffs are relative to the previous sample."""
@@ -122,6 +129,7 @@ class FakeMobileIO:
         # set_axis_label, set_snap, send_layout, add_text, ...: record and succeed
         def call(*args, **kwargs):
             self.calls.append((name, args))
+            self.call_threads.append(threading.current_thread().name)
             return True
 
         return call
