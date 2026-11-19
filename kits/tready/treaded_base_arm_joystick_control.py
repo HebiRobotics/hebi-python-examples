@@ -43,11 +43,11 @@ def update_arm_labels(m: MobileIO):
     layer_change = m.get_button_diff(mapping["arm_layer"])
 
     if layer_change == 1:
-        m.set_axis_label(mapping["right_joystick"], "rotate")
+        m.set_axis_label(mapping["right_joystick"], "rotate", blocking=False)
         m.set_axis_label(mapping["wrist_slider"], "wrist", blocking=False)
         m.set_snap(mapping["wrist_slider"], 0)
     elif layer_change == -1:
-        m.set_axis_label(mapping["right_joystick"], "drive")
+        m.set_axis_label(mapping["right_joystick"], "drive", blocking=False)
         m.set_axis_label(mapping["wrist_slider"], "", blocking=False)
         m.set_snap(mapping["wrist_slider"], np.nan)
 
@@ -164,7 +164,7 @@ if __name__ == "__main__":
         arm_input = update_joystick_arm(m)
         return (base_input, arm_input)
 
-    base_family = "Tready"
+    base_family = base_cfg.families[0]
 
     # mobileIO setup
     print("Looking for mobileIO device...")
