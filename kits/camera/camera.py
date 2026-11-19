@@ -18,8 +18,8 @@ class HebiCamera(GroupManager):
     def __init__(self, group: Group):
         super().__init__(time.time, group)
 
-        self.roll: float = np.nan #self.ea_zxz[0]
-        #self.set_on_update_callback(self.update_image_rotation)
+        self.roll: float = np.nan  # self.ea_zxz[0]
+        # self.set_on_update_callback(self.update_image_rotation)
 
     @staticmethod
     def from_family(family: str):
@@ -36,7 +36,7 @@ class HebiCamera(GroupManager):
             ip_cmd[1].io.b.set_int(5, bitrate_kbps)
         self.group.send_command(ip_cmd)
 
-    #def update_image_rotation(self):
+    # def update_image_rotation(self):
     #    ea = self.ea_zxz
     #    roll_imu = ea[0]
     #    pitch_check = ea[1]
@@ -64,14 +64,14 @@ class HebiCamera(GroupManager):
 
     #    return True
 
-    #@property
-    #def orientation(self):
+    # @property
+    # def orientation(self):
     #    wxyz = self.last_feedback.orientation[0]
     #    xyzw = [*wxyz[1:], wxyz[0]]
     #    return R.from_quat(xyzw).as_matrix()
 
-    #@property
-    #def ea_zxz(self) -> npt.NDArray[np.float64]:
+    # @property
+    # def ea_zxz(self) -> npt.NDArray[np.float64]:
     #    wxyz = self.last_feedback.orientation[0]
     #    return R.from_quat(wxyz, scalar_first=True).as_euler('zxz')
 

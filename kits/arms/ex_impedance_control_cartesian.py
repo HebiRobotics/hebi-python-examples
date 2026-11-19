@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-In this example we will implement various hybrid motion-force controllers using the impedance control plugin, which can be used for a wide variety of 
+In this example we will implement various hybrid motion-force controllers using the impedance control plugin, which can be used for a wide variety of
 applications.
 Impedance control is BEST SUITED for enabling free, rigid and springy behaviour, along/about each different axis.
 While this is perfectly useful for:
@@ -27,10 +27,10 @@ from hebi_util import create_mobile_io_from_config
 import numpy as np
 from plotting import draw_plots
 
-# NOTE: Angle wraparound is an unresolved issue which can lead to unstable behaviour for any case involving rotational positional control. 
+# NOTE: Angle wraparound is an unresolved issue which can lead to unstable behaviour for any case involving rotational positional control.
 #       Make sure that the rotational gains are high enough to prevent large angular errors. The gains provided in these examples are (mostly) well behaved.
 #       Interacting with the end-effector in these examples is perfectly safe.
-#       However, ensure that nothing prevents the wrist's actuators from moving, and DO NOT place your fingers between them. 
+#       However, ensure that nothing prevents the wrist's actuators from moving, and DO NOT place your fingers between them.
 
 # Initialize the interface for network connected modules
 lookup = hebi.Lookup()
@@ -94,15 +94,12 @@ while not mobile_io.get_button_state(quit_btn):
     arm.update()
 
     if mobile_io.update(timeout_ms=0):
-
         # Set and unset impedance mode when button is pressed and released, respectively
-        if (mobile_io.get_button_diff(switch_btn) == 1):
-
+        if mobile_io.get_button_diff(switch_btn) == 1:
             controller_on = True
             arm.set_goal(goal.clear().add_waypoint(t=0.1, position=arm.last_feedback.position))
 
-        elif (mobile_io.get_button_diff(switch_btn) == -1):
-            
+        elif mobile_io.get_button_diff(switch_btn) == -1:
             controller_on = False
 
         # If in impedance mode set led blue
@@ -110,7 +107,7 @@ while not mobile_io.get_button_state(quit_btn):
 
     if not controller_on:
         arm.cancel_goal()
-    
+
     arm.send()
 
 mobile_io.set_led_color("red")

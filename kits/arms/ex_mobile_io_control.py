@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 """
-CAUTION: 
-This example uses waypoints containing fixed joint angles, which is a bad idea if your actuators have large wind-up. 
+CAUTION:
+This example uses waypoints containing fixed joint angles, which is a bad idea if your actuators have large wind-up.
 The correct way to store waypoints is by using se3 coordinates, and converting them to joint positions using our IK functions.
 """
 
@@ -17,7 +17,7 @@ lookup = hebi.Lookup()
 sleep(2)
 
 # Config file
-example_config_file = "config/ex_mobile_io_control.cfg.yaml"    # Relative to this file directory
+example_config_file = "config/ex_mobile_io_control.cfg.yaml"  # Relative to this file directory
 example_config = hebi.config.load_config(os.path.join(os.path.dirname(os.path.realpath(__file__)), example_config_file))
 
 if example_config.user_data is None:
@@ -30,7 +30,9 @@ mobile_io = create_mobile_io_from_config(example_config, lookup)
 # Demo Variables
 abort_flag = False
 goal = hebi.arm.Goal(arm.size)
-waypoints = np.array([example_config.user_data['waypoint_1'], example_config.user_data['waypoint_2'], example_config.user_data['waypoint_3']])
+waypoints = np.array(
+    [example_config.user_data['waypoint_1'], example_config.user_data['waypoint_2'], example_config.user_data['waypoint_3']]
+)
 
 # Print instructions
 instructions = """MOBILE IO CONTROL EXAMPLE
@@ -61,7 +63,7 @@ while not abort_flag:
         if mobile_io.get_button_diff(N) == 1:  # "ToOn"
             mobile_io.set_led_color("green")
             goal.clear()
-            goal.add_waypoint(t=example_config.user_data['travel_time'], position=waypoints[N-1])
+            goal.add_waypoint(t=example_config.user_data['travel_time'], position=waypoints[N - 1])
             arm.set_goal(goal)
 
     # B6 - Grav Comp

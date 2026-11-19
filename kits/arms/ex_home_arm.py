@@ -8,7 +8,7 @@ from plotting import draw_plots
 # Initialize the interface for network connected modules
 # Lookup class is used to find modules on the network
 lookup = hebi.Lookup()
-sleep(2)    # Wait for a few seconds to find modules
+sleep(2)  # Wait for a few seconds to find modules
 
 ###############
 ## Arm Setup ##
@@ -22,7 +22,7 @@ sleep(2)    # Wait for a few seconds to find modules
 # For example, if you have a 5-DoF T-Series arm, replace the config file
 # with "config/A-2580-05.cfg.yaml"
 
-example_config_file = "config/A-2085-06.cfg.yaml"    # Relative to this file directory
+example_config_file = "config/A-2085-06.cfg.yaml"  # Relative to this file directory
 example_config = hebi.config.load_config(os.path.join(os.path.dirname(os.path.realpath(__file__)), example_config_file))
 
 # Set up arm from config
@@ -49,10 +49,9 @@ if enable_logging:
 #######################
 
 while arm.update():
-
     # Send the latest loaded commands to the arm. Since the goal is already set,
     # it will send the last loaded command when arm.update() was last called
-    
+
     arm.send()
 
 ##########################

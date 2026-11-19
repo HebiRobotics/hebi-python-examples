@@ -20,9 +20,7 @@ def setup_base(lookup: "Lookup", base_family: str):
     # Create base group
     group = lookup.get_group_from_names([base_family], wheel_names)
     if group is None:
-        raise RuntimeError(
-            f"Could not find modules: {wheel_names} in family '{base_family}'"
-        )
+        raise RuntimeError(f"Could not find modules: {wheel_names} in family '{base_family}'")
 
     # root_dir, _ = os.path.split(__file__)
     # load_gains(group, os.path.join(root_dir, "gains/rosie-wheel-gains.xml"))
@@ -72,9 +70,7 @@ def setup_arm(cfg: "HebiConfig", lookup: "Lookup"):
             gripper_close_effort = user_data["gripper_close_effort"]
             gripper_open_effort = user_data["gripper_open_effort"]
 
-        gripper = hebi.arm.Gripper(
-            gripper_group, gripper_close_effort, gripper_open_effort
-        )
+        gripper = hebi.arm.Gripper(gripper_group, gripper_close_effort, gripper_open_effort)
         if cfg.gains is not None:
             gripper_gains_file = cfg.gains["gripper"]
             gripper.load_gains(os.path.join(cfg.config_location, gripper_gains_file))

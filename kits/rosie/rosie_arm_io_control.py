@@ -64,9 +64,7 @@ class RosieControl:
         self.base.update(t_now)
         if base_inputs is None:
             return
-        self.base.build_smooth_velocity_trajectory(
-            base_inputs.x, base_inputs.y, base_inputs.rz, t_now
-        )
+        self.base.build_smooth_velocity_trajectory(base_inputs.x, base_inputs.y, base_inputs.rz, t_now)
 
     def send(self):
         self.base.send()

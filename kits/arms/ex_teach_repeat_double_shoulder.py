@@ -16,10 +16,7 @@ gains_file = "gains/A-2099-07.xml"
 
 
 # Create Arm object
-arm = hebi.arm.create([arm_family],
-                      names=module_names,
-                      hrdf_file=hrdf_file,
-                      lookup=lookup)
+arm = hebi.arm.create([arm_family], names=module_names, hrdf_file=hrdf_file, lookup=lookup)
 
 alt_shoulder_group = lookup.get_group_from_names(arm_family, ['J2B_shoulder1'])
 double_shoulder = hebi.arm.DoubledJointMirror(1, alt_shoulder_group)

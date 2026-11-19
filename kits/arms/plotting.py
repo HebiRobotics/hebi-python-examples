@@ -1,7 +1,8 @@
 from matplotlib import pyplot as plt
 
+
 def draw_plots(hebi_log):
-    
+
     # Plot tracking / error from the joints in the arm.
     time = []
     position = []

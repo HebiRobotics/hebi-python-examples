@@ -9,6 +9,7 @@ import hebi
 from hebi.util import create_mobile_io
 
 import typing
+
 if typing.TYPE_CHECKING:
     from typing import Sequence, Optional
     from numpy.typing import NDArray
@@ -32,7 +33,15 @@ class ArmJoystickInputs:
 
 
 class ArmJoystickControl:
-    def __init__(self, arm: hebi.arm.Arm, home_pose: 'Sequence[float] | NDArray[np.float64]', homing_time: float = 5.0, shoulder_flip_angle=-np.pi / 2, joint_limits=None, use_gripper=False):
+    def __init__(
+        self,
+        arm: hebi.arm.Arm,
+        home_pose: 'Sequence[float] | NDArray[np.float64]',
+        homing_time: float = 5.0,
+        shoulder_flip_angle=-np.pi / 2,
+        joint_limits=None,
+        use_gripper=False,
+    ):
 
         self.namespace = ''
 
@@ -195,18 +204,15 @@ class ArmJoystickControl:
         wrist_rot = R.from_euler('z', -pos_curr[5])
         arm_rot_target = R.from_matrix(self.rot_curr) * wrist_rot * r_x * r_y * r_z * wrist_rot.inv()
 
-        #curr_seed_ik = pos_curr
-        #curr_seed_ik[2] = abs(curr_seed_ik[2])
+        # curr_seed_ik = pos_curr
+        # curr_seed_ik[2] = abs(curr_seed_ik[2])
 
         if self.joint_target[2] < self.shoulder_flip_angle:
             diff = abs(self.joint_target[2] - self.shoulder_flip_angle)
             self.joint_target[2] = self.shoulder_flip_angle + diff
 
         try:
-            joint_target = self.arm.ik_target_xyz_so3(
-                self.joint_target,
-                arm_xyz_target,
-                arm_rot_target.as_matrix())
+            joint_target = self.arm.ik_target_xyz_so3(self.joint_target, arm_xyz_target, arm_rot_target.as_matrix())
         except Exception as e:
             print(self.namespace + f'IK failed ({e}), holding position')
             return None
@@ -232,10 +238,10 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_button_label(2, '', blocking=False)
     m.set_button_label(3, '', blocking=False)
     m.set_button_label(4, 'Quit', blocking=False)
-    m.set_button_label(6, '\u21E7', blocking=False)
+    m.set_button_label(6, '\u21e7', blocking=False)
     m.set_button_label(7, 'grip', blocking=False)
     m.set_button_mode(7, 1)
-    m.set_button_label(8, '\u21E9', blocking=False)
+    m.set_button_label(8, '\u21e9', blocking=False)
 
     m.set_axis_label(3, '', blocking=False)
     m.set_axis_label(4, '', blocking=False)
@@ -271,11 +277,7 @@ def parse_mobile_feedback(m: 'MobileIO'):
 
     gripper_closed = m.get_button_state(7)
 
-    arm_inputs = ArmJoystickInputs(
-        home,
-        [arm_dx, arm_dy, arm_dz],
-        [arm_drx, arm_dry, arm_drz],
-        gripper_closed=gripper_closed)
+    arm_inputs = ArmJoystickInputs(home, [arm_dx, arm_dy, arm_dz], [arm_drx, arm_dry, arm_drz], gripper_closed=gripper_closed)
 
     return arm_inputs
 
@@ -321,11 +323,9 @@ if __name__ == "__main__":
     # shoulder limits [-2, inf]
     # joint_limits[1, 0] = -2.0
 
-    arm_control = ArmJoystickControl(arm,
-                                     [0.0, 2.09, 2.09, 0.0, 1.57, 0.0],
-                                     homing_time=3.0,
-                                     joint_limits=joint_limits,
-                                     use_gripper=use_gripper)
+    arm_control = ArmJoystickControl(
+        arm, [0.0, 2.09, 2.09, 0.0, 1.57, 0.0], homing_time=3.0, joint_limits=joint_limits, use_gripper=use_gripper
+    )
 
     # Setup MobileIO
     print('Looking for Mobile IO...')

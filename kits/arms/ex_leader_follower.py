@@ -25,9 +25,7 @@ class FollowerControlState(Enum):
 
 
 class LeaderFollowerInputs:
-    def __init__(
-        self, home: bool = False, follow: bool = False, haptic_fbk: bool = False
-    ):
+    def __init__(self, home: bool = False, follow: bool = False, haptic_fbk: bool = False):
         self.home = home
         self.follow = follow
         self.haptic_fbk = haptic_fbk
@@ -40,9 +38,8 @@ class LeaderFollowerControl:
         follower_arm: hebi.arm.Arm,
         home_pose: "Sequence[float] | npt.NDArray[np.float64]",
         homing_time: float = 3.0,
-        haptic_gains: "Sequence[float]  | npt.NDArray[np.float64]" = np.array(
-            [30, 25, 20, 10, 3, 2]) * 10.0,
-        haptic_limit: float = 100
+        haptic_gains: "Sequence[float]  | npt.NDArray[np.float64]" = np.array([30, 25, 20, 10, 3, 2]) * 10.0,
+        haptic_limit: float = 100,
     ):
         self.namespace = ""
 
@@ -106,8 +103,7 @@ class LeaderFollowerControl:
             arm_goal = hebi.arm.Goal(self.follower_arm.size)
             pos_curr = self.follower_arm.last_feedback.position_command
             if np.any(np.isnan(pos_curr)):
-                print(self.namespace +
-                      "No position command, falling back to feedback position")
+                print(self.namespace + "No position command, falling back to feedback position")
                 pos_curr = self.follower_arm.last_feedback.position
             arm_goal.add_waypoint(t=0.1, position=pos_curr)
             self.follower_arm.set_goal(arm_goal)
@@ -125,20 +121,16 @@ class LeaderFollowerControl:
             self.follower_arm.pending_command.position = self.leader_arm.last_feedback.position
             self.follower_arm.pending_command.velocity = self.leader_arm.last_feedback.velocity
 
-            follower_double_shoulder = self.follower_arm.get_plugin_by_type(
-                hebi.arm.DoubledJointMirror)
+            follower_double_shoulder = self.follower_arm.get_plugin_by_type(hebi.arm.DoubledJointMirror)
             if follower_double_shoulder:
                 follower_double_shoulder.update(self.follower_arm, 0)
 
             if self.haptic_enabled:
-                pos_diff = self.leader_arm.last_feedback.position - \
-                    self.follower_arm.last_feedback.position
+                pos_diff = self.leader_arm.last_feedback.position - self.follower_arm.last_feedback.position
                 haptic_effort = self.haptic_gains * pos_diff * np.abs(pos_diff)
-                haptic_effort = np.clip(
-                    haptic_effort, -self.haptic_limit, self.haptic_limit)
+                haptic_effort = np.clip(haptic_effort, -self.haptic_limit, self.haptic_limit)
                 if np.any(np.isnan(haptic_effort)):
-                    self.leader_arm.pending_command.effort = np.zeros(
-                        self.leader_arm.size)
+                    self.leader_arm.pending_command.effort = np.zeros(self.leader_arm.size)
                 self.leader_arm.pending_command.effort = self.leader_arm.pending_command.effort - haptic_effort
 
         self.send()
@@ -159,8 +151,7 @@ class LeaderFollowerControl:
         elif state is self.state.ALIGNING:
             print(self.namespace + "TRANSITIONING TO ALIGNING")
             g = hebi.arm.Goal(self.follower_arm.size)
-            g.add_waypoint(t=self.homing_time,
-                           position=self.leader_arm.last_feedback.position)
+            g.add_waypoint(t=self.homing_time, position=self.leader_arm.last_feedback.position)
             self.follower_arm.set_goal(g)
 
         elif state is self.state.IDLE:
@@ -239,9 +230,7 @@ if __name__ == "__main__":
     follower_arm = hebi.arm.create_from_config(cfg, lookup)
 
     # Setup LeaderFollowerControl
-    leader_follower_control = LeaderFollowerControl(
-        leader_arm, follower_arm, home_pose=[0.0, 2.09, 2.09, 0.0, 1.57, 0.0]
-    )
+    leader_follower_control = LeaderFollowerControl(leader_arm, follower_arm, home_pose=[0.0, 2.09, 2.09, 0.0, 1.57, 0.0])
 
     # Setup MobileIO
     print("Looking for Mobile IO...")

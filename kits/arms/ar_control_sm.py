@@ -1,4 +1,3 @@
-
 from enum import Enum, auto
 from dataclasses import dataclass
 from time import time, sleep
@@ -9,6 +8,7 @@ import hebi
 from hebi.util import create_mobile_io
 
 import typing
+
 if typing.TYPE_CHECKING:
     from typing import Callable
     from numpy.typing import NDArray
@@ -37,13 +37,14 @@ class ArmMobileIOInputs:
 
 
 class ArmMobileIOControl:
-    def __init__(self,
-                 arm: 'Arm',
-                 gripper: 'Gripper | None' = None,
-                 homing_time=5.0,
-                 traj_duration=1.0,
-                 xyz_scale: 'NDArray[np.float64]' = np.ones(3),
-                 ):
+    def __init__(
+        self,
+        arm: 'Arm',
+        gripper: 'Gripper | None' = None,
+        homing_time=5.0,
+        traj_duration=1.0,
+        xyz_scale: 'NDArray[np.float64]' = np.ones(3),
+    ):
 
         self.namespace = ''
 
@@ -58,12 +59,9 @@ class ArmMobileIOControl:
         self.arm_ik_seed = np.array([0.3, 1.2, 2.2, 2.9, -1.57, 0])
 
         home_orientation = R.from_euler('z', np.pi / 2) * R.from_euler('x', np.pi)
-        self.set_arm_home(
-            np.array([0.5, 0.0, 0.0]),
-            home_orientation.as_matrix())
+        self.set_arm_home(np.array([0.5, 0.0, 0.0]), home_orientation.as_matrix())
 
-        self._transition_handlers: 'list[Callable[[ArmMobileIOControl, ArmControlState], None]]' = [
-        ]
+        self._transition_handlers: 'list[Callable[[ArmMobileIOControl, ArmControlState], None]]' = []
         self.last_cmd_t = time()
         # Feedback buffers are empty (NaN or zeros) until the modules first answer: don't command from them
         self.have_feedback = False
@@ -75,9 +73,7 @@ class ArmMobileIOControl:
     def set_arm_home(self, xyz, rot):
         self.arm_xyz_home = xyz
         self.arm_rot_home = rot
-        self.arm_home = self.arm.ik_target_xyz_so3(
-            self.arm_ik_seed,
-            xyz, rot)
+        self.arm_home = self.arm.ik_target_xyz_so3(self.arm_ik_seed, xyz, rot)
 
     def send(self):
         self.arm.send()
@@ -139,10 +135,12 @@ class ArmMobileIOControl:
         elif self.state is self.state.TELEOP:
             if arm_input.lock_toggle and arm_input.locked:
                 g = hebi.arm.Goal(self.arm.size)
-                g.add_waypoint(t=0.3,
-                               position=self.arm.last_feedback.position_command,
-                               velocity=np.zeros(g.dof_count),
-                               acceleration=np.zeros(g.dof_count))
+                g.add_waypoint(
+                    t=0.3,
+                    position=self.arm.last_feedback.position_command,
+                    velocity=np.zeros(g.dof_count),
+                    acceleration=np.zeros(g.dof_count),
+                )
                 self.arm.set_goal(g)
                 self.transition_to(t_now, self.state.IDLE)
                 return
@@ -191,9 +189,7 @@ class ArmMobileIOControl:
     def set_locked_pose(self, position):
         xyz = np.empty(3)
         orientation = np.empty((3, 3))
-        self.arm.FK(position,
-                    xyz_out=xyz,
-                    orientation_out=orientation)
+        self.arm.FK(position, xyz_out=xyz, orientation_out=orientation)
 
         self.last_locked_seed = position.copy()
         self.last_locked_xyz = xyz
@@ -217,8 +213,7 @@ class ArmMobileIOControl:
 
         phone_offset = arm_input.phone_pos - self.phone_xyz_home
         rot_mat = self.phone_rot_home
-        arm_xyz_target = self.last_locked_xyz + arm_input.ar_scaling * \
-            self.xyz_scale * (rot_mat.T @ phone_offset)
+        arm_xyz_target = self.last_locked_xyz + arm_input.ar_scaling * self.xyz_scale * (rot_mat.T @ phone_offset)
         arm_rot_target = rot_mat.T @ arm_input.phone_rot @ self.last_locked_rot
 
         # if ar scaling is 0, move the home AR pose to current pose
@@ -228,10 +223,7 @@ class ArmMobileIOControl:
             self.phone_xyz_home = arm_input.phone_pos
 
         try:
-            joint_target = self.arm.ik_target_xyz_so3(
-                self.last_locked_seed,
-                arm_xyz_target,
-                arm_rot_target)
+            joint_target = self.arm.ik_target_xyz_so3(self.last_locked_seed, arm_xyz_target, arm_rot_target)
         except Exception as e:
             # Don't let an IK failure stop the command stream (the arm would go limp): hold position
             print(self.namespace + f'IK failed ({e}), holding position')
@@ -286,7 +278,8 @@ def parse_mobile_feedback(m: 'MobileIO'):
         phone_rot=rotation,
         lock_toggle=m.get_button_diff(5) != 0,
         locked=m.get_button_state(5) == 0,
-        gripper_closed=m.get_button_state(7))
+        gripper_closed=m.get_button_state(7),
+    )
 
     return False, arm_input
 

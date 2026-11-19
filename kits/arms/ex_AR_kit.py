@@ -18,10 +18,8 @@ example_config = hebi.config.load_config(example_config_file)
 
 user_data = example_config.user_data
 if user_data is None:
-    needed_fields = ['homing_duration',
-                     'home_position', 'xyz_scale', 'delay_time']
-    raise RuntimeError(
-        f'This Demo needs the following fields set in the configuration user_data:\n{needed_fields}')
+    needed_fields = ['homing_duration', 'home_position', 'xyz_scale', 'delay_time']
+    raise RuntimeError(f'This Demo needs the following fields set in the configuration user_data:\n{needed_fields}')
 
 # Set up arm, and mobile_io from config
 arm = hebi.arm.create_from_config(example_config, lookup)
@@ -34,8 +32,7 @@ goal = hebi.arm.Goal(arm.size)
 
 # Command the softstart to the home position
 softstart = hebi.arm.Goal(arm.size)
-softstart.add_waypoint(t=user_data['homing_duration'],
-                       position=user_data['home_position'])
+softstart.add_waypoint(t=user_data['homing_duration'], position=user_data['home_position'])
 arm.update()
 arm.set_goal(softstart)
 arm.send()
@@ -126,18 +123,15 @@ while not abort_flag:
         rot_phone = R.from_quat(xyzw).as_matrix()
 
         # Calculate new targets
-        xyz_target = xyz_home + \
-            rot_phone_init.T @ (xyz_scale * (xyz_phone - xyz_phone_init))
+        xyz_target = xyz_home + rot_phone_init.T @ (xyz_scale * (xyz_phone - xyz_phone_init))
         rot_target = rot_phone_init.T @ rot_phone @ rot_home
 
         # Calculate new arm joint angles
-        target_joints = arm.ik_target_xyz_so3(
-            arm.last_feedback.position, xyz_target, rot_target)
+        target_joints = arm.ik_target_xyz_so3(arm.last_feedback.position, xyz_target, rot_target)
 
         # Set and send new goal to the arm
         goal.clear()
-        goal.add_waypoint(position=target_joints,
-                          t=float(user_data['delay_time']))
+        goal.add_waypoint(position=target_joints, t=float(user_data['delay_time']))
         arm.set_goal(goal)
 
     arm.send()

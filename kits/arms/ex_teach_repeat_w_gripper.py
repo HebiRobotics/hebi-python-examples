@@ -73,23 +73,32 @@ while not abort_flag:
         # B1 add waypoint (stop)
         if mobile_io.get_button_diff(1) == 1:  # "ToOn"
             print("Stop waypoint added")
-            goal.add_waypoint(t= base_travel_time + slider3 * (base_travel_time - min_travel_time), 
-                              position=arm.last_feedback.position, velocity=[0] * arm.size)
+            goal.add_waypoint(
+                t=base_travel_time + slider3 * (base_travel_time - min_travel_time),
+                position=arm.last_feedback.position,
+                velocity=[0] * arm.size,
+            )
 
         # B2 add waypoint (stop) and toggle the gripper
         if mobile_io.get_button_diff(2) == 1:  # "ToOn"
             # Add 2 waypoints to allow the gripper to open or close
             print("Stop waypoint added and gripper toggled")
             position = arm.last_feedback.position
-            goal.add_waypoint(t= base_travel_time + slider3 * (base_travel_time - min_travel_time), 
-                              position=arm.last_feedback.position, velocity=[0] * arm.size)
+            goal.add_waypoint(
+                t=base_travel_time + slider3 * (base_travel_time - min_travel_time),
+                position=arm.last_feedback.position,
+                velocity=[0] * arm.size,
+            )
             gripper.toggle()
 
         # B3 add waypoint (flow)
         if mobile_io.get_button_diff(3) == 1:  # "ToOn"
             print("Flow waypoint added")
-            goal.add_waypoint(t= base_travel_time + slider3 * (base_travel_time - min_travel_time), 
-                              position=arm.last_feedback.position, velocity=[0] * arm.size)
+            goal.add_waypoint(
+                t=base_travel_time + slider3 * (base_travel_time - min_travel_time),
+                position=arm.last_feedback.position,
+                velocity=[0] * arm.size,
+            )
 
         # B5 toggle training/playback
         if mobile_io.get_button_diff(5) == 1:  # "ToOn"

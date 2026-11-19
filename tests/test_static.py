@@ -42,11 +42,7 @@ def test_double_shoulder_mirror_group_name():
 
 def test_log_names_have_no_colons():
     """A17: ':' is not allowed in Windows file names."""
-    offenders = [
-        f"{p.relative_to(REPO_ROOT)}"
-        for p in sorted((KITS / "tready").glob("*.py"))
-        if re.search(r"%H:%M", p.read_text())
-    ]
+    offenders = [f"{p.relative_to(REPO_ROOT)}" for p in sorted((KITS / "tready").glob("*.py")) if re.search(r"%H:%M", p.read_text())]
     assert not offenders
 
 
@@ -89,7 +85,6 @@ def test_treadward_control_selector_fallback_exists():
     modules = [
         node.value.value
         for node in ast.walk(tree)
-        if isinstance(node, ast.Assign)
-        and any(isinstance(t, ast.Name) and t.id == "default_controller" for t in node.targets)
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "default_controller" for t in node.targets)
     ]
     assert modules and all(importlib.util.find_spec(m) is not None for m in modules), modules

@@ -59,7 +59,6 @@ while not mobile_io.get_button_state(quit_btn):
     # even if we had an empty control loop
 
     if mobile_io.update(timeout_ms=0):
-
         # Toggle gravity compensation when button is pressed
         diff = mobile_io.get_button_diff(switch_btn)
         if diff in {-1, 1}:
@@ -67,7 +66,7 @@ while not mobile_io.get_button_state(quit_btn):
 
         # If in gravity compensation mode, set led blue
         mobile_io.set_led_color("blue" if gravcomp.enabled else "green", blocking=False)
-    
+
     # Send the latest loaded commands to the arm. If no changes are made,
     # it will send the last loaded command when arm.update() was last called
     arm.send()

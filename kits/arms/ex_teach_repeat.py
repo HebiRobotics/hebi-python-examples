@@ -68,14 +68,16 @@ while not abort_flag:
         # B1 - add waypoint (stop)
         if mobile_io.get_button_diff(1) == 1:  # "ToOn"
             print("Stop waypoint added")
-            goal.add_waypoint(t= base_travel_time + slider3 * (base_travel_time - min_travel_time), 
-                              position=arm.last_feedback.position, velocity=[0] * arm.size)
-            
+            goal.add_waypoint(
+                t=base_travel_time + slider3 * (base_travel_time - min_travel_time),
+                position=arm.last_feedback.position,
+                velocity=[0] * arm.size,
+            )
+
         # B2 - add waypoint (flow)
         if mobile_io.get_button_diff(2) == 1:  # "ToOn"
             print("Flow waypoint added")
-            goal.add_waypoint(t= base_travel_time + slider3 * (base_travel_time - min_travel_time), 
-                              position=arm.last_feedback.position)
+            goal.add_waypoint(t=base_travel_time + slider3 * (base_travel_time - min_travel_time), position=arm.last_feedback.position)
 
         # B3 - toggle training/playback
         if mobile_io.get_button_diff(3) == 1:  # "ToOn"

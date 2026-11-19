@@ -4,6 +4,7 @@ from hebi.util import create_mobile_io
 from time import sleep
 
 import typing
+
 if typing.TYPE_CHECKING:
     from hebi.config import HebiConfig
 
@@ -15,17 +16,14 @@ def create_mobile_io_from_config(config: 'HebiConfig', lookup):
 
     # Validate the mobile_io configuration
     if config.user_data is None:
-        raise ValueError(
-            f'HEBI config "user_data" field must contain the keys: {required_keys}')
+        raise ValueError(f'HEBI config "user_data" field must contain the keys: {required_keys}')
 
     if not set(required_keys).issubset(config.user_data.keys()):
-        raise ValueError(
-            f'HEBI config "user_data" field must contain the keys: {required_keys}')
+        raise ValueError(f'HEBI config "user_data" field must contain the keys: {required_keys}')
 
     # Check that all required fields are present and are non-empty strings
     if not all(isinstance(config.user_data[key], str) for key in required_keys):
-        raise TypeError(
-            f'HEBI config "user_data"\'s {required_keys} fields must contain strings, not parseable as strings')
+        raise TypeError(f'HEBI config "user_data"\'s {required_keys} fields must contain strings, not parseable as strings')
 
     family = config.user_data['mobile_io_family']
     name = config.user_data['mobile_io_name']
@@ -40,8 +38,7 @@ def create_mobile_io_from_config(config: 'HebiConfig', lookup):
         mobile_io = create_mobile_io(lookup, family, name)
 
         if mobile_io is None:
-            print(
-                f"Couldn't find Mobile IO '{family}/{name}'. Check device status...")
+            print(f"Couldn't find Mobile IO '{family}/{name}'. Check device status...")
             sleep(1)
         num_retries -= 1
 
@@ -59,28 +56,23 @@ def create_gripper_from_config(config, lookup, arm):
 
     cfg_dir = config.config_location
 
-    required_keys = {'gripper_family', 'gripper_name',
-                     'gripper_gains', 'gripper_close_effort', 'gripper_open_effort'}
+    required_keys = {'gripper_family', 'gripper_name', 'gripper_gains', 'gripper_close_effort', 'gripper_open_effort'}
     required_keys_str = {'gripper_family', 'gripper_name', 'gripper_gains'}
     required_keys_float = {'gripper_close_effort', 'gripper_open_effort'}
 
     # Validate the gripper configuration
     if config.user_data is None:
-        raise ValueError(
-            f'HEBI config "user_data" field must contain the keys: {required_keys}')
+        raise ValueError(f'HEBI config "user_data" field must contain the keys: {required_keys}')
 
     if not set(required_keys).issubset(config.user_data.keys()):
-        raise ValueError(
-            f'HEBI config "user_data" field must contain the keys: {required_keys}')
+        raise ValueError(f'HEBI config "user_data" field must contain the keys: {required_keys}')
 
     # Check that all required fields are present and the correct type
     if not all(isinstance(config.user_data[key], str) for key in required_keys_str):
-        raise TypeError(
-            f'HEBI config "user_data"\'s {required_keys_str} fields must contain strings, not parseable as strings')
+        raise TypeError(f'HEBI config "user_data"\'s {required_keys_str} fields must contain strings, not parseable as strings')
 
     if not all(isinstance(config.user_data[key], float) for key in required_keys_float):
-        raise TypeError(
-            f'HEBI config "user_data"\'s {required_keys_float} fields must contain floats, not parseable as floats')
+        raise TypeError(f'HEBI config "user_data"\'s {required_keys_float} fields must contain floats, not parseable as floats')
 
     family = config.user_data.get('gripper_family')
     name = config.user_data.get('gripper_name')
@@ -99,6 +91,7 @@ def create_gripper_from_config(config, lookup, arm):
         arm.set_end_effector(gripper)
 
     return gripper
+
 
 # Storage for code that might be useful later
 
