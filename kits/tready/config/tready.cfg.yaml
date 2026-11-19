@@ -15,6 +15,7 @@ user_data:
     wheel_base: 0.285        # m
     torso_torque_scale: 2.5  # Nm
     torque_mode_max: 25      # Nm
+    flipper_home_position: 1.5707963  # rad
 
     chassis_ramp_time: 0.5   # s
     flipper_ramp_time: 0.1   # s

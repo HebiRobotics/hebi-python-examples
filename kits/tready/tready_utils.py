@@ -1,5 +1,4 @@
 from time import sleep
-import os
 
 import hebi
 from hebi.util import create_mobile_io
@@ -9,7 +8,6 @@ import typing
 if typing.TYPE_CHECKING:
     from hebi._internal.group import Group
     from hebi._internal.mobile_io import MobileIO
-    from hebi import Lookup
 
 
 def wait_for_mobile_io(lookup, family):
@@ -27,23 +25,6 @@ def wait_for_mobile_io(lookup, family):
         m = create_mobile_io(lookup, family)
 
     return m
-
-
-def setup_base(lookup: "Lookup", base_family: str):
-    from .treaded_base import TreadedBase
-
-    flipper_names = [f"T{n + 1}_J1_flipper" for n in range(4)]
-    wheel_names = [f"T{n + 1}_J2_track" for n in range(4)]
-
-    # Create base group
-    group = lookup.get_group_from_names([base_family], wheel_names + flipper_names)
-    if group is None:
-        raise RuntimeError(f"Could not find modules: {wheel_names + flipper_names} in family '{base_family}'")
-
-    root_dir, _ = os.path.split(__file__)
-    load_gains(group, os.path.join(root_dir, "gains/r-tready-gains.xml"))
-
-    return TreadedBase(group, 0.25, 0.33)
 
 
 def set_mobile_io_instructions(mobile_io: "MobileIO", message, color=None):

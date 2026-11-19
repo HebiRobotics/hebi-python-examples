@@ -12,13 +12,15 @@ import time
 import hebi
 from hebi.arm import GroupManager
 
+from kits.common.state_machine import Controller, ControllerState, wait_for_group
+
 from .tready_utils import load_gains
 
 import typing
 
 if typing.TYPE_CHECKING:
-    from typing import Self, Callable
     from hebi._internal.group import Group
+    from hebi._internal.lookup import Lookup
 
 
 @dataclass
@@ -28,6 +30,7 @@ class TreadedBaseConfig:
 
     wheel_diameter: float  # m
     wheel_base: float  # m
+    flipper_home_pos: float  # rad
 
     torso_vel_scale: float = 1.0  # rad/s
     torso_torque_scale: float = 2.5  # Nm
@@ -46,6 +49,7 @@ class TreadedBaseConfig:
             gains_file=cfg.gains["default"],
             wheel_diameter=cfg.user_data["wheel_diameter"],
             wheel_base=cfg.user_data["wheel_base"],
+            flipper_home_pos=cfg.user_data["flipper_home_position"],
             torso_torque_scale=cfg.user_data["torso_torque_scale"],
             torque_mode_max=cfg.user_data["torque_mode_max"],
         )
@@ -77,7 +81,6 @@ class TreadedBaseConfig:
             / self.wheel_diameter
         )
 
-    flipper_home_pos: float = np.pi / 2  # rad
     flipper_flat_pos: float = np.pi / 4  # rad
     flipper_rear_pos: NDArray[np.float64] = field(
         default_factory=lambda: np.array([-np.pi / 4, -np.pi / 4, 6.5 * np.pi / 4, 6.5 * np.pi / 4])
@@ -132,83 +135,31 @@ class TreadyInputs:
         )
 
 
-@dataclass
-class ControllerState:
-    controller: TreadedBaseController
-
-    def can_transition_to(self, state: ControllerState) -> bool:
-        return True
-
-    def can_transition_from(self, state: ControllerState) -> bool:
-        return True
-
-    def resume_state(self) -> ControllerState:
-        """State to return to after a disconnect or E-stop interrupts this one. Interrupted moves are not restarted."""
-        return self
-
-    def on_enter(self, from_state: ControllerState, **kwargs): ...
-
-    def update(self, **kwargs): ...
-
-    def receive_inputs(self, t_now: float, tready_input: TreadyInputs, **kwargs): ...
-
-    def on_exit(self, to_state: ControllerState, **kwargs): ...
-
-
-@dataclass
-class TreadyDisconnectedState(ControllerState):
-    def on_enter(self, from_state: ControllerState, **kwargs):
-        self.controller.base.set_color("blue")
-        self.prev_state = from_state.resume_state()
-        flipper_pos = self.controller.base.flipper_fbk.position_command
-        if np.any(np.isnan(flipper_pos)):
-            flipper_pos = self.controller.base.flipper_fbk.position
-
-        self.controller.base.set_flipper_trajectory(0.2, flipper_pos)
-        self.controller.base.set_chassis_vel_trajectory(0.2, np.zeros(3))
-
-    def resume_state(self) -> ControllerState:
-        return self.prev_state
-
-    def receive_inputs(self, t_now: float, tready_input: TreadyInputs, **kwargs):
-        print(self.controller.namespace + "Controller reconnected, demo continued.")
-        # Return to the interrupted state without re-running its on_enter (which would restart e.g. homing)
-        controller = self.controller
-        controller.base.clear_color()
-        for handler in controller._transition_handlers:
-            handler(controller, self.prev_state)
-        controller.state = self.prev_state
-
-
-@dataclass
-class TreadyEStopState(ControllerState):
-    def on_enter(self, from_state: ControllerState, **kwargs):
+@dataclass(eq=False)
+class TreadyEStopState(ControllerState["TreadedBaseController"]):
+    # Drop all motion targets: a flipper target held through the M-stop would
+    # be driven to on release. On recovery, teleop restarts velocity control
+    # from measured positions.
+    def on_enter(self, from_state, **kwargs):
         self.controller.base.set_color("yellow")
-        self.prev_state = from_state.resume_state()
-        # Drop all targets: modules would drive back to a held position when the M-stop is released
-        self.controller.base.flipper_traj = None
-        self.controller.base.chassis_traj = None
-        self.controller.base.user_flipper_torque[:] = np.nan
-
-        return super().on_enter(from_state, **kwargs)
-
-    def resume_state(self) -> ControllerState:
-        return self.prev_state
-
-    def update(self, **kwargs):
-        if not self.controller.base.m_stopped:
-            print(self.controller.namespace + "Emergency Stop Released")
-            self.controller.transition_to(self.prev_state)
+        self.controller.base.clear_motion()
 
 
-@dataclass
-class TreadyExitState(ControllerState):
-    def on_enter(self, from_state: ControllerState, **kwargs):
+@dataclass(eq=False)
+class TreadyExitState(ControllerState["TreadedBaseController"]):
+    # Runs before Controller.stop() joins the control thread, so it must not
+    # call base.stop() itself.
+    def on_enter(self, from_state, **kwargs):
         self.controller.base.set_color("red")
-        self.controller.base.stop()
+        self.controller.base.hold_motion()
 
 
-class TreadedBaseController:
+class TreadedBaseController(Controller["TreadedBase", TreadyInputs]):
+    """State machine for a treaded base. States live in ``treaded_base.py``.
+
+    Call ``start()`` after registering handlers; nothing runs before that.
+    """
+
     def __init__(
         self,
         base: TreadedBase,
@@ -217,112 +168,44 @@ class TreadedBaseController:
         exit_state: type[ControllerState],
         flipper_vel_scale=1.0,
         max_base_speed=0.25,
+        *,
+        name: str = "Base",
+        input_timeout: float | None = 1.0,
     ):
-
-        self.base = base
-        self.state = starting_state(self)
-        self.fault_state = fault_state
-        self.exit_state = exit_state
-
-        self.namespace = ""
-        # self._executer = futures.ThreadPoolExecutor(max_workers=1)
+        super().__init__(base, starting_state, fault_state, exit_state, input_timeout=input_timeout, name=name)
 
         self.flipper_vel_scale = flipper_vel_scale
         self.max_base_speed = max_base_speed
 
-        self.last_cmd_t = time.time()
-
-        self.payload_deploy_safe = False
-        self.payload_stow_safe = True
-
-        self._transition_handlers: list[Callable[[Self, ControllerState], None]] = []
-        self._update_handlers: list[Callable[[Self, ControllerState], None]] = []
-
-        self.base.set_on_update_callback(self.on_base_update)
-        self.base.set_on_failed_update_callback(self.on_packet_loss)
-
-    def start(self):
-        """Start the base's control thread. Call after registering handlers and finding all other hardware."""
-        self.last_cmd_t = time.time()
-        if not self.base.running:
-            self.base.start()
-
-        # Starting the base waits for the first feedback; don't count that wait as time without input
-        self.last_cmd_t = time.time()
-
     @property
-    def running(self):
-        return not isinstance(self.state, self.exit_state)
+    def base(self) -> TreadedBase:
+        return self.manager
 
     @property
     def max_chassis_rotation_vel(self):
         return self.max_base_speed / (self.base.config.wheel_base / 2)  # rad/s
 
-    def receive_inputs(self, input: TreadyInputs):
-        # The state machine also runs on the base's thread; don't run it from two threads at once
-        with self.base.lock:
-            t_now = time.time()
-            self.last_cmd_t = t_now
-            self.state.receive_inputs(t_now, input)
+    def drive(self, tready_input: TreadyInputs):
+        """Command chassis velocity from the joystick, or ramp to a stop if driving is unsafe."""
+        if tready_input.drive_safe:
+            chassis_vels: NDArray[np.float64] = np.array(
+                [
+                    self.max_base_speed * tready_input.base_motion.x,
+                    0,
+                    self.max_chassis_rotation_vel * tready_input.base_motion.rz,
+                ],
+                dtype=np.float64,
+            )
+            duration = self.base.chassis_ramp_time
+        else:
+            chassis_vels = np.zeros(3)
+            duration = 0.2
 
-    def transition_to(self, new_state: ControllerState, **kwargs):
-        if not new_state.can_transition_from(self.state):
-            return False
-        elif not self.state.can_transition_to(new_state):
-            return False
-        elif isinstance(self.state, type(new_state)):
-            return True
+        self.base.set_chassis_vel_trajectory(duration, chassis_vels)
 
-        print(f'{self.namespace} Transition {type(self.state)} -> {type(new_state)}')
-        self.state.on_exit(to_state=new_state, **kwargs)
-        new_state.on_enter(from_state=self.state, **kwargs)
-
-        for handler in self._transition_handlers:
-            handler(self, new_state)
-        # This goes after the handlers, so they can use the "before" state also
-        self.state = new_state
-
-        return True
-
-    def clear_leds(self):
-        self.base.pending_command.led.color = 'transparent'
-
-    def wait_for_shutdown(self, timeout_s):
-        self.base.stop()
-        time.sleep(timeout_s)
-
-        if self.base.running:
-            print("Warning: base did not shutdown cleanly")
-
-    def start_logging(self):
-        self.base.group.start_log("logs", mkdirs=True)
-
-    def cycle_log(self):
-        self.base.group.stop_log()
-        self.base.group.start_log("logs", mkdirs=True)
-
-    def on_packet_loss(self):
-        print('WARNING: Failed to get next feedback!!!')
-
-    def on_base_update(self):
-        if isinstance(self.state, self.exit_state):
-            return True
-
-        if self.base.m_stopped:
-            if not isinstance(self.state, self.fault_state):
-                self.transition_to(self.fault_state(self))
-            return True
-
-        # Transition to disconnected if no mobile update recieved
-        if not isinstance(self.state, TreadyDisconnectedState):
-            if (time.time() - self.last_cmd_t) > 1.0:
-                self.transition_to(TreadyDisconnectedState(self))
-                return True
-
-        self.state.update()
-        for handler in self._update_handlers:
-            handler(self, self.state)
-        return True
+    def on_disconnect(self):
+        self.base.set_color("blue")
+        self.base.hold_motion()
 
 
 class TreadedBase(GroupManager):
@@ -370,11 +253,10 @@ class TreadedBase(GroupManager):
         load_gains(group, self.config.gains_file)
 
     @classmethod
-    def from_config(cls, cfg: hebi.config.HebiConfig):
-        lookup = hebi.Lookup()
-        # Create base group
-        while (base_group := lookup.get_group_from_names(cfg.families, cfg.names, timeout_ms=1000)) is None:
-            print(f"Looking for {cfg.families[0]} modules...")
+    def from_config(cls, cfg: hebi.config.HebiConfig, lookup: Lookup | None = None):
+        if lookup is None:
+            lookup = hebi.Lookup()
+        base_group = wait_for_group(lookup, cfg.families, cfg.names)
 
         assert cfg.user_data is not None
 
@@ -497,6 +379,20 @@ class TreadedBase(GroupManager):
                     )
 
         return res
+
+    def clear_motion(self):
+        """Drop flipper and chassis trajectories and flipper torques; the next update commands zero velocity."""
+        self.flipper_traj = None
+        self.chassis_traj = None
+        self.user_flipper_torque[:] = np.nan
+
+    def hold_motion(self, ramp_time: float = 0.2):
+        """Ramp the chassis to a stop and hold the flippers where they are."""
+        flipper_pos = self.flipper_fbk.position_command
+        if np.any(np.isnan(flipper_pos)):
+            flipper_pos = self.flipper_fbk.position
+        self.set_flipper_trajectory(ramp_time, flipper_pos)
+        self.set_chassis_vel_trajectory(ramp_time, np.zeros(3))
 
     def set_flipper_torque(self, e: NDArray[np.float64]):
         self.flipper_traj = None
