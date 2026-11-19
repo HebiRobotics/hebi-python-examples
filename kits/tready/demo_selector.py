@@ -11,7 +11,7 @@ from hebi.util import create_mobile_io
 DEMOS = {
     "Leader-Follower Ctrl": "advanced.demos.MAPS_control.MAPS_input_device_w_gripper_example",
     "Tready MAPS Control": "kits.tready.tready_leader_follower_control",
-    "Tready Joystick Arm": "kits.tready.tready_arm_joystick_control",
+    "Tready Joystick Arm": "kits.tready.treaded_base_arm_joystick_control tready.cfg.yaml",
 }
 
 
@@ -24,7 +24,7 @@ def launch_demo(demo):
     root = os.path.split(os.path.abspath(__file__))[0]
     kits_dir = root.split("kits")[0]
     os.chdir(kits_dir)
-    subprocess.run(["python3", "-m", f"{DEMOS[demo]}"], check=False)
+    subprocess.run(["python3", "-m", *DEMOS[demo].split()], check=False)  # module, then its arguments
 
 
 def select_demo(mobile_io):
