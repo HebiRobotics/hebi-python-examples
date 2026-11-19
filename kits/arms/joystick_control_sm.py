@@ -124,8 +124,12 @@ class ArmJoystickControl:
             print(self.namespace + "TRANSITIONING TO TELEOP")
 
         elif state is self.state.DISCONNECTED:
+            # Hold where the arm is (not a fast move to home)
+            hold = np.array(self.arm.last_feedback.position_command)
+            if np.any(np.isnan(hold)):
+                hold = np.array(self.arm.last_feedback.position)
             g = hebi.arm.Goal(self.arm.size)
-            g.add_waypoint(t=0.1, position=self.arm_home)
+            g.add_waypoint(t=0.25, position=hold, velocity=np.zeros(self.arm.size))
             self.arm.set_goal(g)
             self.arm.pending_command.led.color = "blue"
             print(self.namespace + "TRANSITIONING TO DISCONNECTED")
