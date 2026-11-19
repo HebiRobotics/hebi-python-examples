@@ -225,6 +225,7 @@ if __name__ == "__main__":
         arm.group.start_log(tready_log_dir, f"arm_{now:%Y-%m-%d-%H-%M-%S}")
         base.group.start_log(tready_log_dir, f"base_{now:%Y-%m-%d-%H-%M-%S}")
 
+    base_control.start()
     while base_control.running and arm_control.running:
         t = time.time()
         try:
