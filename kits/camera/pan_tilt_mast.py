@@ -1,36 +1,40 @@
 #!/usr/bin/env python3
+"""Pan/tilt camera mast driven from a Mobile IO.
+
+    python -m kits.camera.pan_tilt_mast pan_tilt_mast.cfg.yaml
+
+The config gives the mast modules and hrdf, and ``camera_family`` in user_data.
+"""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-from pathlib import Path
-import numpy as np
+import sys
 import time
-from scipy.spatial.transform import Rotation as R
+import typing
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import hebi
-from hebi.util import create_mobile_io
+import numpy as np
 from hebi.arm import GroupManager
+from hebi.util import create_mobile_io
+from scipy.spatial.transform import Rotation as R
+
+from kits.common.config import add_config_argument, config_arg_parser, load_config, required_user_data
+from kits.common.state_machine import Controller, ControllerState, wait_for_group
 
 from .camera import HebiCamera
 
-import typing
-from typing import override
-
 if typing.TYPE_CHECKING:
-    from typing import Sequence
-    from hebi._internal.mobile_io import MobileIO
+    from collections.abc import Sequence
+
     from hebi._internal.group import Group
+    from hebi._internal.mobile_io import MobileIO
     from hebi.robot_model import RobotModel
-    from typing import Self, Callable
 
 
 class CameraMast(GroupManager):
-    def __init__(
-        self,
-        pan_tilt_group: Group,
-        hrdf: RobotModel | str = str(Path(__file__).parent / 'config' / 'hrdf' / 'pan_tilt_mast.hrdf'),
-    ):
+    def __init__(self, pan_tilt_group: Group, hrdf: RobotModel | str):
         super().__init__(time.time, pan_tilt_group)
 
         if isinstance(hrdf, str):
@@ -40,15 +44,23 @@ class CameraMast(GroupManager):
 
         self.output_frame = np.empty((4, 4), dtype=np.float64)
 
+    @classmethod
+    def from_config(cls, cfg: hebi.config.HebiConfig, lookup: hebi.Lookup) -> CameraMast:
+        """Wait for the mast modules named in ``cfg`` and load its hrdf."""
+        assert cfg.hrdf is not None, "mast config needs an hrdf"
+        return cls(wait_for_group(lookup, cfg.families, cfg.names), cfg.hrdf)
+
     def _inner_update(self, t: float) -> bool:
         res = super()._inner_update(t)
 
-        wxyz = self.last_feedback[0].orientation
-        if not np.any(np.isnan(wxyz)):  # skip until the IMU reports an orientation (NaN would raise)
+        # Skip the frame update until the IMU reports an orientation; a NaN
+        # quaternion would raise here and kill the control thread.
+        quat = self.last_feedback[0].orientation
+        if not np.any(np.isnan(quat)):
             base_frame = np.eye(4)
-            base_frame[:3, :3] = R.from_quat([*wxyz[1:], wxyz[0]]).as_matrix()
+            base_frame[:3, :3] = R.from_quat([*quat[1:], quat[0]]).as_matrix()  # wxyz -> xyzw (scipy < 1.14)
             self.robot_model.base_frame = base_frame
-        self.robot_model.get_end_effector(self.last_feedback.position, output=self.output_frame)
+            self.robot_model.get_end_effector(self.last_feedback.position, output=self.output_frame)
         return res
 
     def set_velocity(self, duration: float, velocity: Sequence[float]):
@@ -70,199 +82,137 @@ class MastInputs:
     light_pwm: float
 
 
-@dataclass
-class ControllerState:
+class _ResumeToTeleop:
+    """Mixin: after a disconnect or fault, resume in teleop instead of restarting this state's motion."""
+
     controller: MastController
 
-    def can_transition_to(self, state: ControllerState) -> bool:
-        return True
-
-    def can_transition_from(self, state: ControllerState) -> bool:
-        return True
-
-    def on_enter(self, from_state: ControllerState, **kwargs): ...
-
-    def update(self, **kwargs): ...
-
-    def receive_inputs(self, t_now: float, inputs, **kwargs): ...
-
-    def on_exit(self, to_state: ControllerState, **kwargs): ...
+    def resume_state(self):
+        return CameraMastTeleopState(self.controller)
 
 
-@dataclass
-class CameraMastState(ControllerState):
-    controller: MastController
-
-    @override
-    def receive_inputs(self, t_now: float, inputs: MastInputs, **kwargs): ...
-
-
-@dataclass
-class CameraMastStartupState(ControllerState):
-    def update(self, **kwargs):
-        self.controller.transition_to(CameraMastHomingState(self.controller))
+@dataclass(eq=False)
+class CameraMastStartupState(ControllerState["MastController"]):
+    # Never move on startup; home only when the user asks.
+    def update(self, t_now, **kwargs):
+        return CameraMastTeleopState(self.controller)
 
 
-@dataclass
-class CameraMastHomingState(ControllerState):
-    def on_enter(self, from_state: ControllerState, **kwargs):
-        self.controller.mast.set_position(3.0, [np.pi, np.pi / 2])
+@dataclass(eq=False)
+class CameraMastHomingState(_ResumeToTeleop, ControllerState["MastController"]):
+    HOMING_TIME = 3.0  # s
 
-    def update(self, **kwargs):
+    def on_enter(self, from_state, **kwargs):
+        self.controller.mast.set_position(self.HOMING_TIME, self.controller.home_position)
+
+    def update(self, t_now, **kwargs):
         if self.controller.mast.at_goal:
-            self.controller.transition_to(CameraMastTeleopState(self.controller))
+            return CameraMastTeleopState(self.controller)
+        return None
 
 
-@dataclass
-class CameraMastTeleopState(ControllerState):
+@dataclass(eq=False)
+class CameraMastTeleopState(_ResumeToTeleop, ControllerState["MastController"]):
     PAN_SCALING = 0.5
     TILT_SCALING = 0.5
+    RAMP_TIME = 0.25  # s
+
+    # Set by receive_inputs; update() returns it (inputs never transition directly).
+    requested: ControllerState | None = field(default=None, init=False)
+
+    def on_enter(self, from_state, **kwargs):
+        self.controller.hold_position()
 
     def receive_inputs(self, t_now: float, inputs: MastInputs, **kwargs):
-        with self.controller.camera.lock:  # the camera's own thread sends this command
-            self.controller.camera.zoom_level = inputs.zoom
-            self.controller.camera.light_enable = inputs.light_enable
-            self.controller.camera.light_pwm = inputs.light_pwm
+        self.controller.set_camera(inputs.zoom, inputs.light_enable, inputs.light_pwm)
+        if self.requested is not None:
+            return
 
         if inputs.home:
-            self.controller.transition_to(CameraMastHomingState(self.controller))
+            self.requested = CameraMastHomingState(self.controller)
         else:
-            Δpan = inputs.v_pan * self.PAN_SCALING
-            Δtilt = inputs.v_tilt * self.TILT_SCALING
-            Δt = 0.25  # sec
+            v_pan = inputs.v_pan * self.PAN_SCALING
+            v_tilt = inputs.v_tilt * self.TILT_SCALING
+            self.controller.mast.set_velocity(self.RAMP_TIME, [v_pan, v_tilt])
 
-            self.controller.mast.set_velocity(Δt, [Δpan, Δtilt])
-
-
-@dataclass
-class CameraMastDisconnectedState(ControllerState):
-    def on_enter(self, from_state: ControllerState, **kwargs):
-        # Hold where the mast is (cancel_goal() left it limp, so the tilt could sag)
-        hold = np.array(self.controller.mast.last_feedback.position)
-        self.controller.mast.set_position(0.25, hold)
-
-    def update(self, **kwargs):
-        if (time.time() - self.controller.last_cmd_t) < 1.0:
-            self.controller.transition_to(CameraMastTeleopState(self.controller))
+    def update(self, t_now, **kwargs):
+        requested, self.requested = self.requested, None
+        return requested
 
 
-@dataclass
-class CameraMastFaultState(ControllerState):
-    # M-stop: drop the goal (a held target would be driven to on release); resume teleop once released
-    def on_enter(self, from_state: ControllerState, **kwargs):
+@dataclass(eq=False)
+class CameraMastFaultState(ControllerState["MastController"]):
+    # Drop the goal: a target held through the M-stop would be driven to on
+    # release. Recovery resumes into Teleop, which holds from current feedback.
+    def on_enter(self, from_state, **kwargs):
         self.controller.mast.cancel_goal()
 
-    def update(self, **kwargs):
-        if not self.controller.mast.m_stopped:
-            self.controller.transition_to(CameraMastTeleopState(self.controller))
+
+@dataclass(eq=False)
+class CameraMastExitState(ControllerState["MastController"]):
+    def on_enter(self, from_state, **kwargs):
+        self.controller.hold_position()
 
 
-@dataclass
-class CameraMastExitState(ControllerState): ...
+class MastController(Controller[CameraMast, MastInputs]):
+    """Pan/tilt mast with a camera. Mobile IO disconnects hold position.
 
+    ``camera`` is a ``HebiCamera`` or anything with the same methods.
+    ``start()`` starts both the mast's and the camera's threads; ``stop()``
+    stops both.
+    """
 
-class MastController:
     def __init__(
         self,
         mast: CameraMast,
         camera: HebiCamera,
-        starting_state: type[ControllerState],
-        fault_state: type[ControllerState],
-        exit_state: type[ControllerState],
+        home_position: Sequence[float],
+        starting_state: type[ControllerState] = CameraMastStartupState,
+        fault_state: type[ControllerState] = CameraMastFaultState,
+        exit_state: type[ControllerState] = CameraMastExitState,
+        *,
+        name: str = "Mast",
+        input_timeout: float | None = 1.0,
     ):
-
-        self.mast = mast
+        super().__init__(mast, starting_state, fault_state, exit_state, input_timeout=input_timeout, name=name)
         self.camera = camera
-        self.state = starting_state(self)
-        self.fault_state = fault_state
-        self.exit_state = exit_state
-
-        self.namespace = ""
-        # self._executer = futures.ThreadPoolExecutor(max_workers=1)
-
-        self.last_cmd_t = time.time()
-
-        self.payload_deploy_safe = False
-        self.payload_stow_safe = True
-
-        self._transition_handlers: list[Callable[[Self, ControllerState], None]] = []
-        self._update_handlers: list[Callable[[Self, ControllerState], None]] = []
-
-        self.mast.set_on_update_callback(self.on_mast_update)
-        self.mast.set_on_failed_update_callback(self.on_packet_loss)
-
-        if not self.mast.running:
-            self.mast.start()
-
-        if not self.camera.running:
-            self.camera.start()
+        self.home_position = np.asarray(home_position, dtype=np.float64)
 
     @property
-    def running(self):
-        return not isinstance(self.state, self.exit_state)
+    def mast(self) -> CameraMast:
+        return self.manager
 
-    def receive_inputs(self, input: MastInputs):
-        t_now = time.time()
-        self.last_cmd_t = t_now
-        self.state.receive_inputs(t_now, input)
+    def set_camera(self, zoom: float, light_enable: bool, light_pwm: float):
+        # The camera's own thread sends pending_command; don't write it mid-send.
+        with self.camera.lock:
+            self.camera.zoom_level = zoom
+            self.camera.light_enable = light_enable
+            self.camera.light_pwm = light_pwm
 
-    def transition_to(self, new_state: ControllerState, **kwargs):
-        if not new_state.can_transition_from(self.state):
-            return False
-        elif not self.state.can_transition_to(new_state):
-            return False
-        elif isinstance(self.state, type(new_state)):
-            return True
+    def start(self):
+        if not self.camera.running:
+            self.camera.start()
+        try:
+            super().start()
+        except Exception:
+            self.camera.stop()
+            raise
 
-        print(f'{self.namespace} Transition {type(self.state)} -> {type(new_state)}')
-        self.state.on_exit(to_state=new_state, **kwargs)
-        new_state.on_enter(from_state=self.state, **kwargs)
-        self.state = new_state
-
-        return True
-
-    def clear_leds(self):
-        self.mast.pending_command.led.color = 'transparent'
-
-    def wait_for_shutdown(self, timeout_s):
-        self.mast.stop()
-        self.camera.stop()
-        time.sleep(timeout_s)
-
-        if self.mast.running:
-            print("Warning: base did not shutdown cleanly")
-
-    def start_logging(self):
-        self.mast.group.start_log("logs", mkdirs=True)
-
-    def cycle_log(self):
-        self.mast.group.stop_log()
-        self.mast.group.start_log("logs", mkdirs=True)
-
-    def on_packet_loss(self):
-        print('WARNING: Failed to get next feedback!!!')
-
-    def on_mast_update(self):
-        if isinstance(self.state, self.exit_state):
-            return True
-
-        if self.mast.m_stopped:
-            if not isinstance(self.state, self.fault_state):
-                self.transition_to(self.fault_state(self))
-            return True
-
-        # Transition to disconnected if no mobile update recieved
-        if not isinstance(self.state, CameraMastDisconnectedState):
-            if (time.time() - self.last_cmd_t) > 1.0:
-                self.transition_to(CameraMastDisconnectedState(self))
-                return True
-
-        self.state.update()
-        return True
+    def stop(self):
+        super().stop()
+        if self.camera.running:
+            self.camera.stop()
 
 
-def parse_mobile_feedback(m: MobileIO):
-    if not m.update(0.0):
+def create_mast_controller(cfg: hebi.config.HebiConfig, lookup: hebi.Lookup) -> MastController:
+    """Find the mast and its camera. ``cfg.user_data`` gives ``camera_family`` and ``home_position``. Starts nothing."""
+    mast = CameraMast.from_config(cfg, lookup)
+    camera = HebiCamera.from_family(required_user_data(cfg, "camera_family"), lookup)
+    return MastController(mast, camera, required_user_data(cfg, "home_position"))
+
+
+def parse_mobile_feedback(m: MobileIO, timeout_ms: float = 100.0):
+    if not m.update(timeout_ms):
         return None
 
     # Update Camera zoom/lights
@@ -277,22 +227,19 @@ def parse_mobile_feedback(m: MobileIO):
 
 
 if __name__ == "__main__":
+    config_dir = Path(__file__).absolute().parent / 'config'
+    parser = config_arg_parser("Pan/tilt camera mast driven from a Mobile IO", config_dir)
+    add_config_argument(parser, "config", "Mast config, e.g. pan_tilt_mast.cfg.yaml")
+    args = parser.parse_args()
+    cfg = load_config(args.config, config_dir)
+    family = cfg.families[0]
     lookup = hebi.Lookup()
 
-    # Setup Camera Pan/Tilt
-    family = "Mast"
-    module_names = ['J1_pan', 'J2_tilt']
-
-    group = lookup.get_group_from_names(family, module_names, timeout_ms=2000)
-    while group is None:
-        print('Looking for pan/tilt modules...')
-        group = lookup.get_group_from_names(family, module_names, timeout_ms=1000)
-
-    mast = CameraMast(group)
-    camera = HebiCamera.from_family('HEBI')
+    # Find all hardware before anything starts moving
+    mast_control = create_mast_controller(cfg, lookup)
+    camera = mast_control.camera
     camera.set_overlay_text('HEBI Mast Control Demo')
 
-    # Setup MobileIO
     print('Looking for Mobile IO...')
     m = create_mobile_io(lookup, family)
     while m is None:
@@ -301,20 +248,18 @@ if __name__ == "__main__":
             time.sleep(1)
             m = create_mobile_io(lookup, family)
         except KeyboardInterrupt:
-            exit(0)
+            sys.exit(0)
 
     m.update()
-    m.send_layout(layout_file=str(Path(__file__).parent / 'config' / 'layouts' / 'CameraMastControl.json'))
-
-    mast_control = MastController(mast, camera, CameraMastStartupState, CameraMastFaultState, CameraMastExitState)
+    m.send_layout(layout_file=str(config_dir / 'layouts' / 'CameraMastControl.json'))
 
     #######################
     ## Main Control Loop ##
     #######################
 
+    mast_control.start()
     try:
         while mast_control.running:
-            t = time.time()
             inputs = parse_mobile_feedback(m)
             if inputs:
                 if m.get_button_state(8):
@@ -322,7 +267,7 @@ if __name__ == "__main__":
                 mast_control.receive_inputs(inputs)
     except KeyboardInterrupt:
         pass
-
-    print('Quitting')
-    camera.clear_overlay_text()
-    mast_control.wait_for_shutdown(2)
+    finally:
+        print('Quitting')
+        mast_control.stop()
+        camera.clear_overlay_text()
