@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum, auto
+import threading
 from time import time
 
 from kits.tready.treaded_base import (
@@ -57,14 +58,25 @@ class MobileIOUpdater:
         self.voltage = 0
         self.voltage_update_time = 0.0
         self.active_parser = None
+        self._last_torque_labels = None
+        # The handlers below run on the base's control thread. They queue their Mobile IO calls,
+        # and parse_mobile_io_feedback() makes them on the main thread.
+        self._queue_lock = threading.Lock()
+        self._queued_calls = []
+
+    def _queue(self, fn, *args, **kwargs):
+        with self._queue_lock:
+            self._queued_calls.append((fn, args, kwargs))
+
+    def _switch_layout(self, state_cls):
+        print(f'Sending layout to Mobile IO: "{self.layouts[state_cls]}"')
+        self.m.send_layout(layout_file=str(self.layouts[state_cls]))
+        self.active_parser = self.parsers[state_cls]
 
     # Runs when base changes state
     def base_transition_handler(self, controller: TreadedBaseController, new_state: ControllerState):
         if isinstance(new_state, tuple(self.layouts.keys())):
-            state_cls = type(new_state)
-            print(f'Sending layout to Mobile IO: "{self.layouts[state_cls]}"')
-            self.m.send_layout(layout_file=str(self.layouts[state_cls]))
-            self.active_parser = self.parsers[state_cls]
+            self._queue(self._switch_layout, type(new_state))
 
         match new_state:
             case TreadyHomingState():
@@ -115,17 +127,23 @@ class MobileIOUpdater:
             msg += f"\nBase: {self.base_msg}"
 
         if msg != self.last_msg:
-            set_mobile_io_instructions(self.m, msg, self.color)
+            self._queue(set_mobile_io_instructions, self.m, msg, self.color)
 
         self.last_msg = msg
 
     # Updates axis labels for torque mode sliders
     def update_torque_mode(self, controller: TreadedBaseController, state: ControllerState):
 
+        # Compare with the labels last sent: torque_labels_changed is set per input on the main thread,
+        # so two inputs between control ticks would hide a change
         if isinstance(state, TreadyCompliantFlippersState):
-            if state.torque_labels_changed:
-                for i, label in enumerate(state.torque_labels):
-                    self.m.set_axis_label(i + 3, label, blocking=False)
+            labels = list(state.torque_labels)
+            if labels != self._last_torque_labels:
+                self._last_torque_labels = labels
+                for i, label in enumerate(labels):
+                    self._queue(self.m.set_axis_label, i + 3, label, blocking=False)
+        else:
+            self._last_torque_labels = None
 
     # Updates the base startup message
     def update_startup_msg_base(self, controller: TreadedBaseController, state: ControllerState):
@@ -145,6 +163,10 @@ class MobileIOUpdater:
             self.needs_update()
 
     def parse_mobile_io_feedback(self, m: MobileIO, timeout_ms=0.0):
+        with self._queue_lock:
+            calls, self._queued_calls = self._queued_calls, []
+        for fn, args, kwargs in calls:
+            fn(*args, **kwargs)
 
         if m.update(timeout_ms):
             if self.active_parser is not None:
