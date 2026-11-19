@@ -58,6 +58,9 @@ class MobileIOUpdater:
         ``None`` keeps the current UI and only switches the parser.
     """
 
+    CHARGE_NOW_VOLTAGE = 31.0  # [V]
+    LOW_BATTERY_VOLTAGE = 32.0  # [V]
+
     def __init__(
         self,
         mobile_io: MobileIO,
@@ -199,7 +202,13 @@ class MobileIOUpdater:
         with self._lock:
             mode, self._pending_mode = self._pending_mode, None
             labels, self._pending_axis_labels = self._pending_axis_labels, {}
-            msg = f"Battery: {self.voltage:.2f}V"
+            # voltage is 0 until the first reading, which isn't a low battery
+            if 0 < self.voltage < self.CHARGE_NOW_VOLTAGE:
+                msg = f"CHARGE NOW! {self.voltage:.2f}V"
+            elif 0 < self.voltage < self.LOW_BATTERY_VOLTAGE:
+                msg = f"Low Battery: {self.voltage:.2f}V"
+            else:
+                msg = f"Battery: {self.voltage:.2f}V"
             if self.base_msg != "":
                 msg += f"\nBase: {self.base_msg}"
             if self.payload_msg != "":
