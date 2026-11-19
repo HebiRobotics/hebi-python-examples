@@ -1,249 +1,197 @@
-import os
-from enum import Enum, auto
-import numpy as np
-from scipy.spatial.transform import Rotation as R
-from time import time, sleep
-import argparse
+"""Jog an arm's end effector with Mobile IO joysticks.
+
+States: Startup -> Teleop, and Homing on the home button. The arm holds where
+it is on startup and only moves on user input. Input loss holds position and
+resumes in Teleop (re-seeded from the current pose).
+
+    python -m kits.arms.joystick_control_sm A-2580-06G.cfg.yaml [--no-gripper]
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from time import sleep
+from typing import TYPE_CHECKING
 
 import hebi
+import numpy as np
 from hebi.util import create_mobile_io
+from scipy.spatial.transform import Rotation as R
 
-import typing
+from kits.common.config import add_config_argument, config_arg_parser, load_config, required_user_data
+from kits.common.state_machine import ControllerState
 
-if typing.TYPE_CHECKING:
-    from typing import Sequence, Optional
-    from numpy.typing import NDArray
+from .arm_controller import CONFIG_DIR, ArmController, ArmExitState, ArmFaultState, find_gripper, user_data_value
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from hebi._internal.mobile_io import MobileIO
+    from hebi.arm import Arm, Gripper
+    from numpy.typing import NDArray
 
 
-class ArmControlState(Enum):
-    STARTUP = auto()
-    HOMING = auto()
-    TELEOP = auto()
-    DISCONNECTED = auto()
-    EXIT = auto()
-
-
+@dataclass
 class ArmJoystickInputs:
-    def __init__(self, home: bool, delta_xyz, delta_rot_xyz, gripper_closed: bool):
-        self.home = home
-        self.delta_xyz: 'NDArray[np.float64]' = np.array(delta_xyz, dtype=np.float64)
-        self.delta_rot_xyz: 'NDArray[np.float64]' = np.array(delta_rot_xyz, dtype=np.float64)
-        self.gripper_closed = gripper_closed
+    home: bool
+    delta_xyz: NDArray[np.float64]
+    delta_rot_xyz: NDArray[np.float64]
+    gripper_closed: bool = False
+
+    def __post_init__(self):
+        self.delta_xyz = np.asarray(self.delta_xyz, dtype=np.float64)
+        self.delta_rot_xyz = np.asarray(self.delta_rot_xyz, dtype=np.float64)
+
+    @classmethod
+    def idle(cls) -> ArmJoystickInputs:
+        """No motion; used while another part of the robot is starting up."""
+        return cls(home=False, delta_xyz=np.zeros(3), delta_rot_xyz=np.zeros(3))
 
 
-class ArmJoystickControl:
+class _ResumeToTeleop:
+    controller: ArmJoystickController
+
+    def resume_state(self):
+        return JoystickTeleopState(self.controller)
+
+
+@dataclass(eq=False)
+class JoystickStartupState(ControllerState["ArmJoystickController"]):
+    # Never move on startup: the arm may be in an unusual pose after a crash.
+    def update(self, t_now, **kwargs):
+        return JoystickTeleopState(self.controller)
+
+
+@dataclass(eq=False)
+class JoystickHomingState(_ResumeToTeleop, ControllerState["ArmJoystickController"]):
+    led_color = "magenta"
+
+    def on_enter(self, from_state, **kwargs):
+        self.controller.move_to(self.controller.arm_home, self.controller.homing_time)
+
+    def update(self, t_now, **kwargs):
+        if self.controller.arm.at_goal:
+            return JoystickTeleopState(self.controller)
+        return None
+
+    def receive_inputs(self, t_now, inputs: ArmJoystickInputs, **kwargs):
+        self.controller.set_gripper(inputs.gripper_closed)
+
+
+@dataclass(eq=False)
+class JoystickTeleopState(_ResumeToTeleop, ControllerState["ArmJoystickController"]):
+    joint_target: NDArray[np.float64] = field(init=False)
+    # Set by receive_inputs; update() returns it (inputs never transition directly).
+    requested: ControllerState | None = field(default=None, init=False)
+
+    def on_enter(self, from_state, **kwargs):
+        # A copy, never a view of the feedback buffer.
+        self.joint_target = self.controller.current_position()
+        self.controller.hold_position()
+
+    def receive_inputs(self, t_now, inputs: ArmJoystickInputs, **kwargs):
+        self.controller.set_gripper(inputs.gripper_closed)
+        if self.requested is not None:
+            return
+
+        if inputs.home:
+            self.requested = JoystickHomingState(self.controller)
+            return
+
+        if (target := self.compute_target(inputs)) is not None:
+            self.joint_target = target
+            self.controller.move_to(self.joint_target, self.controller.goal_time)
+
+    def update(self, t_now, **kwargs):
+        requested, self.requested = self.requested, None
+        return requested
+
+    def compute_target(self, inputs: ArmJoystickInputs) -> NDArray[np.float64] | None:
+        controller = self.controller
+        pos_curr = controller.current_position()
+
+        xyz_curr = np.empty(3)
+        rot_curr = np.empty((3, 3))
+        try:
+            controller.arm.FK(pos_curr, xyz_out=xyz_curr, orientation_out=rot_curr)
+        except ValueError:
+            print(f'{controller.prefix}Cannot compute FK at {pos_curr}, skipping sample')
+            return None
+
+        xyz_target = xyz_curr + inputs.delta_xyz
+
+        r_x = R.from_euler('x', inputs.delta_rot_xyz[0])
+        r_y = R.from_euler('y', inputs.delta_rot_xyz[1])
+        r_z = R.from_euler('z', inputs.delta_rot_xyz[2])
+        wrist_rot = R.from_euler('z', -pos_curr[5])
+        rot_target = R.from_matrix(rot_curr) * wrist_rot * r_x * r_y * r_z * wrist_rot.inv()
+
+        # Keep the IK seed on one side of the shoulder flip.
+        seed = self.joint_target.copy()
+        if seed[2] < controller.shoulder_flip_angle:
+            seed[2] = controller.shoulder_flip_angle + abs(seed[2] - controller.shoulder_flip_angle)
+
+        target = controller.arm.ik_target_xyz_so3(seed, xyz_target, rot_target.as_matrix())
+
+        limits = controller.joint_limits
+        if np.any(target < limits[:, 0]) or np.any(target > limits[:, 1]):
+            return None
+        return target
+
+
+class ArmJoystickController(ArmController[ArmJoystickInputs]):
+    """Arm jogged in Cartesian space by joystick deltas.
+
+    :param goal_time: Duration of each jog goal. Every input re-plans toward
+        ``current pose + delta``, so this sets how aggressively the arm chases
+        the joystick. Tune on hardware.
+    """
+
     def __init__(
         self,
-        arm: hebi.arm.Arm,
-        home_pose: 'Sequence[float] | NDArray[np.float64]',
+        arm: Arm,
+        home_position: Sequence[float] | NDArray[np.float64],
+        gripper: Gripper | None = None,
+        *,
         homing_time: float = 5.0,
-        shoulder_flip_angle=-np.pi / 2,
-        joint_limits=None,
-        use_gripper=False,
+        goal_time: float = 0.5,
+        shoulder_flip_angle: float = -np.pi / 2,
+        joint_limits: NDArray[np.float64] | None = None,
+        name: str = "Arm",
+        input_timeout: float | None = 1.0,
     ):
-
-        self.namespace = ''
-
-        self.state = ArmControlState.STARTUP
-        self.arm = arm
-        self.use_gripper = use_gripper
-
-        self.arm_home = home_pose
+        super().__init__(arm, JoystickStartupState, ArmFaultState, ArmExitState, gripper=gripper, name=name, input_timeout=input_timeout)
+        self.arm_home = np.asarray(home_position, dtype=np.float64)
         self.homing_time = homing_time
+        self.goal_time = goal_time
         # TODO: GENERALIZE THIS
         self.shoulder_flip_angle = shoulder_flip_angle
-        if joint_limits is not None:
-            self.joint_limits = joint_limits
-        else:
-            self.joint_limits = np.empty((arm.size, 2))
-            self.joint_limits[:, 0] = -np.inf
-            self.joint_limits[:, 1] = np.inf
+        if joint_limits is None:
+            joint_limits = np.column_stack([np.full(arm.size, -np.inf), np.full(arm.size, np.inf)])
+        self.joint_limits = np.asarray(joint_limits, dtype=np.float64)
 
-        self.xyz_curr = np.empty(3)
-        self.rot_curr = np.empty((3, 3))
-        # Copies: joint_target is modified in place, and must not alias the feedback buffer
-        self.joint_target = np.array(arm.last_feedback.position_command)
-        if np.any(np.isnan(self.joint_target)):
-            self.joint_target = np.array(arm.last_feedback.position)
-
-        self.last_cmd_t = time()
-        # Feedback buffers are empty (NaN or zeros) until the modules first answer: don't command from them
-        self.have_feedback = False
-
-    @property
-    def running(self):
-        return self.state is not self.state.EXIT
-
-    def send(self):
-        self.arm.send()
-
-    def update(self, t_now: float, demo_input: 'Optional[ArmJoystickInputs]' = None):
-        if self.arm.update():
-            self.have_feedback = True
-
-        if self.state is self.state.EXIT:
-            return
-
-        if demo_input is None:
-            if t_now - self.last_cmd_t > 1.0 and self.state is not self.state.DISCONNECTED:
-                print(self.namespace + "mobileIO timeout, disabling motion")
-                self.transition_to(t_now, self.state.DISCONNECTED)
-            return
-
-        self.last_cmd_t = t_now
-
-        if self.state is self.state.DISCONNECTED:
-            self.last_cmd_t = t_now
-            self.transition_to(t_now, self.state.TELEOP)
-
-        elif self.state is self.state.HOMING:
-            if self.arm.at_goal:
-                self.joint_target = np.array(self.arm.last_feedback.position_command)
-                self.transition_to(t_now, self.state.TELEOP)
-
-        elif self.state is self.state.TELEOP:
-            if demo_input.home:
-                self.transition_to(t_now, self.state.HOMING)
-                return
-
-            arm_goal = self.compute_arm_goal(demo_input)
-            if arm_goal is None:
-                arm_goal = self.hold_position_goal()
-
-            self.arm.set_goal(arm_goal)
-
-            if self.use_gripper:
-                gripper_closed = self.arm.end_effector.state == 1.0
-                if demo_input.gripper_closed and not gripper_closed:
-                    self.arm.end_effector.close()
-                elif not demo_input.gripper_closed and gripper_closed:
-                    self.arm.end_effector.open()
-
-        elif self.state is self.state.STARTUP:
-            # Wait for real feedback: holding at an empty buffer's position drives the arm somewhere else
-            if not self.have_feedback:
-                return
-
-            # clear any existing color on the arm from before
-            self.arm.pending_command.led.color = "transparent"
-            # Hold where the arm is; homing only happens on the home input
-            goal = self.hold_position_goal()
-            self.joint_target = self._current_position()
-            self.arm.set_goal(goal)
-            self.transition_to(t_now, self.state.TELEOP)
-
-    def transition_to(self, t_now: float, state: ArmControlState):
-        # self transitions are noop
-        if state == self.state:
-            return
-
-        if state is self.state.HOMING:
-            print(self.namespace + "TRANSITIONING TO HOMING")
-            self.arm.pending_command.led.color = "magenta"
-            g = hebi.arm.Goal(self.arm.size)
-            g.add_waypoint(t=self.homing_time, position=self.arm_home)
-            self.arm.set_goal(g)
-
-        elif state is self.state.TELEOP:
-            print(self.namespace + "TRANSITIONING TO TELEOP")
-            self.arm.pending_command.led.color = "transparent"
-
-        elif state is self.state.DISCONNECTED:
-            self.arm.set_goal(self.hold_position_goal())
-            self.arm.pending_command.led.color = "blue"
-            print(self.namespace + "TRANSITIONING TO DISCONNECTED")
-
-        elif state is self.state.EXIT:
-            print(self.namespace + "TRANSITIONING TO EXIT")
-
-        self.state = state
-
-    def _current_position(self):
-        pos = np.array(self.arm.last_feedback.position_command)
-        if np.any(np.isnan(pos)):
-            pos = np.array(self.arm.last_feedback.position)
-        return pos
-
-    def hold_position_goal(self):
-        hold = self._current_position()
-        g = hebi.arm.Goal(self.arm.size)
-        g.add_waypoint(t=0.25, position=hold, velocity=np.zeros(self.arm.size))
-        return g
-
-    def compute_arm_goal(self, arm_inputs: ArmJoystickInputs):
-        arm_goal = hebi.arm.Goal(self.arm.size)
-        pos_curr = self.arm.last_feedback.position_command
-
-        if np.any(np.isnan(pos_curr)):
-            print(self.namespace + 'No position command, skipping goal')
-            return None
-
-        if not np.all(np.isfinite(pos_curr)):
-            print(self.namespace + 'No valid arm feedback yet, skipping goal')
-            return None
-
-        try:
-            self.arm.FK(pos_curr, xyz_out=self.xyz_curr, orientation_out=self.rot_curr)
-        except ValueError:
-            print(self.namespace + f'ERROR: Cannot compute FK with input position: {pos_curr}')
-            exit()
-
-        # joint_target can be invalid if it was read before the first feedback arrived: resync it
-        if not np.all(np.isfinite(self.joint_target)):
-            self.joint_target = np.array(pos_curr)
-
-        arm_xyz_target = self.xyz_curr + arm_inputs.delta_xyz
-        if not (np.all(np.isfinite(arm_xyz_target)) and np.all(np.isfinite(arm_inputs.delta_rot_xyz))):
-            print(self.namespace + f'Non-finite target (xyz={arm_xyz_target}, rot={arm_inputs.delta_rot_xyz}), skipping goal')
-            return None
-
-        r_x = R.from_euler('x', arm_inputs.delta_rot_xyz[0])
-        r_y = R.from_euler('y', arm_inputs.delta_rot_xyz[1])
-        r_z = R.from_euler('z', arm_inputs.delta_rot_xyz[2])
-        wrist_rot = R.from_euler('z', -pos_curr[5])
-        arm_rot_target = R.from_matrix(self.rot_curr) * wrist_rot * r_x * r_y * r_z * wrist_rot.inv()
-
-        # curr_seed_ik = pos_curr
-        # curr_seed_ik[2] = abs(curr_seed_ik[2])
-
-        if self.joint_target[2] < self.shoulder_flip_angle:
-            diff = abs(self.joint_target[2] - self.shoulder_flip_angle)
-            self.joint_target[2] = self.shoulder_flip_angle + diff
-
-        try:
-            joint_target = self.arm.ik_target_xyz_so3(self.joint_target, arm_xyz_target, arm_rot_target.as_matrix())
-        except Exception as e:
-            print(self.namespace + f'IK failed ({e}), holding position')
-            return None
-
-        out_of_bounds = False
-        for idx, joint in enumerate(joint_target):
-            if joint < self.joint_limits[idx, 0] or joint > self.joint_limits[idx, 1]:
-                out_of_bounds = True
-
-        if not out_of_bounds:
-            self.joint_target = joint_target
-
-        arm_goal.add_waypoint(t=0.5, position=self.joint_target)
-        return arm_goal
-
-    def stop(self):
-        self.transition_to(time(), self.state.EXIT)
+    @classmethod
+    def from_config(cls, arm: Arm, cfg: hebi.config.HebiConfig, gripper: Gripper | None = None, **kwargs):
+        """Read ``home_position`` (required) and homing time from ``cfg.user_data``; keyword arguments override."""
+        params = {
+            "home_position": required_user_data(cfg, "home_position"),
+            "homing_time": float(user_data_value(cfg, "homing_time", "homing_duration", default=5.0)),
+        }
+        params.update(kwargs)
+        return cls(arm, gripper=gripper, **params)
 
 
-def setup_mobile_io(m: 'MobileIO'):
+def setup_mobile_io(m: MobileIO):
     m.resetUI()
     m.set_button_label(1, '⟲', blocking=False)
     m.set_button_label(2, '', blocking=False)
     m.set_button_label(3, '', blocking=False)
     m.set_button_label(4, 'Quit', blocking=False)
-    m.set_button_label(6, '\u21e7', blocking=False)
+    m.set_button_label(6, '⇧', blocking=False)
     m.set_button_label(7, 'grip', blocking=False)
     m.set_button_mode(7, 1)
-    m.set_button_label(8, '\u21e9', blocking=False)
+    m.set_button_label(8, '⇩', blocking=False)
 
-    m.set_axis_label(3, '', blocking=False)
     m.set_axis_label(4, '', blocking=False)
     m.set_axis_label(5, '', blocking=False)
     m.set_axis_label(6, '', blocking=False)
@@ -256,14 +204,9 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_snap(3, 0)
 
 
-def parse_mobile_feedback(m: 'MobileIO'):
-    if not m.update(0.0):
+def parse_mobile_feedback(m: MobileIO, timeout_ms: float = 100.0):
+    if not m.update(timeout_ms):
         return None
-
-    home = m.get_button_state(1)
-
-    arm_dx = 0.25 * m.get_axis_state(8)
-    arm_dy = -0.25 * m.get_axis_state(7)
 
     arm_dz = 0.0
     if m.get_button_state(6):
@@ -271,69 +214,36 @@ def parse_mobile_feedback(m: 'MobileIO'):
     elif m.get_button_state(8):
         arm_dz = -0.1
 
-    arm_drx = 0.5 * m.get_axis_state(1)
-    arm_dry = -0.5 * m.get_axis_state(2)
-    arm_drz = 0.75 * m.get_axis_state(3)
-
-    gripper_closed = m.get_button_state(7)
-
-    arm_inputs = ArmJoystickInputs(home, [arm_dx, arm_dy, arm_dz], [arm_drx, arm_dry, arm_drz], gripper_closed=gripper_closed)
-
-    return arm_inputs
+    return ArmJoystickInputs(
+        home=bool(m.get_button_state(1)),
+        delta_xyz=[0.25 * m.get_axis_state(8), -0.25 * m.get_axis_state(7), arm_dz],
+        delta_rot_xyz=[0.5 * m.get_axis_state(1), -0.5 * m.get_axis_state(2), 0.75 * m.get_axis_state(3)],
+        gripper_closed=bool(m.get_button_state(7)),
+    )
 
 
 if __name__ == "__main__":
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Control a HEBI arm with joystick inputs')
-    parser.add_argument('--no-gripper', action='store_true', help='Disable gripper control')
+    parser = config_arg_parser('Control a HEBI arm with joystick inputs', CONFIG_DIR)
+    add_config_argument(parser, "config", "Arm config, e.g. A-2580-06G.cfg.yaml")
+    parser.add_argument('--no-gripper', action='store_true', help="Don't use the gripper the config declares")
     args = parser.parse_args()
+    cfg = load_config(args.config, CONFIG_DIR)
 
     lookup = hebi.Lookup()
     sleep(2)
 
-    # Arm setup
-    cfg = hebi.config.load_config('./config/A-2580-06.cfg.yaml')
+    # Find all hardware before anything starts moving
     arm = hebi.arm.create_from_config(cfg, lookup)
-    arm_family = cfg.families[0]
+    gripper = None if args.no_gripper else find_gripper(lookup, cfg)
 
-    # Check if the gripper is disabled
-    use_gripper = not args.no_gripper
-    if use_gripper:
-        root_dir = os.path.abspath(os.path.dirname(__file__))
-        gripper_family = arm_family
-        gripper_name = 'gripperSpool'
+    arm_control = ArmJoystickController.from_config(arm, cfg, gripper)
 
-        gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
-        while gripper_group is None:
-            print(f"Looking for gripper module {gripper_family} / {gripper_name} ...")
-            sleep(1)
-            gripper_group = lookup.get_group_from_names([gripper_family], [gripper_name])
-
-        gripper = hebi.arm.Gripper(gripper_group, -5, 1)
-        gripper_gains = os.path.join(root_dir, "config/gains/gripper_spool_gains.xml")
-        gripper.load_gains(gripper_gains)
-        arm.set_end_effector(gripper)
-
-    joint_limits = np.empty((7, 2))
-    joint_limits[:, 0] = -np.inf
-    joint_limits[:, 1] = np.inf
-
-    # base limits [-2, 2] (radians)
-    # joint_limits[0, :] = [-2.0, 2.0]
-    # shoulder limits [-2, inf]
-    # joint_limits[1, 0] = -2.0
-
-    arm_control = ArmJoystickControl(
-        arm, [0.0, 2.09, 2.09, 0.0, 1.57, 0.0], homing_time=3.0, joint_limits=joint_limits, use_gripper=use_gripper
-    )
-
-    # Setup MobileIO
     print('Looking for Mobile IO...')
-    m = create_mobile_io(lookup, arm_family)
+    m = create_mobile_io(lookup, cfg.families[0])
     while m is None:
         print('Waiting for Mobile IO device to come online...')
         sleep(1)
-        m = create_mobile_io(lookup, arm_family)
+        m = create_mobile_io(lookup, cfg.families[0])
 
     m.update()
     setup_mobile_io(m)
@@ -342,17 +252,16 @@ if __name__ == "__main__":
     ## Main Control Loop ##
     #######################
 
-    while arm_control.running:
-        t = time()
-        try:
+    arm_control.start()
+    try:
+        while arm_control.running:
             arm_inputs = parse_mobile_feedback(m)
-            arm_control.update(t, arm_inputs)
-
-            arm_control.send()
-        except KeyboardInterrupt:
-            arm_control.transition_to(t, ArmControlState.EXIT)
-            m.set_led_color('red')
-
-        if m.get_button_state(4):
-            arm_control.transition_to(t, ArmControlState.EXIT)
-            m.set_led_color('red')
+            if m.get_button_state(4):
+                break
+            if arm_inputs is not None:
+                arm_control.receive_inputs(arm_inputs)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        arm_control.stop()
+        m.set_led_color('red')

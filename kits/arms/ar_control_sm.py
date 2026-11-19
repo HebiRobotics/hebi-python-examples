@@ -1,34 +1,43 @@
-from enum import Enum, auto
-from dataclasses import dataclass
-from time import time, sleep
-import numpy as np
-from scipy.spatial.transform import Rotation as R
+"""Control an arm by moving a phone running Mobile IO (AR tracking).
+
+States: Startup -> Idle <-> Teleop, and Homing on the home button. The arm
+holds where it is on startup and only moves on user input. Unlock (lock
+button) in Idle to start tracking the phone; lock again to stop. Input loss
+holds position and resumes in Idle, so tracking always restarts from a fresh
+phone reference.
+
+    python -m kits.arms.ar_control_sm A-2580-06G.cfg.yaml
+"""
+
+from __future__ import annotations
+
+import sys
+from dataclasses import dataclass, field
+from time import sleep
+from typing import TYPE_CHECKING
 
 import hebi
+import numpy as np
 from hebi.util import create_mobile_io
+from scipy.spatial.transform import Rotation as R
 
-import typing
+from kits.common.config import add_config_argument, config_arg_parser, load_config, required_user_data
+from kits.common.state_machine import ControllerState
 
-if typing.TYPE_CHECKING:
-    from typing import Callable
-    from numpy.typing import NDArray
+from .arm_controller import CONFIG_DIR, ArmController, ArmExitState, ArmFaultState, find_gripper, user_data_value
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from hebi._internal.mobile_io import MobileIO
     from hebi.arm import Arm, Gripper
-
-
-class ArmControlState(Enum):
-    STARTUP = auto()
-    HOMING = auto()
-    IDLE = auto()
-    TELEOP = auto()
-    DISCONNECTED = auto()
-    EXIT = auto()
+    from numpy.typing import NDArray
 
 
 @dataclass(kw_only=True)
 class ArmMobileIOInputs:
-    phone_pos: 'NDArray[np.float32]'
-    phone_rot: 'NDArray[np.float64]'
+    phone_pos: NDArray[np.float32]
+    phone_rot: NDArray[np.float64]
     ar_scaling: float = 1.0
     lock_toggle: bool = False
     locked: bool = True
@@ -36,216 +45,169 @@ class ArmMobileIOInputs:
     home: bool = False
 
 
-class ArmMobileIOControl:
-    def __init__(
-        self,
-        arm: 'Arm',
-        gripper: 'Gripper | None' = None,
-        homing_time=5.0,
-        traj_duration=1.0,
-        xyz_scale: 'NDArray[np.float64]' = np.ones(3),
-    ):
+class _ResumeToIdle:
+    controller: ArmMobileIOController
 
-        self.namespace = ''
+    def resume_state(self):
+        return ARIdleState(self.controller)
 
-        self.state = ArmControlState.STARTUP
-        self.arm = arm
-        self.gripper = gripper
 
-        self.homing_time = homing_time
-        self.traj_duration = traj_duration
-        self.xyz_scale = xyz_scale
+@dataclass(eq=False)
+class ARStartupState(ControllerState["ArmMobileIOController"]):
+    # Never move on startup: the arm may be in an unusual pose after a crash.
+    def update(self, t_now, **kwargs):
+        return ARIdleState(self.controller)
 
-        self.arm_ik_seed = np.array([0.3, 1.2, 2.2, 2.9, -1.57, 0])
 
-        home_orientation = R.from_euler('z', np.pi / 2) * R.from_euler('x', np.pi)
-        self.set_arm_home(np.array([0.5, 0.0, 0.0]), home_orientation.as_matrix())
+@dataclass(eq=False)
+class ARHomingState(_ResumeToIdle, ControllerState["ArmMobileIOController"]):
+    led_color = "magenta"
 
-        self._transition_handlers: 'list[Callable[[ArmMobileIOControl, ArmControlState], None]]' = []
-        self.last_cmd_t = time()
-        # Feedback buffers are empty (NaN or zeros) until the modules first answer: don't command from them
-        self.have_feedback = False
+    def on_enter(self, from_state, **kwargs):
+        self.controller.move_to(self.controller.arm_home, self.controller.homing_time)
 
-    @property
-    def running(self):
-        return self.state is not self.state.EXIT
+    def update(self, t_now, **kwargs):
+        if self.controller.arm.at_goal:
+            return ARIdleState(self.controller)
+        return None
 
-    def set_arm_home(self, xyz, rot):
-        self.arm_xyz_home = xyz
-        self.arm_rot_home = rot
-        self.arm_home = self.arm.ik_target_xyz_so3(self.arm_ik_seed, xyz, rot)
+    def receive_inputs(self, t_now, inputs: ArmMobileIOInputs, **kwargs):
+        self.controller.set_gripper(inputs.gripper_closed)
 
-    def send(self):
-        self.arm.send()
-        if self.gripper:
-            self.gripper.send()
 
-    def update(self, t_now: float, arm_input: 'ArmMobileIOInputs | None'):
-        if self.arm.update():
-            self.have_feedback = True
+@dataclass(eq=False)
+class ARIdleState(_ResumeToIdle, ControllerState["ArmMobileIOController"]):
+    # Set by receive_inputs; update() returns it (inputs never transition directly).
+    requested: ControllerState | None = field(default=None, init=False)
 
-        if self.state is self.state.EXIT:
+    def on_enter(self, from_state, **kwargs):
+        self.controller.hold_position()
+
+    def receive_inputs(self, t_now, inputs: ArmMobileIOInputs, **kwargs):
+        self.controller.set_gripper(inputs.gripper_closed)
+        if self.requested is not None:
             return
 
-        if arm_input is None:
-            if self.state is not self.state.DISCONNECTED and t_now - self.last_cmd_t > 1.0:
-                print(self.namespace + "mobileIO timeout, disabling motion")
-                self.transition_to(t_now, self.state.DISCONNECTED)
+        if inputs.home:
+            self.requested = ARHomingState(self.controller)
+        elif inputs.lock_toggle and not inputs.locked:
+            teleop = ARTeleopState(self.controller)
+            teleop.set_reference(inputs, self.controller.current_position())
+            self.requested = teleop
+
+    def update(self, t_now, **kwargs):
+        requested, self.requested = self.requested, None
+        return requested
+
+
+@dataclass(eq=False)
+class ARTeleopState(_ResumeToIdle, ControllerState["ArmMobileIOController"]):
+    # Set by receive_inputs; update() returns it (inputs never transition directly).
+    requested: ControllerState | None = field(default=None, init=False)
+
+    # Phone pose when tracking started, and the arm pose it maps to.
+    phone_xyz_home: NDArray[np.float64] = field(init=False)
+    phone_rot_home: NDArray[np.float64] = field(init=False)
+    locked_xyz: NDArray[np.float64] = field(init=False)
+    locked_rot: NDArray[np.float64] = field(init=False)
+    locked_seed: NDArray[np.float64] = field(init=False)
+
+    def set_reference(self, inputs: ArmMobileIOInputs, arm_position: NDArray[np.float64]):
+        self.phone_xyz_home = np.array(inputs.phone_pos, dtype=np.float64)
+        self.phone_rot_home = inputs.phone_rot
+        self.locked_xyz = np.empty(3)
+        self.locked_rot = np.empty((3, 3))
+        self.controller.arm.FK(arm_position, xyz_out=self.locked_xyz, orientation_out=self.locked_rot)
+        self.locked_seed = arm_position.copy()
+
+    def receive_inputs(self, t_now, inputs: ArmMobileIOInputs, **kwargs):
+        self.controller.set_gripper(inputs.gripper_closed)
+        if self.requested is not None:
             return
 
-        # Reset the timeout
-        self.last_cmd_t = t_now
-        # Transition to teleop if mobileIO is reconnected
-        last_pos = self.arm.last_feedback.position_command
-        if np.any(np.isnan(last_pos)):
-            last_pos = self.arm.last_feedback.position
-        if self.state is self.state.DISCONNECTED:
-            self.last_cmd_t = t_now
-            print(self.namespace + 'Controller reconnected, demo continued.')
-            self.transition_to(t_now, self.state.IDLE)
+        if inputs.home:
+            self.requested = ARHomingState(self.controller)
+        elif inputs.lock_toggle and inputs.locked:
+            self.requested = ARIdleState(self.controller)
+        elif (joint_target := self.compute_target(inputs)) is not None:
+            self.controller.move_to(joint_target, self.controller.traj_duration)
 
-        # After startup, hold position; homing only happens on the home input
-        elif self.state is self.state.STARTUP:
-            # Command the current position so the arm doesn't float. Wait for real feedback first: holding at
-            # an empty buffer's position drives the arm somewhere else.
-            goal = self.hold_goal() if self.have_feedback else None
-            if goal is not None:
-                self.arm.set_goal(goal)
-                self.transition_to(t_now, self.state.IDLE)
+    def update(self, t_now, **kwargs):
+        requested, self.requested = self.requested, None
+        return requested
 
-        # If homing is complete, transition to teleop
-        elif self.state is self.state.HOMING:
-            if self.arm.at_goal:
-                self.transition_to(t_now, self.state.IDLE)
-
-        # Idle mode
-        elif self.state is self.state.IDLE:
-            if arm_input.home:
-                self.transition_to(t_now, self.state.HOMING)
-                return
-
-            if arm_input.lock_toggle and not arm_input.locked:
-                self.phone_xyz_home = arm_input.phone_pos
-                self.phone_rot_home = arm_input.phone_rot
-                self.set_locked_pose(last_pos)
-                self.transition_to(t_now, self.state.TELEOP)
-                return
-
-        # Teleop mode
-        elif self.state is self.state.TELEOP:
-            if arm_input.lock_toggle and arm_input.locked:
-                g = hebi.arm.Goal(self.arm.size)
-                g.add_waypoint(
-                    t=0.3,
-                    position=self.arm.last_feedback.position_command,
-                    velocity=np.zeros(g.dof_count),
-                    acceleration=np.zeros(g.dof_count),
-                )
-                self.arm.set_goal(g)
-                self.transition_to(t_now, self.state.IDLE)
-                return
-
-            if (arm_goal := self.compute_arm_goal(arm_input)) is not None:
-                self.arm.set_goal(arm_goal)
-
-        if self.gripper is not None:
-            gripper_closed = self.gripper.state == 1.0
-            if arm_input.gripper_closed and not gripper_closed:
-                print('Gripper Close')
-                self.gripper.close()
-            elif not arm_input.gripper_closed and gripper_closed:
-                print('Gripper Open')
-                self.gripper.open()
-
-    def transition_to(self, t_now: float, state: ArmControlState):
-        # self transitions are noop
-        if state == self.state:
-            return
-
-        if state is self.state.HOMING:
-            print(self.namespace + "TRANSITIONING TO HOMING")
-            self.arm.pending_command.led.color = "magenta"
-            self.home(self.homing_time)
-
-        elif state is self.state.IDLE:
-            print(self.namespace + "TRANSITIONING TO IDLE")
-            self.arm.pending_command.led.color = "transparent"
-
-        elif state is self.state.TELEOP:
-            print(self.namespace + "TRANSITIONING TO TELEOP")
-            self.arm.pending_command.led.color = "transparent"
-
-        elif state is self.state.DISCONNECTED:
-            print(self.namespace + "mobileIO timeout, disabling motion")
-            self.arm.pending_command.led.color = "blue"
-
-        elif state is self.state.EXIT:
-            print(self.namespace + "TRANSITIONING TO EXIT")
-
-        for handler in self._transition_handlers:
-            handler(self, state)
-        self.state = state
-
-    def set_locked_pose(self, position):
-        xyz = np.empty(3)
-        orientation = np.empty((3, 3))
-        self.arm.FK(position, xyz_out=xyz, orientation_out=orientation)
-
-        self.last_locked_seed = position.copy()
-        self.last_locked_xyz = xyz
-        self.last_locked_rot = orientation
-
-    def hold_goal(self):
-        """A goal at the current commanded position with zero velocity, stopping any motion in progress."""
-        hold = np.array(self.arm.last_feedback.position_command)
-        if np.any(np.isnan(hold)):
-            hold = np.array(self.arm.last_feedback.position)
-        if np.any(np.isnan(hold)):
+    def compute_target(self, inputs: ArmMobileIOInputs) -> NDArray[np.float64] | None:
+        if np.any(np.isnan(inputs.phone_pos)) or np.any(np.isnan(inputs.phone_rot)):
+            print(f'{self.controller.prefix}NaN in AR pose, skipping sample')
             return None
-        goal = hebi.arm.Goal(self.arm.size)
-        goal.add_waypoint(t=0.3, position=hold, velocity=np.zeros(self.arm.size))
-        return goal
 
-    def compute_arm_goal(self, arm_input: ArmMobileIOInputs):
-        if np.any(np.isnan(arm_input.phone_pos)) or np.any(np.isnan(arm_input.phone_rot)):
-            print(f'NaN detected in pose from AR device:\n{arm_input.phone_pos}\n{arm_input.phone_rot}')
-            return self.hold_goal()
-
-        phone_offset = arm_input.phone_pos - self.phone_xyz_home
+        phone_offset = inputs.phone_pos - self.phone_xyz_home
         rot_mat = self.phone_rot_home
-        arm_xyz_target = self.last_locked_xyz + arm_input.ar_scaling * self.xyz_scale * (rot_mat.T @ phone_offset)
-        arm_rot_target = rot_mat.T @ arm_input.phone_rot @ self.last_locked_rot
+        xyz_target = self.locked_xyz + inputs.ar_scaling * self.controller.xyz_scale * (rot_mat.T @ phone_offset)
+        rot_target = rot_mat.T @ inputs.phone_rot @ self.locked_rot
 
-        # if ar scaling is 0, move the home AR pose to current pose
-        # this keeps the arm from driving to some weird offset when scaling
-        # is turned back up by the user in the future
-        if arm_input.ar_scaling == 0.0:
-            self.phone_xyz_home = arm_input.phone_pos
+        # With scaling at 0, keep re-zeroing the phone reference so the arm doesn't
+        # jump to an accumulated offset when scaling is turned back up.
+        if inputs.ar_scaling == 0.0:
+            self.phone_xyz_home = np.array(inputs.phone_pos, dtype=np.float64)
 
         try:
-            joint_target = self.arm.ik_target_xyz_so3(self.last_locked_seed, arm_xyz_target, arm_rot_target)
-        except Exception as e:
-            # Don't let an IK failure stop the command stream (the arm would go limp): hold position
-            print(self.namespace + f'IK failed ({e}), holding position')
-            print(f'target xyz: {arm_xyz_target}')
-            print(f'seed: {self.last_locked_seed}')
-            print(f'target rot:\n{arm_rot_target}')
-            return self.hold_goal()
-
-        arm_goal = hebi.arm.Goal(self.arm.size)
-        arm_goal.add_waypoint(t=self.traj_duration, position=joint_target)
-        return arm_goal
-
-    def home(self, duration):
-        g = hebi.arm.Goal(self.arm.size)
-        g.add_waypoint(t=duration, position=self.arm_home)
-        self.arm.set_goal(g)
-
-    def stop(self):
-        self.transition_to(time(), self.state.EXIT)
+            return self.controller.arm.ik_target_xyz_so3(self.locked_seed, xyz_target, rot_target)
+        except Exception as e:  # noqa: BLE001 - skip one bad IK sample rather than end the demo
+            print(f'{self.controller.prefix}IK failed ({e}) for xyz={xyz_target}, skipping sample')
+            return None
 
 
-def setup_mobile_io(m: 'MobileIO'):
+class ArmMobileIOController(ArmController[ArmMobileIOInputs]):
+    """Arm teleoperated by a phone's AR pose. Homes to a joint-space ``home_position``."""
+
+    def __init__(
+        self,
+        arm: Arm,
+        home_position: Sequence[float] | NDArray[np.float64],
+        gripper: Gripper | None = None,
+        *,
+        homing_time: float = 5.0,
+        traj_duration: float = 1.0,
+        xyz_scale: NDArray[np.float64] | None = None,
+        name: str = "Arm",
+        input_timeout: float | None = 1.0,
+    ):
+        super().__init__(arm, ARStartupState, ArmFaultState, ArmExitState, gripper=gripper, name=name, input_timeout=input_timeout)
+        self.arm_home = np.asarray(home_position, dtype=np.float64)
+        self.homing_time = homing_time
+        self.traj_duration = traj_duration
+        self.xyz_scale = np.ones(3) if xyz_scale is None else np.asarray(xyz_scale, dtype=np.float64)
+
+    @classmethod
+    def from_config(cls, arm: Arm, cfg: hebi.config.HebiConfig, gripper: Gripper | None = None, **kwargs):
+        """Read ``home_position`` (required), homing time, trajectory duration and ``xyz_scale`` from ``cfg.user_data``.
+
+        Accepts both key spellings used in the kit configs
+        (``homing_duration``/``homing_time``, ``delay_time``/``trajectory_duration``).
+        Keyword arguments override the config.
+        """
+        params = {
+            "home_position": required_user_data(cfg, "home_position"),
+            "homing_time": float(user_data_value(cfg, "homing_time", "homing_duration", default=5.0)),
+            "traj_duration": float(user_data_value(cfg, "trajectory_duration", "delay_time", default=1.0)),
+            "xyz_scale": user_data_value(cfg, "xyz_scale", default=None),
+        }
+        params.update(kwargs)
+        return cls(arm, gripper=gripper, **params)
+
+
+def phone_rotation(m: MobileIO) -> NDArray[np.float64]:
+    try:
+        wxyz = m.orientation  # reorder by hand: from_quat(scalar_first=...) needs scipy >= 1.14
+        return R.from_quat([*wxyz[1:], wxyz[0]]).as_matrix()
+    except ValueError as e:
+        print(f'Error getting orientation as matrix: {e}\n{m.orientation}')
+        # Invalid pose: the arm holds position rather than tracking a made-up orientation
+        return np.full((3, 3), np.nan)
+
+
+def setup_mobile_io(m: MobileIO):
     m.set_button_label(1, '⟲')
     m.set_button_label(5, 'lock')
     m.set_button_mode(5, 1)
@@ -254,58 +216,47 @@ def setup_mobile_io(m: 'MobileIO'):
     m.set_button_label(8, '❌')
 
 
-def parse_mobile_feedback(m: 'MobileIO'):
-    if not m.update(0.0):
+def parse_mobile_feedback(m: MobileIO, timeout_ms: float = 100.0):
+    """Returns ``(quit, inputs)``; ``inputs`` is ``None`` if no new sample arrived."""
+    if not m.update(timeout_ms):
         return False, None
 
     if m.get_button_state(8):
         return True, None
 
-    user_home = m.get_button_state(1)
-
-    try:
-        wxyz = m.orientation
-        xyzw = [*wxyz[1:], wxyz[0]]
-        rotation = R.from_quat(xyzw).as_matrix()
-    except ValueError as e:
-        print(f'Error getting orientation as matrix: {e}\n{m.orientation}')
-        # Invalid pose: the arm holds position rather than tracking a made-up orientation
-        rotation = np.full((3, 3), np.nan)
-
+    # Button 5 is a toggle: on = unlocked (tracking), off = locked.
     arm_input = ArmMobileIOInputs(
-        home=user_home,
+        home=bool(m.get_button_state(1)),
         phone_pos=np.copy(m.position),
-        phone_rot=rotation,
+        phone_rot=phone_rotation(m),
         lock_toggle=m.get_button_diff(5) != 0,
         locked=m.get_button_state(5) == 0,
-        gripper_closed=m.get_button_state(7),
+        gripper_closed=bool(m.get_button_state(7)),
     )
-
     return False, arm_input
 
 
 if __name__ == "__main__":
+    parser = config_arg_parser("Control an arm by moving a phone (Mobile IO AR)", CONFIG_DIR)
+    add_config_argument(parser, "config", "Arm config, e.g. A-2580-06G.cfg.yaml")
+    args = parser.parse_args()
+    cfg = load_config(args.config, CONFIG_DIR)
     lookup = hebi.Lookup()
     sleep(2)
 
-    # Arm setup
-    cfg = hebi.config.load_config('./config/A-2580-06.cfg.yaml')
+    # Find all hardware before anything starts moving
     arm = hebi.arm.create_from_config(cfg, lookup)
+    arm_control = ArmMobileIOController.from_config(arm, cfg, find_gripper(lookup, cfg))
 
-    arm_control = ArmMobileIOControl(arm)
-
-    arm_family = cfg.families[0]
-
-    # Setup MobileIO
     print('Looking for mobileIO device...')
-    m = create_mobile_io(lookup, arm_family)
+    m = create_mobile_io(lookup, cfg.families[0])
     while m is None:
         try:
             print('Waiting for mobileIO device to come online...')
             sleep(1)
-            m = create_mobile_io(lookup, arm_family)
-        except KeyboardInterrupt as e:
-            exit()
+            m = create_mobile_io(lookup, cfg.families[0])
+        except KeyboardInterrupt:
+            sys.exit()
 
     print("mobileIO device found.")
     m.resetUI()
@@ -316,15 +267,15 @@ if __name__ == "__main__":
     ## Main Control Loop ##
     #######################
 
-    while arm_control.running:
-        t = time()
-        try:
+    arm_control.start()
+    try:
+        while arm_control.running:
             quit, arm_input = parse_mobile_feedback(m)
             if quit:
                 break
-            arm_control.update(t, arm_input)
-            arm_control.send()
-        except KeyboardInterrupt as e:
-            break
-
-    arm_control.stop()
+            if arm_input is not None:
+                arm_control.receive_inputs(arm_input)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        arm_control.stop()

@@ -1,0 +1,58 @@
+# Follower arm for ex_leader_follower (A-2085-06)
+# HEBI Robot Config file
+# See https://github.com/HebiRobotics/robot-config/blob/main/README.adoc
+
+# X-Series 6-DoF Arm
+version: 1.1
+families: ["Follower-Arm"]
+names: ["J1_base", "J2_shoulder", "J3_elbow", "J4_wrist1", "J5_wrist2", "J6_wrist3"]
+hrdf: "hrdf/A-2085-06.hrdf"
+
+gains:
+  default: "gains/A-2085-06.xml"
+
+feedback_frequency: 100 # [Hz]
+command_lifetime: 0.25 # [s]
+
+user_data:
+  mobile_io_family: "Arm"
+  # IK Seed positions for inverse kinematics
+  ik_seed_pos: [0.01, 1.0, 2.5, 1.5, -1.5, 0.01]
+
+  # Home Position
+  home_position: [0.0, 1.2, 1.8, 2.2, -1.57, 0.0]
+
+plugins:
+  - type: GravityCompensationEffort
+    name: gravComp
+    enabled: true
+    ramp_time: 5
+
+  - type: DynamicsCompensationEffort
+    name: dynamicsComp
+    enabled: true
+    ramp_time: 5
+
+  # An impedance controller adds a virtual spring to the
+  # end-effector and can improve tracking. It can be enabled
+  # by setting 'enabled' to true. The gains are in the form of
+  # [x, y, z, rx, ry, rz]. Setting gains of zero deactivates
+  # the corresponding degree of translation or rotation.
+  - type: ImpedanceController
+    name: impedanceController
+    enabled: false
+    ramp_time: 5
+    gains_in_end_effector_frame: true
+    kp: [50, 50, 50, 0, 0, 0] # (N/m) or (Nm/rad)
+    kd: [5, 5, 5, 0, 0, 0] # (N/(m/sec)) or (Nm/(rad/sec))
+    ki: [0, 0, 1, 0, 0, 0]
+    i_clamp: [10, 10, 10, 10, 10, 10] # max value
+
+  # Kits with a gas spring need to add a shoulder compensation torque.
+  # It should be around -7 Nm for most kits, but it may need to be tuned
+  # for your specific setup.
+  - type: EffortOffset
+    name: gasSpringCompensation
+    enabled: false # disabled by default as the default configuration ships without one
+    ramp_time: 5
+    offset: [0, -7, 0, 0, 0, 0]

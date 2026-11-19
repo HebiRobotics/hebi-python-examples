@@ -1,182 +1,260 @@
-import os
-from enum import Enum, auto
-import numpy as np
-from time import time, sleep
+"""Leader/follower: a compliant leader arm drives a follower arm, with optional haptic feedback.
+
+States: Startup -> Idle -> Aligning -> Follow, and Homing on the home button.
+Both arms hold where they are on startup; nothing moves until user input.
+"Follow" on the Mobile IO aligns the follower to the leader, then follows.
+Input loss holds the follower and resumes in Idle.
+
+Threads: the follower arm's thread runs the state machine. The leader arm runs
+its own thread; its update callback applies haptic feedback. Lock order is
+follower -> leader only: the leader's callback never takes the follower's
+lock, it reads a snapshot of follower positions instead.
+
+    python -m kits.arms.ex_leader_follower ex_leader_follower_leader.cfg.yaml ex_leader_follower.cfg.yaml
+
+Takes the leader arm's config, then the follower arm's. The follower config's
+``mobile_io_family`` (user_data) names the Mobile IO.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from time import sleep
+from typing import TYPE_CHECKING
 
 import hebi
+import numpy as np
 from hebi.util import create_mobile_io
 
-import typing
+from kits.common.config import add_config_argument, config_arg_parser, load_config, required_user_data
+from kits.common.state_machine import ControllerState
 
-if typing.TYPE_CHECKING:
-    from typing import Sequence, Optional
-    import numpy.typing as npt
+from .arm_controller import CONFIG_DIR, ArmController, ArmExitState, ArmFaultState
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from hebi._internal.mobile_io import MobileIO
+    from hebi.arm import Arm
+    from numpy.typing import NDArray
 
 
-class FollowerControlState(Enum):
-    STARTUP = auto()
-    HOMING = auto()
-    ALIGNING = auto()
-    IDLE = auto()
-    FOLLOW = auto()
-    DISCONNECTED = auto()
-    EXIT = auto()
+DEFAULT_HAPTIC_GAINS = np.array([30, 25, 20, 10, 3, 2]) * 10.0
 
 
+@dataclass
 class LeaderFollowerInputs:
-    def __init__(self, home: bool = False, follow: bool = False, haptic_fbk: bool = False):
-        self.home = home
-        self.follow = follow
-        self.haptic_fbk = haptic_fbk
+    home: bool = False
+    follow: bool = False
+    haptic_fbk: bool = False
 
 
-class LeaderFollowerControl:
+class _ResumeToIdle:
+    controller: LeaderFollowerController
+
+    def resume_state(self):
+        return LFIdleState(self.controller)
+
+
+@dataclass(eq=False)
+class LFStartupState(ControllerState["LeaderFollowerController"]):
+    # Never move on startup: hold both arms where they are (Idle holds the follower).
+    def update(self, t_now, **kwargs):
+        c = self.controller
+        with c.leader.lock:
+            c.hold_position(manager=c.leader)
+        return LFIdleState(c)
+
+
+@dataclass(eq=False)
+class LFHomingState(_ResumeToIdle, ControllerState["LeaderFollowerController"]):
+    """Drive both leader and follower to the home pose."""
+
+    def on_enter(self, from_state, **kwargs):
+        c = self.controller
+        c.move_to(c.arm_home, c.homing_time)
+        with c.leader.lock:
+            goal = hebi.arm.Goal(c.leader.size)
+            goal.add_waypoint(t=c.homing_time, position=c.arm_home)
+            c.leader.set_goal(goal)
+
+    def update(self, t_now, **kwargs):
+        if self.controller.arm.at_goal:
+            return LFIdleState(self.controller)
+        return None
+
+
+@dataclass(eq=False)
+class LFIdleState(_ResumeToIdle, ControllerState["LeaderFollowerController"]):
+    # Set by receive_inputs; update() returns it (inputs never transition directly).
+    requested: ControllerState | None = field(default=None, init=False)
+
+    def on_enter(self, from_state, **kwargs):
+        self.controller.hold_position()
+
+    def receive_inputs(self, t_now, inputs: LeaderFollowerInputs, **kwargs):
+        if self.requested is not None:
+            return
+        if inputs.home:
+            self.requested = LFHomingState(self.controller)
+        elif inputs.follow:
+            self.requested = LFAligningState(self.controller)
+
+    def update(self, t_now, **kwargs):
+        requested, self.requested = self.requested, None
+        return requested
+
+
+@dataclass(eq=False)
+class LFAligningState(_ResumeToIdle, ControllerState["LeaderFollowerController"]):
+    """Move the follower to the leader's current pose before following."""
+
+    goal_set: bool = False
+    # Set by receive_inputs; update() returns it (inputs never transition directly).
+    requested: ControllerState | None = field(default=None, init=False)
+
+    def update(self, t_now, **kwargs):
+        if self.requested is not None:
+            requested, self.requested = self.requested, None
+            return requested
+        c = self.controller
+        if not self.goal_set:
+            # Set the goal here, not in on_enter: on_enter may not change state.
+            if c.leader_position is None:
+                print(f"{c.prefix}No leader feedback yet, staying idle")
+                return LFIdleState(c)
+            c.move_to(c.leader_position, c.homing_time)
+            self.goal_set = True
+        elif c.arm.at_goal:
+            return LFFollowState(c)
+        return None
+
+    def receive_inputs(self, t_now, inputs: LeaderFollowerInputs, **kwargs):
+        if self.requested is not None:
+            return
+        if inputs.home:
+            self.requested = LFHomingState(self.controller)
+        elif not inputs.follow:
+            self.requested = LFIdleState(self.controller)
+
+
+@dataclass(eq=False)
+class LFFollowState(_ResumeToIdle, ControllerState["LeaderFollowerController"]):
+    last_good_position: NDArray[np.float64] | None = None
+    last_good_velocity: NDArray[np.float64] | None = None
+    # Set by receive_inputs; update() returns it (inputs never transition directly).
+    requested: ControllerState | None = field(default=None, init=False)
+
+    def on_enter(self, from_state, **kwargs):
+        c = self.controller
+        # Leader goes compliant to serve as the input device; the follower is
+        # commanded directly from leader feedback in update().
+        with c.leader.lock:
+            c.leader.cancel_goal()
+        c.arm.cancel_goal()
+
+    def update(self, t_now, **kwargs):
+        if self.requested is not None:
+            requested, self.requested = self.requested, None
+            return requested
+        c = self.controller
+        pos, vel = c.leader_position, c.leader_velocity
+        if pos is not None and not np.any(np.isnan(pos)):
+            self.last_good_position, self.last_good_velocity = pos, vel
+        elif self.last_good_position is not None:
+            # Bad leader sample: hold the last good pose rather than command NaN (limp).
+            pos, vel = self.last_good_position, np.zeros_like(self.last_good_position)
+        else:
+            # No good leader sample yet: hold where the follower is.
+            pos, vel = c.current_position(), np.zeros(c.arm.size)
+        c.arm.pending_command.position = pos
+        c.arm.pending_command.velocity = vel
+        # The mirror plugin already ran this tick with the old command; re-run it.
+        if mirror := c.arm.get_plugin_by_type(hebi.arm.DoubledJointMirror):
+            mirror.update(c.arm, 0)
+        return None
+
+    def receive_inputs(self, t_now, inputs: LeaderFollowerInputs, **kwargs):
+        if self.requested is not None:
+            return
+        if inputs.home:
+            self.requested = LFHomingState(self.controller)
+        elif not inputs.follow:
+            self.requested = LFIdleState(self.controller)
+        else:
+            self.controller.haptic_enabled = inputs.haptic_fbk
+
+    def on_exit(self, to_state, **kwargs):
+        self.controller.haptic_enabled = False
+        self.controller.hold_position()
+
+
+class LeaderFollowerController(ArmController[LeaderFollowerInputs]):
+    """State machine on the follower arm; the leader arm runs its own thread.
+
+    ``start()`` / ``stop()`` start and stop both arms.
+    """
+
     def __init__(
         self,
-        leader_arm: hebi.arm.Arm,
-        follower_arm: hebi.arm.Arm,
-        home_pose: "Sequence[float] | npt.NDArray[np.float64]",
+        follower: Arm,
+        leader: Arm,
+        home_position: Sequence[float] | NDArray[np.float64],
+        *,
         homing_time: float = 3.0,
-        haptic_gains: "Sequence[float]  | npt.NDArray[np.float64]" = np.array([30, 25, 20, 10, 3, 2]) * 10.0,
+        haptic_gains: Sequence[float] | NDArray[np.float64] = DEFAULT_HAPTIC_GAINS,
         haptic_limit: float = 100,
+        name: str = "Follower",
+        input_timeout: float | None = 1.0,
     ):
-        self.namespace = ""
-
-        self.state = FollowerControlState.STARTUP
-        self.leader_arm = leader_arm
-        self.follower_arm = follower_arm
-
-        self.arm_home = home_pose
+        super().__init__(follower, LFStartupState, ArmFaultState, ArmExitState, name=name, input_timeout=input_timeout)
+        self.leader = leader
+        self.arm_home = np.asarray(home_position, dtype=np.float64)
         self.homing_time = homing_time
-
-        self.haptic_enabled = False
-
-        self.haptic_gains = haptic_gains
+        self.haptic_gains = np.asarray(haptic_gains, dtype=np.float64)
         self.haptic_limit = haptic_limit
-        self.mobile_last_fbk_t = time()
-
-    @property
-    def running(self):
-        return self.state is not self.state.EXIT
-
-    def send(self):
-        self.leader_arm.send()
-        self.follower_arm.send()
-
-    def update(self, t_now: float, demo_input: "Optional[LeaderFollowerInputs]" = None):
-        self.leader_arm.update()
-        self.follower_arm.update()
-
-        if self.state is self.state.EXIT:
-            return
-
-        if demo_input is None:
-            if t_now - self.mobile_last_fbk_t > 1.0 and self.state is not self.state.DISCONNECTED:
-                print(self.namespace + "mobileIO timeout, disabling motion")
-                self.transition_to(t_now, self.state.DISCONNECTED)
-        else:
-            self.mobile_last_fbk_t = t_now
-
-        if self.state is self.state.DISCONNECTED:
-            self.transition_to(t_now, self.state.IDLE)
-
-        elif self.state is self.state.STARTUP:
-            self.transition_to(t_now, self.state.HOMING)
-
-        elif self.state is self.state.HOMING:
-            if self.follower_arm.at_goal:
-                self.transition_to(t_now, self.state.IDLE)
-
-        elif self.state is self.state.ALIGNING:
-            if self.follower_arm.at_goal:
-                self.transition_to(t_now, self.state.FOLLOW)
-
-        elif self.state is self.state.IDLE:
-            if demo_input and demo_input.home:
-                self.transition_to(t_now, self.state.HOMING)
-                return
-            elif demo_input and demo_input.follow:
-                self.transition_to(t_now, self.state.ALIGNING)
-                return
-
-            arm_goal = hebi.arm.Goal(self.follower_arm.size)
-            pos_curr = self.follower_arm.last_feedback.position_command
-            if np.any(np.isnan(pos_curr)):
-                print(self.namespace + "No position command, falling back to feedback position")
-                pos_curr = self.follower_arm.last_feedback.position
-            arm_goal.add_waypoint(t=0.1, position=pos_curr)
-            self.follower_arm.set_goal(arm_goal)
-
-        elif self.state is self.state.FOLLOW:
-            if demo_input and demo_input.home:
-                self.transition_to(t_now, self.state.HOMING)
-                return
-            elif demo_input and not demo_input.follow:
-                self.transition_to(t_now, self.state.IDLE)
-                return
-            if demo_input:
-                self.haptic_enabled = demo_input.haptic_fbk
-
-            self.follower_arm.pending_command.position = self.leader_arm.last_feedback.position
-            self.follower_arm.pending_command.velocity = self.leader_arm.last_feedback.velocity
-
-            follower_double_shoulder = self.follower_arm.get_plugin_by_type(hebi.arm.DoubledJointMirror)
-            if follower_double_shoulder:
-                follower_double_shoulder.update(self.follower_arm, 0)
-
-            if self.haptic_enabled:
-                pos_diff = self.leader_arm.last_feedback.position - self.follower_arm.last_feedback.position
-                haptic_effort = self.haptic_gains * pos_diff * np.abs(pos_diff)
-                haptic_effort = np.clip(haptic_effort, -self.haptic_limit, self.haptic_limit)
-                if np.any(np.isnan(haptic_effort)):
-                    self.leader_arm.pending_command.effort = np.zeros(self.leader_arm.size)
-                self.leader_arm.pending_command.effort = self.leader_arm.pending_command.effort - haptic_effort
-
-        self.send()
-
-    def transition_to(self, t_now: float, state: FollowerControlState):
-        # self transitions are noop
-        if state == self.state:
-            return
-
-        if state is self.state.HOMING:
-            print(self.namespace + "TRANSITIONING TO HOMING")
-            g = hebi.arm.Goal(self.follower_arm.size)
-            g.add_waypoint(t=self.homing_time, position=self.arm_home)
-            # Have leader and follower both drive to home pose on start/home
-            self.leader_arm.set_goal(g)
-            self.follower_arm.set_goal(g)
-
-        elif state is self.state.ALIGNING:
-            print(self.namespace + "TRANSITIONING TO ALIGNING")
-            g = hebi.arm.Goal(self.follower_arm.size)
-            g.add_waypoint(t=self.homing_time, position=self.leader_arm.last_feedback.position)
-            self.follower_arm.set_goal(g)
-
-        elif state is self.state.IDLE:
-            print(self.namespace + "TRANSITIONING TO IDLE")
-
-        elif state is self.state.FOLLOW:
-            # Cancel Leader arm goal so it becomes compliant
-            # to serve as input device
-            self.leader_arm.cancel_goal()
-            print(self.namespace + "TRANSITIONING TO FOLLOW")
-
-        elif state is self.state.DISCONNECTED:
-            print(self.namespace + "TRANSITIONING TO DISCONNECTED")
-
-        elif state is self.state.EXIT:
-            print(self.namespace + "TRANSITIONING TO EXIT")
-
-        self.state = state
         self.haptic_enabled = False
+
+        # Snapshots exchanged between the two arm threads (attribute swaps are atomic).
+        self.leader_position: NDArray[np.float64] | None = None
+        self.leader_velocity: NDArray[np.float64] | None = None
+        self._follower_position: NDArray[np.float64] | None = None
+        self.add_update_handler(self._snapshot_follower)
+
+    def start(self):
+        self.leader.set_on_update_callback(self._on_leader_update)
+        self.leader.start()
+        try:
+            super().start()
+        except Exception:
+            self.leader.stop()
+            raise
 
     def stop(self):
-        self.transition_to(time(), FollowerControlState.EXIT)
+        super().stop()
+        if self.leader.running:
+            self.leader.stop()
+
+    def _snapshot_follower(self, controller, state) -> None:
+        # Update handler (normal states only); haptics only run in Follow.
+        self._follower_position = np.array(self.arm.last_feedback.position, dtype=np.float64)
+
+    def _on_leader_update(self) -> bool:
+        # Leader thread, leader lock held. Never take the follower's lock here.
+        fbk = self.leader.last_feedback
+        self.leader_position = np.array(fbk.position, dtype=np.float64)
+        self.leader_velocity = np.array(fbk.velocity, dtype=np.float64)
+
+        follower_pos = self._follower_position
+        if self.haptic_enabled and follower_pos is not None:
+            pos_diff = self.leader_position - follower_pos
+            haptic_effort = np.clip(self.haptic_gains * pos_diff * np.abs(pos_diff), -self.haptic_limit, self.haptic_limit)
+            if not np.any(np.isnan(haptic_effort)):
+                self.leader.pending_command.effort = self.leader.pending_command.effort - haptic_effort
+        return True
 
 
-def setup_mobile_io(m: "MobileIO"):
+def setup_mobile_io(m: MobileIO):
     m.resetUI()
     m.set_button_label(1, "⟲")
 
@@ -186,63 +264,51 @@ def setup_mobile_io(m: "MobileIO"):
     m.set_button_label(3, "Haptic")
     m.set_button_mode(3, 1)
 
-    m.set_button_label(4, " ")
-    m.set_button_label(5, " ")
-    m.set_button_label(6, " ")
-    m.set_button_label(7, " ")
+    for i in range(4, 8):
+        m.set_button_label(i, " ")
     m.set_button_label(8, "Quit")
 
-    m.set_axis_label(1, " ")
-    m.set_axis_label(2, " ")
-    m.set_axis_label(3, " ")
-    m.set_axis_label(4, " ")
-    m.set_axis_label(5, " ")
-    m.set_axis_label(6, " ")
-    m.set_axis_label(7, " ")
-    m.set_axis_label(8, " ")
+    for i in range(1, 9):
+        m.set_axis_label(i, " ")
 
 
-def parse_mobile_feedback(m: "MobileIO"):
-    if not m.update(0.0):
+def parse_mobile_feedback(m: MobileIO, timeout_ms: float = 100.0):
+    if not m.update(timeout_ms):
         return None
 
-    home = m.get_button_state(1)
-    follow = m.get_button_state(2) == 1
-    haptic_fbk = m.get_button_state(3) == 1
-
-    return LeaderFollowerInputs(home, follow, haptic_fbk)
+    return LeaderFollowerInputs(
+        home=bool(m.get_button_state(1)),
+        follow=m.get_button_state(2) == 1,
+        haptic_fbk=m.get_button_state(3) == 1,
+    )
 
 
 if __name__ == "__main__":
-    root_dir = os.path.abspath(os.path.dirname(__file__))
+    parser = config_arg_parser("Leader/follower arms with haptic feedback", CONFIG_DIR)
+    add_config_argument(parser, "leader_config", "Leader arm config, e.g. ex_leader_follower_leader.cfg.yaml")
+    add_config_argument(parser, "follower_config", "Follower arm config, e.g. ex_leader_follower.cfg.yaml")
+    args = parser.parse_args()
+    leader_cfg = load_config(args.leader_config, CONFIG_DIR)
+    cfg = load_config(args.follower_config, CONFIG_DIR)
     lookup = hebi.Lookup()
     sleep(2)
 
-    cfg = hebi.config.load_config('config/A-2085-06.cfg.yaml')
-    # Leader Arm setup
-    cfg.families = ["Leader-Arm"]
-    leader_arm = hebi.arm.create_from_config(cfg, lookup)
-
-    # Follower Arm setup
-    # create_from_config consumes the config's plugin entries, so load it again
-    cfg = hebi.config.load_config('config/A-2085-06.cfg.yaml')
-    cfg.families = ["Follower-Arm"]
+    # Find all hardware before anything starts moving
+    leader_arm = hebi.arm.create_from_config(leader_cfg, lookup)
     follower_arm = hebi.arm.create_from_config(cfg, lookup)
+    mio_family = required_user_data(cfg, "mobile_io_family")
 
-    # Setup LeaderFollowerControl
-    leader_follower_control = LeaderFollowerControl(leader_arm, follower_arm, home_pose=[0.0, 2.09, 2.09, 0.0, 1.57, 0.0])
+    control = LeaderFollowerController(follower_arm, leader_arm, home_position=required_user_data(cfg, "home_position"))
 
-    # Setup MobileIO
     print("Looking for Mobile IO...")
-    m = create_mobile_io(lookup, "Arm")
+    m = create_mobile_io(lookup, mio_family)
     while m is None:
         try:
             print("Waiting for Mobile IO device to come online...")
             sleep(1)
-            m = create_mobile_io(lookup, "Arm")
+            m = create_mobile_io(lookup, mio_family)
         except KeyboardInterrupt:
-            leader_follower_control.stop()
-            exit()
+            raise SystemExit(0) from None
 
     m.update()
     setup_mobile_io(m)
@@ -251,17 +317,16 @@ if __name__ == "__main__":
     ## Main Control Loop ##
     #######################
 
-    while leader_follower_control.running:
-        t = time()
-        try:
-            arm_inputs = parse_mobile_feedback(m)
-            leader_follower_control.update(t, arm_inputs)
-
-            leader_follower_control.send()
-        except KeyboardInterrupt:
-            leader_follower_control.stop()
-            m.set_led_color("red")
-
-        if m.get_button_state(8):
-            leader_follower_control.stop()
-            m.set_led_color("red")
+    control.start()
+    try:
+        while control.running:
+            inputs = parse_mobile_feedback(m)
+            if m.get_button_state(8):
+                break
+            if inputs is not None:
+                control.receive_inputs(inputs)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        control.stop()
+        m.set_led_color("red")
