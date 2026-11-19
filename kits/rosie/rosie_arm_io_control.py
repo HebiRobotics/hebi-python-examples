@@ -10,11 +10,17 @@ from scipy.spatial.transform import Rotation as R
 import hebi
 from hebi.util import create_mobile_io
 
+import threading
+
 from kits.arms.ar_control_sm import (
-    ArmMobileIOControl,
-    ArmControlState,
+    ARHomingState,
+    ARIdleState,
+    ARTeleopState,
+    ArmMobileIOController,
     ArmMobileIOInputs,
 )
+from kits.arms.arm_controller import ArmExitState
+from kits.common.config import add_config_argument, config_arg_parser, load_config
 from ..bases.omni_base import ChassisVelocity, OmniBase
 from .rosie_utils import set_mobile_io_instructions, setup_base, setup_arm
 
@@ -24,34 +30,42 @@ if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
 
 
-def mio_layout_updater(mio: "MobileIO"):
+class ArmMobileIOUI:
+    """Arm status on the Mobile IO.
 
-    def update_mobile_io(controller: ArmMobileIOControl, new_state: ArmControlState):
-        if controller.state == new_state:
-            return
+    ``on_transition`` runs on the arm's control thread, so it only records the
+    message; ``flush()`` sends it from the main thread.
+    """
 
-        if new_state is new_state.HOMING:
-            controller.arm.pending_command.led.color = "magenta"
-            msg = "Robot Homing Sequence\nPlease wait..."
-            set_mobile_io_instructions(mio, msg)
+    def __init__(self, mio: "MobileIO"):
+        self.mio = mio
+        self._lock = threading.Lock()
+        self._pending: tuple[str, str | None] | None = None
+        self._reset_ui = False
 
-        elif new_state is new_state.TELEOP:
-            controller.arm.pending_command.led.color = "transparent"
-            # Print Instructions
-            set_mobile_io_instructions(mio, "Robot Ready to Control", color="green")
+    def on_transition(self, controller: ArmMobileIOController, new_state):
+        match new_state:
+            case ARHomingState():
+                self._post("Robot Homing Sequence\nPlease wait...", None)
+            case ARIdleState() | ARTeleopState():
+                self._post("Robot Ready to Control", "green")
+            case ArmExitState():
+                with self._lock:
+                    self._reset_ui = True
+                self._post("Demo Stopped.", "red")
 
-        elif new_state is new_state.DISCONNECTED:
-            controller.arm.pending_command.led.color = "blue"
+    def _post(self, msg: str, color: str | None):
+        with self._lock:
+            self._pending = (msg, color)
 
-        elif new_state is new_state.EXIT:
-            print("TRANSITIONING TO EXIT")
-            controller.arm.pending_command.led.color = "transparent"
-
-            # unset mobileIO control config
-            mio.resetUI()
-            set_mobile_io_instructions(mio, "Demo Stopped.", color="red")
-
-    return update_mobile_io
+    def flush(self):
+        with self._lock:
+            pending, self._pending = self._pending, None
+            reset_ui, self._reset_ui = self._reset_ui, False
+        if reset_ui:
+            self.mio.resetUI()
+        if pending is not None:
+            set_mobile_io_instructions(self.mio, *pending)
 
 
 class RosieControl:
@@ -143,7 +157,8 @@ def setup_mobile_io(m: "MobileIO"):
                 rotation = R.from_quat(xyzw).as_matrix()
             except ValueError as e:
                 print(f"Error getting orientation as matrix: {e}\n{m.orientation}")
-                rotation = np.eye(3)
+                # Invalid pose: the arm holds position rather than tracking a made-up orientation
+                rotation = np.full((3, 3), np.nan)
 
             if m.get_button_diff(arm_lock) != 0:
                 if not m.get_button_state(arm_lock):
@@ -176,12 +191,13 @@ def setup_mobile_io(m: "MobileIO"):
 
 
 if __name__ == "__main__":
-    lookup = hebi.Lookup()
-
-    root_dir = os.path.dirname(__file__)
-    cfg_file = os.path.join(root_dir, "config", "rosie-t.cfg.yaml")
-    cfg = hebi.config.load_config(cfg_file)
+    config_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config")
+    parser = config_arg_parser("Rosie: omni base + AR-controlled arm", config_dir)
+    add_config_argument(parser, "config", "Rosie config, e.g. rosie-t.cfg.yaml")
+    args = parser.parse_args()
+    cfg = load_config(args.config, config_dir)
     family = cfg.families[0]
+    lookup = hebi.Lookup()
 
     # mobileIO setup
     print("Waiting for mobileIO device to come online...")
@@ -203,25 +219,10 @@ if __name__ == "__main__":
         tries -= 1
         arm, gripper = setup_arm(cfg, lookup)
 
+    arm_ui = ArmMobileIOUI(m)
     if arm is None:
         warnings.warn("Could not find arm! Continuing without...")
         arm_control = None
-    else:
-        while not arm.update():
-            print("Waiting for feedback from arm...")
-            sleep(1.0)
-
-        args = []
-        if user_data := cfg.user_data:
-            args.append(user_data["homing_duration"])
-            args.append(user_data["delay_time"])
-            args.append(np.array(user_data["xyz_scale"]))
-
-        arm_control = ArmMobileIOControl(arm, gripper, *args)
-
-    if arm_control:
-        arm_control._transition_handlers.append(mio_layout_updater(m))
-    else:
         set_mobile_io_instructions(m, "Robot Ready to Control", color="green")
 
         def on_shutdown():
@@ -229,50 +230,51 @@ if __name__ == "__main__":
                 set_mobile_io_instructions(m, "Demo Stopped.", color="red")
 
         base_control.on_shutdown = on_shutdown
+    else:
+        while not arm.update():
+            print("Waiting for feedback from arm...")
+            sleep(1.0)
+
+        arm_control = ArmMobileIOController.from_config(arm, cfg, gripper)
+        arm_control.add_transition_handler(arm_ui.on_transition)
 
     #######################
     ## Main Control Loop ##
     #######################
 
     logging = True
+    rosie_dir = os.path.dirname(__file__)
+    log_dir = os.path.join(rosie_dir, "logs")
 
     if logging:
-        rosie_dir = os.path.dirname(__file__)
         now = datetime.datetime.now()
-        base.group.start_log(
-            os.path.join(rosie_dir, "logs"),
-            f"base_{now:%Y-%m-%d-%H-%M-%S}",
-            mkdirs=True,
-        )
-        if arm:
-            arm.group.start_log(
-                os.path.join(rosie_dir, "logs"),
-                f"arm_{now:%Y-%m-%d-%H-%M-%S}",
-                mkdirs=True,
-            )
+        base.group.start_log(log_dir, f"base_{now:%Y-%m-%d_%H-%M-%S}", mkdirs=True)
+        if arm_control:
+            arm_control.start_logging(log_dir, "arm")
 
-    while base_control.running and (arm_control is None or arm_control.running):
-        t = time()
-        try:
+    if arm_control:
+        arm_control.start()
+
+    try:
+        while base_control.running and (arm_control is None or arm_control.running):
+            t = time()
             quit, base_inputs, arm_inputs = parse_mobile_feedback(m)
+            if quit:
+                break
             base_control.update(t, base_inputs)
-            if arm_control:
-                arm_control.update(t, arm_inputs)
-        except KeyboardInterrupt:
-            quit = True
-
-        if quit:
-            base_control.stop()
-            if arm_control:
-                arm_control.transition_to(t, ArmControlState.EXIT)
-
+            base_control.send()
+            if arm_control and arm_inputs is not None:
+                arm_control.receive_inputs(arm_inputs)
+            arm_ui.flush()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        base_control.stop()
         base_control.send()
         if arm_control:
-            arm_control.send()
-
-    if logging:
-        base.group.stop_log()
-        if arm:
-            arm.group.stop_log()
+            arm_control.stop()  # also stops the arm log
+        arm_ui.flush()
+        if logging:
+            base.group.stop_log()
 
     sys.exit(0)

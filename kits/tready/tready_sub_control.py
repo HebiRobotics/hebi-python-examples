@@ -1,340 +1,154 @@
-from time import time, sleep
-import os
+"""Tready-Sub: a Tready base with optional leader/follower arms and an optional pan/tilt mast.
 
-import numpy as np
+    python -m kits.tready.tready_sub_control tready_sub.cfg.yaml \
+        --arms tready_sub_leader_arm.cfg.yaml tready_sub_follower_arm.cfg.yaml \
+        --mast tready_sub_mast.cfg.yaml
 
-import hebi
-from hebi.util import create_mobile_io
-from .tready_utils import load_gains, set_mobile_io_instructions
-from .treaded_base_core import TreadyControlState, TreadyInputs, ChassisVelocity
-from .tready import (
-    TreadyBase,
-    TreadyControl,
-)
-from kits.arms.ex_leader_follower import LeaderFollowerControl, LeaderFollowerInputs
-from kits.camera.pan_tilt_mast import MastControl, MastInputs, HebiCameraMast
+Uses the default Mobile IO layout, labeled in ``setup_mobile_io``. The arms
+and the camera mast are optional: leave out ``--arms`` / ``--mast`` to run
+without them. Systems that are given must be present.
+
+Buttons: 1 reset (homes base and mast; overrides base startup while starting
+up), 2 torque mode, 3 follow, 4 haptic feedback, 5/7 flipper height,
+6 recenter flippers, 8 quit. Left stick drives, right stick pans/tilts.
+"""
+
+from __future__ import annotations
 
 import typing
 
+import hebi
+
+from kits.arms.ex_leader_follower import LeaderFollowerController, LeaderFollowerInputs
+from kits.camera.pan_tilt_mast import MastInputs, create_mast_controller
+from kits.common.config import add_config_argument, required_user_data
+
+from .demo_runner import create_base_controller, demo_arg_parser, load_config, run
+from .mobile_io_manager import MobileIOUpdater, handle_torque_toggle, parse_flippers, torque_inputs
+from .treaded_base import TreadyStartupState, TreadyTeleopState
+from .treaded_base_core import ChassisVelocity, TreadyInputs
+from .tready_utils import wait_for_mobile_io
+
 if typing.TYPE_CHECKING:
+    from collections.abc import Callable
+
     from hebi._internal.mobile_io import MobileIO
 
+BUTTONS = {"reset": 1, "torque": 2, "follow": 3, "haptic": 4, "height_up": 5, "recenter": 6, "height_down": 7, "quit": 8}
+AXES = {"turn": 1, "forward": 2, "pan": 7, "tilt": 8}
 
-def setup_mobile_io(m: "MobileIO"):
-    """Sets up mobileIO interface.
+MAST_IDLE = MastInputs(v_pan=0.0, v_tilt=0.0, home=False, zoom=1.0, light_enable=False, light_pwm=0.0)
+ARM_IDLE = LeaderFollowerInputs()
 
-    Return a function that parses mobileIO feedback into the format
-    expected by the Demo
-    """
 
-    # Base
-    reset_pose_btn = 1
-    torque_btn = 2
-    height_up_btn = 5
-    recenter_btn = 6
-    height_down_btn = 7
-    quit_demo_btn = 8
+def setup_mobile_io(m: MobileIO):
+    labels = {
+        BUTTONS["reset"]: "⟲",
+        BUTTONS["torque"]: "Torque",
+        BUTTONS["follow"]: "Follow",
+        BUTTONS["haptic"]: "Haptic",
+        BUTTONS["height_up"]: "⤾◼⤿",
+        BUTTONS["recenter"]: "Center",
+        BUTTONS["height_down"]: "⤿◼⤾",
+        BUTTONS["quit"]: "❌",
+    }
+    for button, label in labels.items():
+        m.set_button_label(button, label)
+    for button in (BUTTONS["torque"], BUTTONS["follow"], BUTTONS["haptic"]):
+        m.set_button_mode(button, 1)
+    m.set_button_output(BUTTONS["follow"], 1)
+    m.set_button_output(BUTTONS["haptic"], 1)
 
-    turn_joy = 1  # Left Pad Left/Right
-    forward_joy = 2  # Left Pad Up/Down
-    front_left_slider = 3
-    front_right_slider = 4
-    back_left_slider = 5
-    back_right_slider = 6
+    for axis, label in {1: "Turn", 2: "Drive", 3: "FL", 4: "FR", 5: "BL", 6: "BR", 7: "Pan", 8: "Tilt"}.items():
+        m.set_axis_label(axis, label)
+    for axis in range(1, 9):
+        m.set_snap(axis, 0)
 
-    m.set_button_label(reset_pose_btn, "⟲")
-    m.set_button_label(torque_btn, "Torque")
-    m.set_button_label(height_up_btn, "⤾◼⤿")
-    m.set_button_label(recenter_btn, "Center")
-    m.set_button_label(height_down_btn, "⤿◼⤾")
-    m.set_button_label(quit_demo_btn, "❌")
 
-    m.set_button_mode(torque_btn, 1)
+def parse_drive(m: MobileIO) -> TreadyInputs:
+    handle_torque_toggle(m, BUTTONS["torque"])
+    torque = torque_inputs(m, BUTTONS["torque"])
 
-    m.set_axis_label(turn_joy, "Turn")
-    m.set_axis_label(forward_joy, "Drive")
-    m.set_axis_label(front_left_slider, "FL")
-    m.set_axis_label(front_right_slider, "FR")
-    m.set_axis_label(back_left_slider, "BL")
-    m.set_axis_label(back_right_slider, "BR")
+    if m.get_button_state(BUTTONS["quit"]):
+        return TreadyInputs(quit=True)
+    if m.get_button_state(BUTTONS["reset"]):
+        return TreadyInputs(home=True, **torque)
+    if m.get_button_state(BUTTONS["recenter"]):
+        return TreadyInputs(align_flippers=True, **torque)
+    return TreadyInputs(
+        base_motion=ChassisVelocity(m.get_axis_state(AXES["forward"]), m.get_axis_state(AXES["turn"])),
+        flippers=parse_flippers(m, BUTTONS["height_up"], BUTTONS["height_down"]),
+        **torque,
+    )
 
-    for i in range(1, 9):
-        m.set_snap(i, 0)
 
-    m.set_led_color("yellow")
+def make_parsers(has_arms: bool, has_mast: bool) -> tuple[Callable, Callable]:
+    """Startup and drive parsers returning one input per controller present (base, [arms], [mast])."""
 
-    # Arm
-    follow_btn = 3
-    haptic_btn = 4
+    def others(arm_in: LeaderFollowerInputs, mast_in: MastInputs) -> tuple:
+        return (*([arm_in] if has_arms else []), *([mast_in] if has_mast else []))
 
-    m.set_button_label(follow_btn, "Follow")
-    m.set_button_label(haptic_btn, "Haptic")
-    m.set_button_mode(follow_btn, 1)
-    m.set_button_mode(haptic_btn, 1)
-    m.set_button_output(follow_btn, 1)
-    m.set_button_output(haptic_btn, 1)
+    def parse_startup(m: MobileIO):
+        base_in = TreadyInputs(quit=bool(m.get_button_state(BUTTONS["quit"])), override_startup=bool(m.get_button_state(BUTTONS["reset"])))
+        return (base_in, *others(ARM_IDLE, MAST_IDLE))
 
-    # Camera Mast
-    pan_joy = 7
-    tilt_joy = 8
+    def parse_drive_mode(m: MobileIO):
+        arm_in = LeaderFollowerInputs(
+            follow=m.get_button_state(BUTTONS["follow"]) == 1,
+            haptic_fbk=m.get_button_state(BUTTONS["haptic"]) == 1,
+        )
+        mast_in = MastInputs(
+            v_pan=-m.get_axis_state(AXES["pan"]),
+            v_tilt=-m.get_axis_state(AXES["tilt"]),
+            home=bool(m.get_button_state(BUTTONS["reset"])),
+            zoom=1.0,
+            light_enable=False,
+            light_pwm=0.0,
+        )
+        return (parse_drive(m), *others(arm_in, mast_in))
 
-    m.set_axis_label(pan_joy, "Pan")
-    m.set_axis_label(tilt_joy, "Tilt")
-
-    def parse_mobile_io_feedback(m: "MobileIO"):
-        def change_to_torque_mode(m: "MobileIO"):
-            axis_vals = [0, -0.5, 1, 1]
-            for i in range(3, 7):
-                if not m.set_snap(i, np.nan):
-                    print(f"Failed to set snap for axis {i}")
-                if not m.set_axis_value(i, axis_vals[i - 3]):
-                    print(f"Failed to set axis value for axis {i}")
-
-        def change_to_velocity_mode(m: "MobileIO"):
-            for i in range(3, 7):
-                if not m.set_snap(i, 0):
-                    print(f"Failed to set snap for axis {i}")
-            m.set_axis_label(front_left_slider, "FL", blocking=False)
-            m.set_axis_label(front_right_slider, "FR", blocking=False)
-            m.set_axis_label(back_left_slider, "BL", blocking=False)
-            m.set_axis_label(back_right_slider, "BR", blocking=False)
-
-        if m.update(0.0):
-            if m.get_button_state(quit_demo_btn):
-                return True, None, None, None
-
-            arm_inputs = LeaderFollowerInputs(
-                follow=m.get_button_state(follow_btn) == 1,
-                haptic_fbk=m.get_button_state(haptic_btn) == 1,
-            )
-
-            mast_inputs = MastInputs(
-                [-m.get_axis_state(pan_joy), -m.get_axis_state(tilt_joy)],
-                m.get_button_state(1),
-            )
-
-            if m.get_button_state(reset_pose_btn):
-                return (
-                    False,
-                    TreadyInputs(
-                        home=True,
-                        torque_mode=m.get_button_state(torque_btn),
-                        torque_toggle=abs(m.get_button_diff(torque_btn)) == 1,
-                    ),
-                    arm_inputs,
-                    mast_inputs,
-                )
-
-            if m.get_button_diff(torque_btn) == 1:
-                change_to_torque_mode(m)
-            elif m.get_button_diff(torque_btn) == -1:
-                change_to_velocity_mode(m)
-
-            tready_inputs = None
-            if m.get_button_state(recenter_btn):
-                tready_inputs = TreadyInputs(
-                    align_flippers=True,
-                    torque_mode=m.get_button_state(torque_btn),
-                    torque_toggle=abs(m.get_button_diff(torque_btn)) == 1,
-                )
-            else:
-                chassis_velocity = ChassisVelocity(m.get_axis_state(forward_joy), m.get_axis_state(turn_joy))
-                height_up = m.get_button_state(height_up_btn)
-                height_down = m.get_button_state(height_down_btn)
-                height = height_up - height_down
-                if height != 0:
-                    flippers = [-height / 2] * 4
-                else:
-                    flippers = [
-                        m.get_axis_state(front_left_slider),
-                        m.get_axis_state(front_right_slider),
-                        m.get_axis_state(back_left_slider),
-                        m.get_axis_state(back_right_slider),
-                    ]
-
-                tready_inputs = TreadyInputs(
-                    base_motion=chassis_velocity,
-                    flippers=flippers,
-                    torque_mode=m.get_button_state(torque_btn),
-                    torque_toggle=abs(m.get_button_diff(torque_btn)) == 1,
-                )
-
-            return False, tready_inputs, arm_inputs, mast_inputs
-
-        else:
-            return False, None, None, None
-
-    return parse_mobile_io_feedback
+    return parse_startup, parse_drive_mode
 
 
 if __name__ == "__main__":
-    root_dir = os.path.dirname(os.path.abspath(__file__))
+    parser = demo_arg_parser("Tready-Sub: base with optional leader/follower arms and camera mast")
+    add_config_argument(
+        parser,
+        "arms",
+        "Leader and follower arm configs, e.g. tready_sub_leader_arm.cfg.yaml tready_sub_follower_arm.cfg.yaml",
+        option=True,
+        nargs=2,
+    )
+    add_config_argument(parser, "mast", "Camera mast config, e.g. tready_sub_mast.cfg.yaml", option=True)
+    args = parser.parse_args()
+    cfg = load_config(args.base_config)
+    leader_cfg, follower_cfg = (load_config(name) for name in args.arms) if args.arms else (None, None)
+    mast_cfg = load_config(args.mast) if args.mast else None
     lookup = hebi.Lookup()
-    sleep(2)
 
-    base_family = "Tready-Sub"
-    flipper_names = [f"T{n + 1}_J1_flipper" for n in range(4)]
-    wheel_names = [f"T{n + 1}_J2_track" for n in range(4)]
-
-    # mobileIO setup
-    print("Looking for mobileIO device...", end=" ")
-    m = create_mobile_io(lookup, base_family)
-    while m is None:
-        try:
-            print("Waiting for mobileIO device to come online...")
-            sleep(1)
-            m = create_mobile_io(lookup, base_family)
-        except KeyboardInterrupt:
-            exit(0)
-
+    # Find all hardware before anything starts moving. Systems named on the command line are required.
+    m = wait_for_mobile_io(lookup, cfg.families[0])
     print("mobileIO device found.")
     m.update()
-    parse_mobile_io_feedback = setup_mobile_io(m)
+    setup_mobile_io(m)
 
-    # Create base group
-    print("Looking for Tready modules...", end=" ")
-    base_group = lookup.get_group_from_names(base_family, wheel_names + flipper_names)
-    while base_group is None:
-        try:
-            print("Waiting for Tready modules...")
-            sleep(1)
-            base_group = lookup.get_group_from_names(base_family, wheel_names + flipper_names)
-        except KeyboardInterrupt:
-            exit(0)
-    print("Tready modules found.")
+    base_control = create_base_controller(cfg, lookup)
+    arm_control = None
+    if leader_cfg is not None:
+        leader = hebi.arm.create_from_config(leader_cfg, lookup)
+        follower = hebi.arm.create_from_config(follower_cfg, lookup)
+        arm_control = LeaderFollowerController(follower, leader, home_position=required_user_data(follower_cfg, "home_position"))
+    mast_control = create_mast_controller(mast_cfg, lookup) if mast_cfg is not None else None
 
-    load_gains(base_group, os.path.join(root_dir, "gains", "smart-tready-gains.xml"))
+    parse_startup, parse_drive_mode = make_parsers(arm_control is not None, mast_control is not None)
+    updater = MobileIOUpdater(
+        m,
+        {
+            TreadyStartupState: (None, parse_startup),
+            TreadyTeleopState: (None, parse_drive_mode),
+        },
+    )
+    updater.attach(base_control)
 
-    base = TreadyBase(base_group, chassis_ramp_time=0.33, flipper_ramp_time=0.1)
-    base.set_robot_model(os.path.join(root_dir, "hrdf", "Tready.hrdf"))
-    base_control = TreadyControl(base)
-    base_control.namespace = "[Base] "
-
-    # Leader Arm setup
-    try:
-        print("Looking for Leader Arm...", end=" ")
-        leader_cfg = hebi.config.load_config(os.path.join(root_dir, "config/tready_sub_leader_arm.cfg.yaml"))
-        leader_arm = hebi.arm.create_from_config(leader_cfg, lookup)
-        print("Leader Arm found.")
-    except Exception as e:
-        print(f"Failed to create Leader Arm: {e}")
-        leader_arm = None
-
-    # Follower Arm setup
-    try:
-        print("Looking for Follower Arm...", end=" ")
-        follower_cfg = hebi.config.load_config(os.path.join(root_dir, "config/tready_sub_follower_arm.cfg.yaml"))
-        follower_arm = hebi.arm.create_from_config(follower_cfg, lookup)
-        print("Follower Arm found.")
-
-    except Exception as e:
-        print(f"Failed to create Follower Arm: {e}")
-        follower_arm = None
-
-    # Setup LeaderFollowerControl
-    if leader_arm is None or follower_arm is None:
-        leader_follower_control = None
-    else:
-        # If the config file has a home pose use that, otherwise default
-        home_pose = [1.57, -1.3, 0.0, 0.0, 1.57, 1.0, 0.0]
-        if leader_cfg.user_data and "home_pose" in leader_cfg.user_data:
-            home_pose = leader_cfg.user_data["home_pose"]
-        leader_follower_control = LeaderFollowerControl(leader_arm, follower_arm, home_pose=home_pose)
-        leader_follower_control.namespace = "[Arm] "
-
-    # Create camera mast group
-    try:
-        print("Looking for Camera Mast...", end=" ")
-        mast_family = "Tready-Sub"
-        mast_module_names = ["J1_pan", "J2_tilt"]
-        mast_group = lookup.get_group_from_names(mast_family, mast_module_names)
-        if mast_group is None:
-            raise RuntimeError("Could not find mast group. Check that family and names match actuators on the network.")
-        else:
-            mast = HebiCameraMast(mast_group)
-            mast_control = MastControl(mast)
-            mast_control.namespace = "[Mast] "
-        print("Camera Mast found.")
-    except Exception as e:
-        print(f"Failed to create Camera Mast: {e}")
-        mast = None
-
-    def update_mobile_io(controller: TreadyControl, new_state: TreadyControlState):
-        if controller.state == new_state:
-            return
-
-        if new_state is TreadyControlState.HOMING:
-            controller.base.set_color("magenta")
-            msg = "Robot Homing Sequence\nPlease wait..."
-            set_mobile_io_instructions(m, msg, color="blue")
-
-        elif new_state is TreadyControlState.ALIGNING:
-            controller.base.set_color("magenta")
-            msg = "Robot Flippers Centering\nPlease wait..."
-            set_mobile_io_instructions(m, msg, color="blue")
-
-        elif new_state is TreadyControlState.TELEOP:
-            controller.base.clear_color()
-            msg = "Robot Ready to Control"
-            set_mobile_io_instructions(m, msg, color="green")
-
-        elif new_state is TreadyControlState.DISCONNECTED:
-            print("Lost connection to Controller. Please reconnect.")
-            controller.base.set_color("blue")
-
-        elif new_state is TreadyControlState.EMERGENCY_STOP:
-            controller.base.set_color("yellow")
-            set_mobile_io_instructions(m, "Emergency Stop Activated", color="red")
-
-        elif new_state is TreadyControlState.EXIT:
-            controller.base.set_color("red")
-            set_mobile_io_instructions(m, "Demo Stopped", color="red")
-
-    def update_torque_mode(controller: TreadyControl):
-        if controller.state is TreadyControlState.TELEOP:
-            if controller.torque_labels is not None:
-                for i, label in enumerate(controller.torque_labels):
-                    m.set_axis_label(i + 3, label, blocking=False)
-            else:
-                m.set_axis_label(3, "FL", blocking=False)
-                m.set_axis_label(4, "FR", blocking=False)
-                m.set_axis_label(5, "BL", blocking=False)
-                m.set_axis_label(6, "BR", blocking=False)
-
-    base_control._transition_handlers.append(update_mobile_io)
-    base_control._update_handlers.append(update_torque_mode)
-
-    print("\n")
-
-    # can enable start logging here
-    while (
-        base_control.running
-        and (leader_follower_control is None or leader_follower_control.running)
-        and (mast is None or mast_control.running)
-    ):
-        t = time()
-        try:
-            quit, base_inputs, arm_inputs, mast_inputs = parse_mobile_io_feedback(m)
-            if quit:
-                break
-
-            base_control.update(t, base_inputs)
-            if leader_follower_control is not None:
-                leader_follower_control.update(t, arm_inputs)
-            if mast is not None:
-                mast_control.update(t, mast_inputs)
-
-            base_control.send()
-            if leader_follower_control is not None:
-                leader_follower_control.send()
-            if mast is not None:
-                mast_control.send()
-        except KeyboardInterrupt:
-            break
-
-    base_control.stop()
-    if leader_follower_control is not None:
-        leader_follower_control.stop()
-    if mast is not None:
-        mast_control.stop()
-    # stop logging here
+    controllers = [c for c in (base_control, arm_control, mast_control) if c is not None]
+    run(updater, controllers, log=not args.no_log)

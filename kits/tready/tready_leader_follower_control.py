@@ -1,7 +1,22 @@
-import sys
+"""Tready base plus a MAPS input arm driving a follower arm with a gripper.
+
+    python -m kits.tready.tready_leader_follower_control tready.cfg.yaml maps-input-arm.cfg.yaml tready-maps-follower-arm.cfg.yaml
+
+The base's Mobile IO drives the base. A second Mobile IO, in the follower
+arm config's ``mobile_io_family``, controls the gripper and MAPS reset. The MAPS
+leader/follower and gripper controllers come from
+``advanced/demos/MAPS_control`` and still use the old ``update()``/``send()``
+style, so they run in the main loop via ``run(step=...)``.
+"""
+
+from __future__ import annotations
+
 import os
-from time import time, sleep
-from .tready import TreadyControl, TreadyControlState, config_mobile_io
+from time import sleep
+
+import hebi
+import numpy as np
+from hebi.util import create_mobile_io
 
 from advanced.demos.MAPS_control.gripper_control import GripperControl
 from advanced.demos.MAPS_control.MAPS_input_device_example import (
@@ -9,208 +24,130 @@ from advanced.demos.MAPS_control.MAPS_input_device_example import (
     LeaderFollowerControl,
     LeaderFollowerControlState,
 )
-from advanced.demos.MAPS_control.MAPS_input_device_w_gripper_example import (
-    setup_mobile_io,
-    parse_mobile_feedback,
-)
+from advanced.demos.MAPS_control.MAPS_input_device_w_gripper_example import parse_mobile_feedback, setup_mobile_io
+from kits.arms.arm_controller import find_gripper
+from kits.common.config import required_user_data, user_data
 
-import numpy as np
+from .demo_runner import LAYOUT_DIR, create_base_controller, load_config, parse_args, run
+from .mobile_io_manager import MobileIOUpdater, update_drive_mode, update_startup_mode
+from .treaded_base import TreadyStartupState, TreadyTeleopState
+from .tready_utils import wait_for_mobile_io
 
-import hebi
-from hebi.util import create_mobile_io
-from hebi.arm import Gripper
+# Allowed angular difference (deg) per joint before starting to align
+ALLOWED_DIFF = np.array([30.0, 20.0, 30.0, 20.0, 45.0, 45.0, 360.0])
+
+
+def show(m, msg: str):
+    m.clear_text()
+    m.add_text(msg)
+
+
+def wait_for_group_with_message(lookup: hebi.Lookup, m, families, names, msg: str):
+    while (group := lookup.get_group_from_names(families, names)) is None:
+        show(m, msg)
+        sleep(1)
+    return group
+
+
+def find_output_arm(cfg: hebi.config.HebiConfig, lookup: hebi.Lookup, m):
+    """Follower arm from its config, with the double-shoulder mirror module synced to joint 1."""
+    arm = hebi.arm.create_from_config(cfg, lookup)  # also loads the default gains
+
+    # Keep the two modules in the double shoulder bracket in sync:
+    # mirror joint index 1 onto the config's mirror_module.
+    mirror_group = wait_for_group_with_message(
+        lookup, m, cfg.families, [user_data(cfg, "mirror_module")], "Still looking for mirror group..."
+    )
+    arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
+    gains_cmd = hebi.GroupCommand(1)
+    gains_cmd.read_gains(os.path.join(cfg.config_location, user_data(cfg, "mirror_gains")))
+    mirror_group.send_command_with_acknowledgement(gains_cmd)
+
+    arm.cancel_goal()
+    return arm
 
 
 if __name__ == "__main__":
-    from .tready_utils import set_mobile_io_instructions, setup_base
-
-    lookup = hebi.Lookup()
-    sleep(2)
-
-    family = "Tready"
-
-    # Base setup
-    base = setup_base(lookup, family)
-
-    # mobileIO setup
-    phone_name = "mobileIO"
-
-    print("Waiting for mobileIO device to come online...")
-    m_tready = create_mobile_io(lookup, family, phone_name)
-    while m_tready is None:
-        m_tready = create_mobile_io(lookup, family, phone_name)
-        print("Could not find mobileIO device, waiting...")
-        sleep(0.5)
-
-    print("mobileIO device found.")
-    input_parser = config_mobile_io(m_tready)
-
-    demo_controller = TreadyControl(base)
-
-    def update_mobile_io(controller: TreadyControl, new_state: TreadyControlState):
-        if controller.state == new_state:
-            return
-
-        if new_state is controller.state.HOMING:
-            controller.base.set_color("magenta")
-            msg = "Robot Homing Sequence\nPlease wait..."
-            set_mobile_io_instructions(m_tready, msg, color="blue")
-
-        elif new_state is controller.state.TELEOP:
-            controller.base.clear_color()
-            msg = "Robot Ready to Control\nB1: Reset\nB6: Joined Flipper\nB8 - Quit"
-            set_mobile_io_instructions(m_tready, msg, color="green")
-
-        elif new_state is controller.state.DISCONNECTED:
-            controller.base.set_color("blue")
-
-        elif new_state is controller.state.EXIT:
-            controller.base.set_color("red")
-
-            # unset mobileIO control config
-            m_tready.set_button_mode(6, 0)
-            m_tready.set_button_output(1, 0)
-            m_tready.set_button_output(8, 0)
-            set_mobile_io_instructions(m_tready, "Demo Stopped", color="red")
-
-    demo_controller._transition_handlers.append(update_mobile_io)
-
-    # Setup MAPS leader/follower
-    print("Looking for Mobile IO...")
-    m = create_mobile_io(lookup, "Arm")
-    while m is None:
-        print("Waiting for Mobile IO device to come online...")
-        sleep(1)
-        m = create_mobile_io(lookup, "Arm")
-
-    setup_mobile_io(m)
-
-    maps_modules = ["J1-A", "J2-B", "J2-A", "J3-B", "J3-A", "J4-B", "J4-A"]
-    maps_group = lookup.get_group_from_names(["MAPS"], maps_modules)
-    while maps_group is None:
-        m.clear_text()
-        m.add_text("MAPS arm not found: Check connection and make sure all modules are blinking green")
-        sleep(1)
-        maps_group = lookup.get_group_from_names(["MAPS"], maps_modules)
-
-    # need these b/c MAPS joint zeros are in different locations
-    angle_offsets = np.array([0.0, np.pi / 2, -np.pi, -np.pi / 2, -np.pi / 2, -np.pi / 2, 0.0])
-    input_arm = ContinuousAngleMaps(maps_group, angle_offsets)
-
-    base_dir, _ = os.path.split(__file__)
-    base_dir = os.path.join(base_dir, "../arm")
-
-    output_arm = hebi.arm.create(
-        ["Arm"],
-        [
-            "J1_base",
-            "J2A_shoulder1",
-            "J3_shoulder2",
-            "J4_elbow1",
-            "J5_elbow2",
-            "J6_wrist1",
-            "J7_wrist2",
-        ],
-        hrdf_file=os.path.join(base_dir, "hrdf/A-2303-01.hrdf"),
-        lookup=lookup,
+    args = parse_args(
+        "Tready base with a MAPS-driven follower arm and gripper",
+        maps_config="MAPS input device config, e.g. maps-input-arm.cfg.yaml",
+        follower_arm_config="Follower arm config, e.g. tready-maps-follower-arm.cfg.yaml",
     )
+    cfg = load_config(args.base_config)
+    maps_cfg = load_config(args.maps_config)
+    follower_cfg = load_config(args.follower_arm_config)
+    lookup = hebi.Lookup()
 
-    mirror_group = lookup.get_group_from_names(["Arm"], ["J2B_shoulder1"])
-    while mirror_group is None:
-        m.clear_text()
-        m.add_text("Still looking for mirror group...")
+    # Find all hardware before anything starts moving
+    m_base = wait_for_mobile_io(lookup, cfg.families[0])
+    print("Base mobileIO device found.")
+    base_control = create_base_controller(cfg, lookup)
+
+    arm_mio_family = required_user_data(follower_cfg, "mobile_io_family")
+    print("Looking for arm Mobile IO...")
+    while (m_arm := create_mobile_io(lookup, arm_mio_family)) is None:
+        print("Waiting for arm Mobile IO device to come online...")
         sleep(1)
-        mirror_group = lookup.get_group_from_names(["Arm"], ["J2B_shoulder1"])
-    # mirror the position/velocity/effort of module 1 ('J2A_shoulder1') to the module
-    # in the mirror group ('J2B_shoulder1')
-    # Keeps the two modules in the double shoulder bracket in sync
-    output_arm.add_plugin(hebi.arm.DoubledJointMirror(1, mirror_group))
+    setup_mobile_io(m_arm)
 
-    output_arm.load_gains(os.path.join(base_dir, "gains/A-2303-01.xml"))
-    # need to update the gains for the mirror group also
-    gains_cmd = hebi.GroupCommand(1)
-    gains_cmd.read_gains(os.path.join(base_dir, "gains/mirror_shoulder.xml"))
-    mirror_group.send_command_with_acknowledgement(gains_cmd)
+    maps_group = wait_for_group_with_message(
+        lookup,
+        m_arm,
+        maps_cfg.families,
+        maps_cfg.names,
+        "MAPS arm not found: Check connection and make sure all modules are blinking green",
+    )
+    input_arm = ContinuousAngleMaps(maps_group, np.array(user_data(maps_cfg, "angle_offsets"), dtype=np.float64))
+    output_arm = find_output_arm(follower_cfg, lookup, m_arm)
 
-    output_arm.cancel_goal()
-
-    gripper_group = lookup.get_group_from_names(["Arm"], ["gripperSpool"])
-    while gripper_group is None:
-        m.clear_text()
-        m.add_text("Looking for gripper module 'Arm/gripperSpool' ...")
-        sleep(1)
-        gripper_group = lookup.get_group_from_names(["Arm"], ["gripperSpool"])
-
-    gripper = Gripper(gripper_group, -5, 1)
-    gripper.load_gains(os.path.join(base_dir, "gains/gripper_spool_gains.xml"))
+    if (gripper := find_gripper(lookup, follower_cfg)) is None:
+        raise RuntimeError("This demo needs the follower arm's gripper")
 
     input_arm.update()
     output_arm.update()
 
-    output_joints_home = [0.0, -1.0, 0.0, -0.6, -np.pi / 2, 1.0, 0.0]
-    # allowed angular difference (°) per joint before starting align
-    allowed_diff = np.array([30.0, 20.0, 30.0, 20.0, 45.0, 45.0, 360.0])
-
-    leader_follower_control = LeaderFollowerControl(input_arm, output_arm, output_joints_home, allowed_diff)
+    leader_follower_control = LeaderFollowerControl(input_arm, output_arm, required_user_data(follower_cfg, "home_position"), ALLOWED_DIFF)
     gripper_control = GripperControl(gripper)
 
-    # Update text/border color on state transitions
-
-    def update_ui(controller: LeaderFollowerControl, new_state: LeaderFollowerControlState):
+    # Arm UI (old-style controller: handlers run on the main thread)
+    def update_arm_ui(controller: LeaderFollowerControl, new_state: LeaderFollowerControlState):
         if controller.state == new_state:
             return
-
         if new_state == LeaderFollowerControlState.HOMING:
-            m.set_led_color("blue", blocking=False)
-            m.clear_text()
-            m.add_text("Homing...")
+            m_arm.set_led_color("blue", blocking=False)
+            show(m_arm, "Homing...")
         elif new_state == LeaderFollowerControlState.UNALIGNED:
-            m.set_led_color("blue", blocking=False)
+            m_arm.set_led_color("blue", blocking=False)
         elif new_state == LeaderFollowerControlState.ALIGNED:
-            m.set_led_color("green", blocking=False)
-            m.clear_text()
-            m.add_text("Aligned!")
+            m_arm.set_led_color("green", blocking=False)
+            show(m_arm, "Aligned!")
 
-    leader_follower_control._transition_handlers.append(update_ui)
+    leader_follower_control._transition_handlers.append(update_arm_ui)
 
-    #######################
-    ## Main Control Loop ##
-    #######################
-
-    demo_controller.start_logging()
-    last_log_start_time = time()
     last_text_update = 0.0
-    while demo_controller.running and gripper_control.running and leader_follower_control.running:
-        t = time()
-        demo_inputs = None
-        if m_tready.update(0.0):
-            demo_inputs = input_parser(m_tready)
 
-        arm_inputs, gripper_inputs = parse_mobile_feedback(m)
+    def step_arm(t_now: float) -> bool:
+        """One iteration of the MAPS leader/follower + gripper loop."""
+        global last_text_update
+        arm_inputs, gripper_inputs = parse_mobile_feedback(m_arm)
+        leader_follower_control.update(t_now, arm_inputs)
+        gripper_control.update(t_now, gripper_inputs)
+        leader_follower_control.send()
+        gripper_control.send()
 
-        try:
-            demo_controller.update(t, demo_inputs)
-            leader_follower_control.update(t, arm_inputs)
-            gripper_control.update(t, gripper_inputs)
+        if leader_follower_control.state == LeaderFollowerControlState.UNALIGNED and t_now - last_text_update > 0.1:
+            last_text_update = t_now
+            show(m_arm, f"Unaligned: {np.around(np.rad2deg(leader_follower_control.angle_diff), decimals=0)}")
+        return leader_follower_control.running and gripper_control.running
 
-            demo_controller.send()
-            leader_follower_control.send()
-            gripper_control.send()
+    updater = MobileIOUpdater(
+        m_base,
+        {
+            TreadyStartupState: (LAYOUT_DIR / "TreadwardStartupController.json", update_startup_mode),
+            TreadyTeleopState: (LAYOUT_DIR / "TreadwardDriveController.json", update_drive_mode),
+        },
+    )
+    updater.attach(base_control)
 
-            if leader_follower_control.state == LeaderFollowerControlState.UNALIGNED:
-                if t - last_text_update > 0.1:
-                    last_text_update = t
-                    m.clear_text()
-                    m.add_text(f"Unaligned: {np.around(np.rad2deg(leader_follower_control.angle_diff), decimals=0)}")
-
-        except KeyboardInterrupt:
-            demo_controller.transition_to(t, TreadyControlState.EXIT)
-
-        if m_tready.get_button_state(8):
-            demo_controller.transition_to(t, TreadyControlState.EXIT)
-
-        if t - last_log_start_time > 3600:
-            demo_controller.cycle_log()
-            last_log_start_time = t
-
-    sys.exit(0)
+    # The MAPS loop blocks on arm feedback each step, so don't also block on the Mobile IO.
+    run(updater, [base_control], log=not args.no_log, step=step_arm, poll_timeout_ms=0)

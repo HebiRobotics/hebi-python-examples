@@ -1,30 +1,42 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import time
-import datetime
-import sys
-from pathlib import Path
 
 import numpy as np
-from numpy.typing import NDArray
 
-import hebi
+from kits.common.state_machine import ControllerState
 
-from .treaded_base_core import TreadyEStopState, TreadyExitState, TreadyInputs, TreadedBase, TreadedBaseController, ControllerState
+from .treaded_base_core import TreadyInputs, TreadedBaseController
 
-from .tready_utils import wait_for_mobile_io
+# Re-exported so demos can import the base and its standard states from one place.
+from .treaded_base_core import TreadedBase, TreadyEStopState, TreadyExitState  # noqa: F401
 
 
-@dataclass
+class _ResumeToTeleop:
+    """Mixin: after a disconnect or fault, resume in teleop instead of restarting this state's motion."""
+
+    controller: TreadedBaseController
+
+    def resume_state(self):
+        return TreadyTeleopState(self.controller)
+
+
+@dataclass(eq=False)
 class TreadyInitialState(ControllerState):
     def update(self, **kwargs):
         # On first loop move to startup
-        self.controller.transition_to(TreadyStartupState(self.controller))
+        return TreadyStartupState(self.controller)
 
 
-@dataclass
+@dataclass(eq=False)
 class TreadyStartupState(ControllerState):
+    # Set by receive_inputs; update() returns it (inputs never transition directly).
+    requested: ControllerState | None = field(default=None, init=False)
+
+    def resume_state(self):
+        return TreadyStartupState(self.controller)
+
     def on_enter(self, from_state: ControllerState, **kwargs):
         self.controller.base.set_color("magenta")
         self.unlocked_flippers: list[int] = []
@@ -43,180 +55,185 @@ class TreadyStartupState(ControllerState):
         if not self.allow_payload_startup:
             self.controller.base.unlock_flippers(self.unlocked_flippers)
 
+        requested, self.requested = self.requested, None
+        return requested
+
     def receive_inputs(self, t_now: float, tready_input: TreadyInputs, **kwargs):
         # Transition to teleop when startup complete
         if tready_input.override_startup:
             self.allow_payload_startup = True
 
         if self.allow_payload_startup and tready_input.allow_startup:
-            self.controller.transition_to(TreadyTeleopState(self.controller))
+            self.requested = TreadyTeleopState(self.controller)
 
 
-@dataclass
-class TreadyHomingState(ControllerState):
-    def resume_state(self) -> ControllerState:
-        return TreadyTeleopState(self.controller)
-
+@dataclass(eq=False)
+class TreadyHomingState(_ResumeToTeleop, ControllerState):
     def on_enter(self, from_state: ControllerState, **kwargs):
         self.controller.base.set_color("magenta")
         self.controller.base.home()
 
     def update(self, **kwargs):
         if not self.controller.base.has_active_flipper_trajectory:
-            self.controller.transition_to(TreadyTeleopState(self.controller))
+            return TreadyTeleopState(self.controller)
+        return None
 
 
-@dataclass
-class TreadyFlatteningState(ControllerState):
-    def resume_state(self) -> ControllerState:
-        return TreadyTeleopState(self.controller)
-
+@dataclass(eq=False)
+class TreadyFlatteningState(_ResumeToTeleop, ControllerState):
     def on_enter(self, from_state: ControllerState, **kwargs):
         self.controller.base.set_color("magenta")
         self.controller.base.flatten_flippers()
 
     def update(self, **kwargs):
         if not self.controller.base.has_active_flipper_trajectory:
-            self.controller.transition_to(TreadyTeleopState(self.controller))
+            return TreadyTeleopState(self.controller)
+        return None
 
 
-@dataclass
-class TreadyRearingState(ControllerState):
-    def resume_state(self) -> ControllerState:
-        return TreadyTeleopState(self.controller)
-
+@dataclass(eq=False)
+class TreadyRearingState(_ResumeToTeleop, ControllerState):
     def on_enter(self, from_state: ControllerState, **kwargs):
         self.controller.base.set_color("magenta")
         self.controller.base.rear_up()
 
     def update(self, **kwargs):
         if not self.controller.base.has_active_flipper_trajectory:
-            self.controller.transition_to(TreadyTeleopState(self.controller))
+            return TreadyTeleopState(self.controller)
+        return None
 
 
-@dataclass
+@dataclass(eq=False)
 class TreadyDeployingState(ControllerState):
+    """Stop the chassis so a payload can deploy. Payload coupling lives in the demo (it reads this state)."""
+
+    def resume_state(self):
+        return TreadyDeployingState(self.controller)
+
     def on_enter(self, from_state: ControllerState, **kwargs):
+        self.controller.base.set_color("magenta")
         self.controller.base.deploy()
 
     def update(self, **kwargs):
         if not self.controller.base.has_active_trajectory:
-            self.controller.transition_to(TreadyDeployedState(self.controller))
+            return TreadyDeployedState(self.controller)
+        return None
 
 
-@dataclass
+@dataclass(eq=False)
 class TreadyDeployedState(ControllerState):
+    """Payload deployed. Driving is allowed only while the payload says it's safe (``drive_safe``)."""
+
+    # Set by receive_inputs; update() returns it (inputs never transition directly).
+    requested: ControllerState | None = field(default=None, init=False)
+
+    def resume_state(self):
+        return TreadyDeployedState(self.controller)
+
     def on_enter(self, from_state: ControllerState, **kwargs):
-        self.controller.payload_deploy_safe = True
-        self.controller.payload_stow_safe = True
+        self.controller.base.clear_color()
 
     def receive_inputs(self, t_now: float, tready_input: TreadyInputs, **kwargs):
+        if self.requested is not None:
+            return
         if tready_input.stow:
-            self.controller.transition_to(TreadyStowingState(self.controller))
+            self.requested = TreadyStowingState(self.controller)
             return
 
-        if tready_input.drive_safe:
-            # Mobile Base Control
-            chassis_vels: NDArray[np.float64] = np.array(
-                [
-                    self.controller.max_base_speed * tready_input.base_motion.x,
-                    0,
-                    self.controller.max_chassis_rotation_vel * tready_input.base_motion.rz,
-                ],
-                dtype=np.float64,
-            )
+        self.controller.drive(tready_input)
 
-            duration = self.controller.base.chassis_ramp_time
-        else:
-            chassis_vels = np.zeros(3)
-            duration = 0.2
-
-        self.controller.base.set_chassis_vel_trajectory(duration, chassis_vels)
-
-    def on_exit(self, to_state: ControllerState, **kwargs):
-        self.controller.payload_deploy_safe = False
-        self.controller.payload_stow_safe = False
+    def update(self, **kwargs):
+        requested, self.requested = self.requested, None
+        return requested
 
 
-@dataclass
+@dataclass(eq=False)
 class TreadyStowingState(ControllerState):
+    """Hold still until the payload reports it is stowed (``stow_safe``)."""
+
+    # Set by receive_inputs; update() returns it (inputs never transition directly).
+    requested: ControllerState | None = field(default=None, init=False)
+
+    def resume_state(self):
+        return TreadyStowingState(self.controller)
+
     def on_enter(self, from_state: ControllerState, **kwargs):
-        # Hold still while the payload stows
-        self.controller.base.set_chassis_vel_trajectory(0.2, np.zeros(3))
+        self.controller.base.set_color("magenta")
+        self.controller.base.hold_motion()
 
     def receive_inputs(self, t_now: float, tready_input: TreadyInputs, **kwargs):
         if tready_input.stow_safe:
-            self.controller.transition_to(TreadyTeleopState(self.controller))
+            self.requested = TreadyTeleopState(self.controller)
+
+    def update(self, **kwargs):
+        requested, self.requested = self.requested, None
+        return requested
 
 
-@dataclass
-class TreadyAligningState(ControllerState):
-    def resume_state(self) -> ControllerState:
-        return TreadyTeleopState(self.controller)
-
+@dataclass(eq=False)
+class TreadyAligningState(_ResumeToTeleop, ControllerState):
     def on_enter(self, from_state: ControllerState, **kwargs):
         self.controller.base.set_color("magenta")
         self.controller.base.align_flippers()
 
     def update(self, **kwargs):
         if not self.controller.base.has_active_flipper_trajectory:
-            self.controller.transition_to(TreadyTeleopState(self.controller))
+            return TreadyTeleopState(self.controller)
+        return None
 
 
-@dataclass
-class TreadyTeleopState(ControllerState):
+@dataclass(eq=False)
+class TreadyTeleopState(_ResumeToTeleop, ControllerState):
+    # Set by receive_inputs; update() returns it (inputs never transition directly).
+    requested: ControllerState | None = field(default=None, init=False)
+
     def on_enter(self, from_state: ControllerState, **kwargs):
         self.controller.base.clear_color()
 
     def receive_inputs(self, t_now: float, tready_input: TreadyInputs, **kwargs):
+        if self.requested is not None:
+            return
+
         # IDK why but sometimes this happens
         if not tready_input.allow_startup:
             print("How did this happen")
-            self.controller.transition_to(TreadyStartupState(self.controller))
+            self.requested = TreadyStartupState(self.controller)
+            return
 
         # Flipper Control
         flipper_vels = -self.controller.base.flipper_sign * tready_input.flippers * self.controller.flipper_vel_scale
         self.controller.base.set_flipper_trajectory(self.controller.base.flipper_ramp_time, v=flipper_vels)
 
         if tready_input.torque_mode:
-            self.controller.transition_to(TreadyCompliantFlippersState(self.controller))
+            self.requested = TreadyCompliantFlippersState(self.controller)
         # Check for home button
         elif tready_input.home:
-            self.controller.transition_to(TreadyHomingState(self.controller))
+            self.requested = TreadyHomingState(self.controller)
         # Check for flipper alignment
         elif tready_input.align_flippers:
-            self.controller.transition_to(TreadyAligningState(self.controller))
+            self.requested = TreadyAligningState(self.controller)
         # Check for flipper flatten
         elif tready_input.flatten_flippers:
-            self.controller.transition_to(TreadyFlatteningState(self.controller))
+            self.requested = TreadyFlatteningState(self.controller)
         # Check for rear up
         elif tready_input.rear_up:
-            self.controller.transition_to(TreadyRearingState(self.controller))
+            self.requested = TreadyRearingState(self.controller)
         # Check for deployment
         elif tready_input.deploy:
-            self.controller.transition_to(TreadyDeployingState(self.controller))
-
-        if tready_input.drive_safe:
-            # Mobile Base Control
-            chassis_vels: NDArray[np.float64] = np.array(
-                [
-                    self.controller.max_base_speed * tready_input.base_motion.x,
-                    0,
-                    self.controller.max_chassis_rotation_vel * tready_input.base_motion.rz,
-                ],
-                dtype=np.float64,
-            )
-
-            duration = self.controller.base.chassis_ramp_time
+            self.requested = TreadyDeployingState(self.controller)
         else:
-            chassis_vels = np.zeros(3)
-            duration = 0.2
+            self.controller.drive(tready_input)
 
-        self.controller.base.set_chassis_vel_trajectory(duration, chassis_vels)
+    def update(self, **kwargs):
+        requested, self.requested = self.requested, None
+        return requested
 
 
-@dataclass
-class TreadyCompliantFlippersState(ControllerState):
+@dataclass(eq=False)
+class TreadyCompliantFlippersState(_ResumeToTeleop, ControllerState):
+    # Set by receive_inputs; update() returns it (inputs never transition directly).
+    requested: ControllerState | None = field(default=None, init=False)
+
     def on_enter(self, from_state: ControllerState, **kwargs):
         self.torque_start_time = time.time()
         self.torque_labels = [
@@ -225,10 +242,13 @@ class TreadyCompliantFlippersState(ControllerState):
             "Roll:",
             "Pitch:",
         ]
+        self.torque_labels_changed = True
 
     def receive_inputs(self, t_now: float, tready_input: TreadyInputs, **kwargs):
+        if self.requested is not None:
+            return
         if not tready_input.torque_mode:
-            self.controller.transition_to(TreadyTeleopState(self.controller))
+            self.requested = TreadyTeleopState(self.controller)
             return
 
         torque_slider = (tready_input.flippers[0] + 1) / 2
@@ -273,83 +293,40 @@ class TreadyCompliantFlippersState(ControllerState):
         ]
         self.torque_labels_changed = self.prev_torque_labels != self.torque_labels
 
-        if tready_input.drive_safe:
-            # Mobile Base Control
-            chassis_vels: NDArray[np.float64] = np.array(
-                [
-                    self.controller.max_base_speed * tready_input.base_motion.x,
-                    0,
-                    self.controller.max_chassis_rotation_vel * tready_input.base_motion.rz,
-                ],
-                dtype=np.float64,
-            )
+        self.controller.drive(tready_input)
 
-            duration = self.controller.base.chassis_ramp_time
-        else:
-            chassis_vels = np.zeros(3)
-            duration = 0.2
-
-        self.controller.base.set_chassis_vel_trajectory(duration, chassis_vels)
+    def update(self, **kwargs):
+        requested, self.requested = self.requested, None
+        return requested
 
 
 if __name__ == "__main__":
-    # This file is running as __main__, a second copy of the state classes above. Use the package's copies,
-    # which are the ones mobile_io_manager imports and matches on (otherwise status messages never match).
-    from kits.tready.treaded_base import TreadyInitialState, TreadyStartupState, TreadyTeleopState
-    from .mobile_io_manager import (
-        MobileIOUpdater,
-        update_startup_mode,
-        update_drive_mode,
-    )
+    # Run as `python -m kits.tready.treaded_base BASE_CONFIG`. This file is executing as __main__, which is a
+    # second copy of the state classes above, and the Mobile IO updater matches on the package's copies,
+    # so everything the demo uses is imported from the package.
+    import hebi
 
+    from kits.tready.demo_runner import LAYOUT_DIR, create_base_controller, load_config, parse_args, run
+    from kits.tready.mobile_io_manager import MobileIOUpdater, update_drive_mode, update_startup_mode
+    from kits.tready.treaded_base import TreadyStartupState, TreadyTeleopState
+    from kits.tready.tready_utils import wait_for_mobile_io
+
+    args = parse_args("Drive a Tready / Treadward base with a Mobile IO")
+    cfg = load_config(args.base_config)
     lookup = hebi.Lookup()
 
-    config_dir = Path(__file__).absolute().parent / "config"
-    cfg = hebi.config.load_config(str(config_dir / sys.argv[1]))
-
+    # Find all hardware before anything starts moving
     m = wait_for_mobile_io(lookup, cfg.families[0])
-
     print("mobileIO device found.")
-    m.update()
+    base_control = create_base_controller(cfg, lookup)
 
-    layout_dir = config_dir / "layouts"
     updater = MobileIOUpdater(
         m,
         {
-            TreadyStartupState: (layout_dir / "TreadwardStartupController.json", update_startup_mode),
-            TreadyTeleopState: (layout_dir / "TreadwardDriveController.json", update_drive_mode),
+            TreadyStartupState: (LAYOUT_DIR / "TreadwardStartupController.json", update_startup_mode),
+            TreadyTeleopState: (LAYOUT_DIR / "TreadwardDriveController.json", update_drive_mode),
         },
     )
+    updater.attach(base_control)
 
-    base = TreadedBase.from_config(cfg)
-    base_control = TreadedBaseController(
-        base, TreadyInitialState, TreadyEStopState, TreadyExitState, max_base_speed=cfg.user_data["max_base_speed"]
-    )
-
-    base_control._transition_handlers.append(updater.base_transition_handler)
-
-    base_control._update_handlers.append(updater.update_voltage_reading)
-    base_control._update_handlers.append(updater.update_torque_mode)
-    base_control._update_handlers.append(updater.update_startup_msg_base)
-
-    # can enable start logging here
-    logging = True
-
-    if logging:
-        log_dir = Path(__file__).parent / "logs"
-        base.group.start_log(str(log_dir), f"base_{datetime.datetime.now():%Y-%m-%d-%H-%M-%S}")
-
-    base_control.start()
-    while base_control.running:
-        try:
-            inputs = updater.parse_mobile_io_feedback(m, timeout_ms=500)
-            if inputs is not None:
-                base_inputs = inputs[0]
-                if base_inputs.quit:
-                    break
-                base_control.receive_inputs(base_inputs)
-
-        except KeyboardInterrupt:
-            break
-
-    base_control.wait_for_shutdown(5)
+    run(updater, [base_control], log=not args.no_log)

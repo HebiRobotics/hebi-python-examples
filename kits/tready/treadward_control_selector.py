@@ -1,52 +1,42 @@
+"""Run the payload demo if the payload is present, else the plain base demo.
+
+    python -m kits.tready.treadward_control_selector treadward.cfg.yaml treadward-core-sampler.cfg.yaml
+
+Looks for the payload's modules; if found, runs the payload demo with both
+configs, otherwise the base demo with the base config only.
+"""
+
 import subprocess
 import sys
 from time import sleep
 
 import hebi
 
-max_payload_attempts = 5
+from kits.common.config import add_config_argument, config_arg_parser
+from kits.tready.demo_runner import CONFIG_DIRS, load_config
+
+PAYLOAD_DEMO = "kits.tready.smart_treadward_sampler_control"
+BASE_DEMO = "kits.tready.treaded_base"
+MAX_PAYLOAD_ATTEMPTS = 5
 
 
-class PayloadInfo:
-    def __init__(self, family: str, names: list[str], controller: str):
-        self.family = family
-        self.names = names
-        self.controller = controller
+if __name__ == "__main__":
+    parser = config_arg_parser("Run the payload demo if its modules are found, else the base demo", *CONFIG_DIRS)
+    add_config_argument(parser, "base_config", "Treaded base config, e.g. treadward.cfg.yaml")
+    add_config_argument(parser, "payload_config", "Payload config, e.g. treadward-core-sampler.cfg.yaml")
+    args = parser.parse_args()
+    payload_cfg = load_config(args.payload_config)
 
-
-payloads = [
-    PayloadInfo(
-        "Treadward",
-        ["Mast_Pivot", "Chain_Upper", "Chain_Lower", "Wiggly-IO"],
-        "kits.tready.smart_treadward_sampler_control",
-    ),
-]
-default_controller = "kits.tready.treadward"
-
-
-l = hebi.Lookup()
-sleep(2)
-
-payload_group = None
-payload_controller = ""
-attempts = 0
-while attempts < max_payload_attempts and payload_group is None:
-    attempts += 1
-    print("Looking for payload modules...")
-    sleep(1)
-
-    for payload in payloads:
-        payload_family = payload.family
-        payload_names = payload.names
-        payload_group = l.get_group_from_names(payload_family, payload_names)
-        payload_controller = payload.controller
-        if payload_group is not None:
+    lookup = hebi.Lookup()
+    sleep(2)
+    found = False
+    for _ in range(MAX_PAYLOAD_ATTEMPTS):
+        print("Looking for payload modules...")
+        if lookup.get_group_from_names(payload_cfg.families, payload_cfg.names) is not None:
+            found = True
             break
+        sleep(1)
 
-
-if payload_group is not None:
-    print(f"Running {payload_controller}.py")
-    subprocess.run([sys.executable, "-m", payload_controller])
-else:
-    print(f"Running {default_controller}.py")
-    subprocess.run([sys.executable, "-m", default_controller])
+    command = [PAYLOAD_DEMO, args.base_config, args.payload_config] if found else [BASE_DEMO, args.base_config]
+    print(f"Running {' '.join(command)}")
+    subprocess.run([sys.executable, "-m", *command], check=False)  # the demo reports its own errors

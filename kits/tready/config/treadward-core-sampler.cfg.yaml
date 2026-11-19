@@ -1,0 +1,7 @@
+# Treadward core sampler payload: mast pivot, two chain motors, wiggler IO board
+version: 1.1
+families: ["Treadward"]
+names: ["Mast_Pivot", "Chain_Upper", "Chain_Lower", "Wiggly-IO"]
+
+gains:
+  default: "gains/core-sampling-gains.xml"

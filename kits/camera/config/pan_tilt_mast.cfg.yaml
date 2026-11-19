@@ -1,0 +1,9 @@
+# Pan/tilt camera mast
+version: 1.1
+families: ["Mast"]
+names: ["J1_pan", "J2_tilt"]
+hrdf: "hrdf/pan_tilt_mast.hrdf"
+
+user_data:
+  camera_family: "HEBI"   # family of the HEBI camera on the mast
+  home_position: [3.1415927, 1.5707963]  # pan, tilt (rad); moved to only on the home button

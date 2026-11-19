@@ -22,8 +22,9 @@ class HebiCamera(GroupManager):
         # self.set_on_update_callback(self.update_image_rotation)
 
     @staticmethod
-    def from_family(family: str):
-        lookup = hebi.Lookup()
+    def from_family(family: str, lookup: hebi.Lookup | None = None):
+        if lookup is None:
+            lookup = hebi.Lookup()
         group = lookup.get_group_from_names(family, ['toolhead', 'cam1'], timeout_ms=2000)
         if group is None:
             raise RuntimeError(f'Could not find HEBI Camera with family {family}')

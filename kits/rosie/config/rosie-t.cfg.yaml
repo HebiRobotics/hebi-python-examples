@@ -11,6 +11,8 @@ gains:
 user_data:
   # Default seed positions for doing inverse kinematics
   ik_seed_pos: [0.01, 1.0, 1.5, 1.5, -1.5, 0.01]
+  # Home pose (rad). The arm only moves here when the user presses home.
+  home_position: [0.225, 1.138, 1.905, 2.338, -1.571, 0.225]
 
   # Gripper specific settings
   has_gripper: true

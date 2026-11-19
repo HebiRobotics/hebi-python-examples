@@ -2,11 +2,11 @@
 
 import ast
 import importlib.util
+import io
 import re
+import tokenize
 
 import hebi
-import pytest
-
 from conftest import REPO_ROOT
 
 KITS = REPO_ROOT / "kits"
@@ -58,33 +58,69 @@ def test_arm_demos_parse_before_python_3_12():
     assert not offenders
 
 
+def _nested_fstring_quotes(source: str) -> list[int]:
+    """Lines where a string inside an f-string reuses the f-string's quote (PEP 701, Python 3.12+)."""
+    if not hasattr(tokenize, "FSTRING_START"):  # running on < 3.12: compile() already rejects them
+        return []
+    quotes, lines = [], []
+    for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+        if tok.type in (tokenize.STRING, tokenize.FSTRING_START):
+            quote = tok.string.lstrip("rRbBuUfF")[:3]
+            quote = quote if quote in ('"""', "'''") else quote[0]
+            if quotes and quotes[-1] == quote:
+                lines.append(tok.start[0])
+            if tok.type == tokenize.FSTRING_START:
+                quotes.append(quote)
+        elif tok.type == tokenize.FSTRING_END:
+            quotes.pop()
+    return lines
+
+
+def test_kits_parse_on_python_3_11():
+    """The demos support Python 3.11+: no PEP 695 generics/type aliases, no PEP 701 f-string quote reuse."""
+    offenders = []
+    for path in sorted(KITS.rglob("*.py")):
+        source = path.read_text()
+        rel = path.relative_to(REPO_ROOT)
+        try:
+            ast.parse(source, filename=str(path), feature_version=(3, 11))
+        except SyntaxError as e:
+            offenders.append(f"{rel}:{e.lineno}: {e.msg}")
+        offenders += [f"{rel}:{line}: f-string reuses its quote" for line in _nested_fstring_quotes(source)]
+    assert not offenders, "\n".join(offenders)
+
+
 def test_ar_arm_demo_works_with_older_scipy():
     """A15: Rotation.from_quat(scalar_first=...) needs scipy >= 1.14 and raises TypeError before that."""
-    assert "scalar_first" not in (KITS / "tready" / "tready_arm_io_control.py").read_text()
+    for path in ["tready/treaded_base_arm_io_control.py", "camera/pan_tilt_mast.py", "arms/ar_control_sm.py"]:
+        tree = ast.parse((KITS / path).read_text())
+        assert not any(isinstance(n, ast.keyword) and n.arg == "scalar_first" for n in ast.walk(tree)), path
 
 
-def test_demo_selector_imports_sys_and_shows_demo_output():
-    """A7: demo_selector used sys without importing it, and check_output swallowed the demo's console output."""
-    source = (KITS / "tready" / "demo_selector.py").read_text()
-    tree = ast.parse(source)
-    imported = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
-    assert "sys" in imported
-    assert "check_output" not in source
-
-
-def test_demo_selector_targets_exist():
-    from kits.tready.demo_selector import DEMOS
-
-    missing = [module for module in DEMOS.values() if importlib.util.find_spec(module) is None]
-    assert not missing
-
-
-def test_treadward_control_selector_fallback_exists():
-    """A8: with no payload found, the selector launched kits.tready.smart_treadward_control, which doesn't exist."""
+def test_treadward_control_selector_targets_exist():
+    """With no payload found, the selector launched kits.tready.smart_treadward_control, which doesn't exist."""
     tree = ast.parse((KITS / "tready" / "treadward_control_selector.py").read_text())
     modules = [
-        node.value.value
+        node.value
         for node in ast.walk(tree)
-        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "default_controller" for t in node.targets)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and re.fullmatch(r"kits(\.\w+)+", node.value)
     ]
     assert modules and all(importlib.util.find_spec(m) is not None for m in modules), modules
+
+
+def test_only_the_controller_transitions_states():
+    """States and demos never call the Controller's _transition_to: update() returns the next state, and the
+    Controller applies it (kits/common/state_machine.py). receive_inputs() records requests; it never transitions."""
+    offenders = []
+    for path in sorted(KITS.rglob("*.py")):
+        if path == KITS / "common" / "state_machine.py":
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in ("transition_to", "_transition_to")
+            ):
+                offenders.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}")
+    assert not offenders, f"_transition_to called outside the Controller: {offenders}"

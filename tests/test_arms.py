@@ -6,7 +6,6 @@ from pathlib import Path
 import hebi
 import numpy as np
 import pytest
-
 from conftest import REPO_ROOT, unique_family
 
 ARMS_CONFIG = REPO_ROOT / "kits" / "arms" / "config"
@@ -31,68 +30,87 @@ def run_until(predicate, step, timeout_s=5.0):
     return False
 
 
+# The arm controllers run their own control thread (Controller.start()/stop()). Imitated modules report
+# the M-stop as pressed, so tests drive it with this flag instead.
+@pytest.fixture(autouse=True)
+def no_mstop(monkeypatch):
+    monkeypatch.setattr(hebi.arm.Arm, "m_stopped", property(lambda self: getattr(self, "test_mstop", False)))
+
+
+def wait_for(ctrl, cls, timeout_s=5.0, feed=None):
+    deadline = time.time() + timeout_s
+    while time.time() < deadline and not isinstance(ctrl.state, cls):
+        if feed is not None:
+            ctrl.receive_inputs(feed())
+        time.sleep(0.02)
+    return isinstance(ctrl.state, cls)
+
+
+@pytest.fixture
+def started():
+    """Stops every controller passed to it at the end of the test."""
+    controllers = []
+
+    def start(ctrl):
+        controllers.append(ctrl)
+        ctrl.start()
+        return ctrl
+
+    yield start
+    for ctrl in controllers:
+        if ctrl.running:
+            ctrl.stop()
+
+
 # ---------------------------------------------------------------- joystick_control_sm
 
 
-def test_joystick_teleop_sets_goal(imitation, lookup):
-    """A1: teleop goals are built with add_waypoint(position=...) and no `t`, which raises on hebi >= 2.16.1."""
-    from kits.arms.joystick_control_sm import ArmControlState, ArmJoystickControl, ArmJoystickInputs
+def test_joystick_jog_sets_goal(imitation, lookup, started):
+    """add_waypoint(position=...) without `t` raised on hebi >= 2.16.1; joint_target aliased the feedback buffer."""
+    from kits.arms import joystick_control_sm as js
 
-    arm, _ = imitated_arm(imitation, lookup, ARMS_CONFIG / "A-2580-06.cfg.yaml")
-    ctrl = ArmJoystickControl(arm, HOME, homing_time=0.3)
-    idle = ArmJoystickInputs(False, [0, 0, 0], [0, 0, 0], False)
+    arm, cfg = imitated_arm(imitation, lookup, ARMS_CONFIG / "A-2580-06.cfg.yaml")
+    ctrl = started(js.ArmJoystickController.from_config(arm, cfg))
+    assert wait_for(ctrl, js.JoystickTeleopState, feed=js.ArmJoystickInputs.idle)
+    target = ctrl.state.joint_target
+    assert not np.shares_memory(target, arm.last_feedback.position_command) and not np.any(np.isnan(target))
 
-    def step(t):
-        ctrl.update(t, idle)
-        ctrl.send()
-
-    assert run_until(lambda: ctrl.state is ArmControlState.TELEOP, step), ctrl.state
-    ctrl.update(time.time(), ArmJoystickInputs(False, [0.02, 0, 0], [0, 0, 0], False))
+    ctrl.receive_inputs(js.ArmJoystickInputs(home=False, delta_xyz=[0.02, 0, 0], delta_rot_xyz=[0, 0, 0]))
     assert arm.trajectory is not None
 
 
-def test_joystick_joint_target_is_a_copy(imitation, lookup):
-    """A2: joint_target must not alias the feedback buffer (it's modified in place for the shoulder flip)."""
-    from kits.arms.joystick_control_sm import ArmControlState, ArmJoystickControl, ArmJoystickInputs
+def test_joystick_disconnect_holds_position(imitation, lookup, started):
+    """On Mobile IO disconnect the arm was sent to its home pose in 0.1 s."""
+    from kits.arms import joystick_control_sm as js
+    from kits.common.state_machine import DisconnectedState
 
-    arm, _ = imitated_arm(imitation, lookup, ARMS_CONFIG / "A-2580-06.cfg.yaml")
-    arm.update()
-    ctrl = ArmJoystickControl(arm, HOME, homing_time=0.3)
-    assert not np.shares_memory(ctrl.joint_target, arm.last_feedback.position_command)
-    assert not np.any(np.isnan(ctrl.joint_target))
-
-    idle = ArmJoystickInputs(False, [0, 0, 0], [0, 0, 0], False)
-
-    def step(t):
-        ctrl.update(t, idle)
-        ctrl.send()
-
-    assert run_until(lambda: ctrl.state is ArmControlState.TELEOP, step)
-    assert not np.shares_memory(ctrl.joint_target, arm.last_feedback.position_command)
+    arm, cfg = imitated_arm(imitation, lookup, ARMS_CONFIG / "A-2580-06.cfg.yaml")
+    ctrl = started(js.ArmJoystickController.from_config(arm, cfg))
+    assert wait_for(ctrl, js.JoystickTeleopState, feed=js.ArmJoystickInputs.idle)
+    ctrl.receive_inputs(js.ArmJoystickInputs(home=False, delta_xyz=[0.05, 0, 0], delta_rot_xyz=[0, 0, 0]))
+    assert wait_for(ctrl, DisconnectedState, timeout_s=3)
+    traj = arm.trajectory
+    assert np.allclose(traj.get_state(traj.end_time)[1], 0.0)
+    assert not np.allclose(traj.get_state(traj.end_time)[0], ctrl.arm_home, atol=1e-3), "moved to home on disconnect"
 
 
 # ---------------------------------------------------------------- ar_control_sm
 
 
-def test_ar_teleop_home_button_homes(imitation, lookup):
-    """A3: the home button is ignored while tracking (TELEOP)."""
-    from kits.arms.ar_control_sm import ArmControlState, ArmMobileIOControl, ArmMobileIOInputs
+def test_ar_teleop_home_button_homes(imitation, lookup, started):
+    """The home button was ignored while tracking (Teleop)."""
+    from kits.arms import ar_control_sm as ar
 
-    arm, _ = imitated_arm(imitation, lookup, ARMS_CONFIG / "A-2580-06.cfg.yaml")
-    ctrl = ArmMobileIOControl(arm, None, homing_time=0.3)
+    arm, cfg = imitated_arm(imitation, lookup, ARMS_CONFIG / "A-2580-06.cfg.yaml")
+    ctrl = started(ar.ArmMobileIOController.from_config(arm, cfg))
 
     def inputs(**kw):
-        return ArmMobileIOInputs(phone_pos=np.zeros(3), phone_rot=np.eye(3), **kw)
+        return ar.ArmMobileIOInputs(phone_pos=np.zeros(3), phone_rot=np.eye(3), **kw)
 
-    def step(t):
-        ctrl.update(t, inputs())
-        ctrl.send()
-
-    assert run_until(lambda: ctrl.state is ArmControlState.IDLE, step), ctrl.state
-    ctrl.update(time.time(), inputs(lock_toggle=True, locked=False))
-    assert ctrl.state is ArmControlState.TELEOP
-    ctrl.update(time.time(), inputs(locked=False, home=True))
-    assert ctrl.state is ArmControlState.HOMING
+    assert wait_for(ctrl, ar.ARIdleState, feed=inputs)
+    # An input only records a request; the transition happens on the next control tick.
+    assert wait_for(ctrl, ar.ARTeleopState, feed=lambda: inputs(lock_toggle=True, locked=False))
+    assert wait_for(ctrl, ar.ARHomingState, feed=lambda: inputs(locked=False, home=True))
 
 
 def test_ar_main_parser_buttons(fake_mobile_io):
@@ -110,17 +128,59 @@ def test_ar_main_parser_buttons(fake_mobile_io):
     assert inputs.gripper_closed
 
 
+def test_ar_invalid_phone_orientation_is_nan(fake_mobile_io):
+    """An invalid orientation must hold the arm (NaN pose is skipped), not track a made-up identity pose."""
+    from kits.arms.ar_control_sm import phone_rotation
+
+    fake_mobile_io.orientation = [0.0, 0.0, 0.0, 0.0]  # zero-norm quaternion: scipy raises ValueError
+    assert np.all(np.isnan(phone_rotation(fake_mobile_io)))
+
+
+def test_joystick_parser_treats_nan_axes_as_no_input(fake_mobile_io):
+    """Axes can read NaN right after a layout is sent, before the phone reports them."""
+    from kits.tready.treaded_base_arm_joystick_control import parse_joystick_arm
+
+    for axis in fake_mobile_io.axes:
+        fake_mobile_io.axes[axis] = float("nan")
+    fake_mobile_io.press(b3=1)  # arm mode on: also reads the rotation axes
+    inputs = parse_joystick_arm(fake_mobile_io)
+    assert np.all(np.asarray(inputs.delta_xyz) == 0.0)
+    assert np.all(np.asarray(inputs.delta_rot_xyz) == 0.0)
+
+
+def test_arm_led_colors_are_the_same_in_every_demo():
+    """Homing is magenta, disconnected is blue, everything else is transparent."""
+    from types import SimpleNamespace
+
+    from kits.arms.ar_control_sm import ARHomingState, ARIdleState
+    from kits.arms.arm_controller import ArmController
+    from kits.arms.joystick_control_sm import JoystickHomingState, JoystickTeleopState
+    from kits.common.state_machine import DisconnectedState
+
+    led = SimpleNamespace(color="")
+    controller = SimpleNamespace(arm=SimpleNamespace(pending_command=SimpleNamespace(led=led)))
+
+    for state_cls, color in [
+        (ARHomingState, "magenta"),
+        (JoystickHomingState, "magenta"),
+        (DisconnectedState, "blue"),
+        (ARIdleState, "transparent"),
+        (JoystickTeleopState, "transparent"),
+    ]:
+        ArmController._set_led_color(controller, object.__new__(state_cls))
+        assert led.color == color, state_cls.__name__
+
+
 # ---------------------------------------------------------------- ex_leader_follower
 
 
-def test_leader_follower_idle_holds(imitation, lookup):
-    """A1: Idle re-commands the follower with add_waypoint(position=...) and no `t`.
-    Also, the first update with no Mobile IO input read an attribute that was never set."""
-    from kits.arms.ex_leader_follower import FollowerControlState, LeaderFollowerControl, LeaderFollowerInputs
+def test_leader_follower_idle_holds(imitation, lookup, started):
+    """Idle held the follower with add_waypoint(position=...) and no `t`; reusing one config object for both
+    arms raised KeyError (create_from_config consumes its plugin entries)."""
+    from kits.arms import ex_leader_follower as lf
 
-    # One config object per arm: create_from_config consumes the config's plugin entries.
-    leader_cfg = hebi.config.load_config(str(ARMS_CONFIG / "A-2085-06.cfg.yaml"))
-    follower_cfg = hebi.config.load_config(str(ARMS_CONFIG / "A-2085-06.cfg.yaml"))
+    leader_cfg = hebi.config.load_config(str(ARMS_CONFIG / "ex_leader_follower_leader.cfg.yaml"))
+    follower_cfg = hebi.config.load_config(str(ARMS_CONFIG / "ex_leader_follower.cfg.yaml"))
     leader_family, follower_family = unique_family("leader"), unique_family("follower")
     imitation([(f, n) for f in (leader_family, follower_family) for n in leader_cfg.names])
     leader_cfg.families = [leader_family]
@@ -128,11 +188,8 @@ def test_leader_follower_idle_holds(imitation, lookup):
     leader = hebi.arm.create_from_config(leader_cfg, lookup)
     follower = hebi.arm.create_from_config(follower_cfg, lookup)
 
-    ctrl = LeaderFollowerControl(leader, follower, home_pose=HOME, homing_time=0.3)
-    ctrl.update(time.time(), None)  # no Mobile IO sample yet
-
-    assert run_until(lambda: ctrl.state is FollowerControlState.IDLE, lambda t: ctrl.update(t, LeaderFollowerInputs()))
-    ctrl.update(time.time(), LeaderFollowerInputs())
+    ctrl = started(lf.LeaderFollowerController(follower, leader, home_position=follower_cfg.user_data["home_position"]))
+    assert wait_for(ctrl, lf.LFIdleState, feed=lf.LeaderFollowerInputs)
     assert follower.trajectory is not None
 
 

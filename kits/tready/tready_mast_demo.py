@@ -1,123 +1,74 @@
 #! /usr/bin/env python3
+"""Drive a Tready / Treadward base with a pan/tilt camera mast from one Mobile IO.
+
+    python -m kits.tready.tready_mast_demo tready.cfg.yaml pan_tilt_mast.cfg.yaml --stream-to 10.10.2.1
+
+``--stream-to`` sends the camera's video to that host (the address the old
+demo hard-coded is shown above).
+"""
+
 from __future__ import annotations
 
-import datetime
-import sys
-from pathlib import Path
+import typing
 
 import hebi
 
+from ..camera.pan_tilt_mast import MastInputs, create_mast_controller
+from .demo_runner import LAYOUT_DIR, create_base_controller, demo_arg_parser, load_config, run
+from .mobile_io_manager import MobileIOUpdater, update_drive_mode, update_startup_mode
+from .treaded_base import TreadyStartupState, TreadyTeleopState
 from .tready_utils import wait_for_mobile_io
-
-from ..camera.camera import HebiCamera
-from ..camera.pan_tilt_mast import (
-    CameraMast,
-    MastController,
-    CameraMastStartupState,
-    CameraMastFaultState,
-    CameraMastExitState,
-    MastInputs,
-)
-from .treaded_base_core import (
-    TreadedBaseController,
-    TreadyEStopState,
-    TreadyExitState,
-)
-from .treaded_base import TreadedBase, TreadyInitialState, TreadyStartupState, TreadyTeleopState
-
-import typing
 
 if typing.TYPE_CHECKING:
     from hebi._internal.mobile_io import MobileIO
 
+# Mast inputs while the base is starting up: hold still, lights off.
+MAST_IDLE = MastInputs(v_pan=0.0, v_tilt=0.0, home=False, zoom=1.0, light_enable=False, light_pwm=0.2)
+
+
+def update_camera_drive_mode(m: MobileIO):
+    (base_inputs,) = update_drive_mode(m)
+
+    pan = -1.0 * m.get_axis_state(7)
+    tilt = m.get_axis_state(8)
+    mast_inputs = MastInputs(pan, tilt, base_inputs.home, 1.0, True, 0.4)
+    return base_inputs, mast_inputs
+
+
+def update_camera_startup_mode(m: MobileIO):
+    (base_inputs,) = update_startup_mode(m)
+    return base_inputs, MAST_IDLE
+
 
 if __name__ == "__main__":
-    from .mobile_io_manager import MobileIOUpdater, update_startup_mode, update_drive_mode
-
-    def update_camera_drive_mode(m: MobileIO):
-        base_inputs = update_drive_mode(m)[0]
-
-        pan = -1.0 * m.get_axis_state(7)
-        tilt = m.get_axis_state(8)
-        mast_inputs = MastInputs(pan, tilt, base_inputs.home, 1.0, True, 0.4)
-        return base_inputs, mast_inputs
-
-    def update_camera_startup_mode(m: MobileIO):
-        return update_startup_mode(m)[0], MastInputs(0.0, 0.0, False, 1.0, False, 0.2)
-
+    parser = demo_arg_parser("Drive a treaded base with a pan/tilt camera mast", mast_config="Mast config, e.g. pan_tilt_mast.cfg.yaml")
+    parser.add_argument("--stream-to", metavar="HOST", help="Stream the camera's video to this host")
+    parser.add_argument("--stream-kbps", type=int, default=1000, help="Video bitrate when streaming (default: 1000)")
+    args = parser.parse_args()
+    cfg = load_config(args.base_config)
+    mast_cfg = load_config(args.mast_config)
     lookup = hebi.Lookup()
 
-    config_dir = Path(__file__).absolute().parent / "config"
-    cfg = hebi.config.load_config(str(config_dir / sys.argv[1]))
-
+    # Find all hardware before anything starts moving
     m = wait_for_mobile_io(lookup, cfg.families[0])
-
     print("mobileIO device found.")
-    m.update()
+    base_control = create_base_controller(cfg, lookup)
+    mast_control = create_mast_controller(mast_cfg, lookup)
+    camera = mast_control.camera
+    if args.stream_to:
+        camera.stream_to(args.stream_to, args.stream_kbps)
+    camera.set_overlay_text('HEBI Mast Control Demo')
 
-    layout_dir = config_dir / "layouts"
     updater = MobileIOUpdater(
         m,
         {
-            TreadyStartupState: (layout_dir / "TreadwardStartupController.json", update_camera_startup_mode),
-            TreadyTeleopState: (layout_dir / "TreadwardCameraDriveController.json", update_camera_drive_mode),
+            TreadyStartupState: (LAYOUT_DIR / "TreadwardStartupController.json", update_camera_startup_mode),
+            TreadyTeleopState: (LAYOUT_DIR / "TreadwardCameraDriveController.json", update_camera_drive_mode),
         },
     )
+    updater.attach(base_control)
 
-    # Setup Camera Pan/Tilt
-    family = "Mast"
-    module_names = ['J1_pan', 'J2_tilt']
-
-    group = lookup.get_group_from_names(family, module_names, timeout_ms=2000)
-    while group is None:
-        print('Looking for pan/tilt modules...')
-        group = lookup.get_group_from_names(family, module_names, timeout_ms=1000)
-
-    mast = CameraMast(group)
-    camera = HebiCamera.from_family('HEBI')
-    camera.stream_to('10.10.2.1', 1000)
-    camera.set_overlay_text('HEBI Mast Control Demo')
-
-    mast_control = MastController(mast, camera, CameraMastStartupState, CameraMastFaultState, CameraMastExitState)
-
-    base = TreadedBase.from_config(cfg)
-    base_control = TreadedBaseController(
-        base, TreadyInitialState, TreadyEStopState, TreadyExitState, max_base_speed=cfg.user_data["max_base_speed"]
-    )
-
-    base_control._transition_handlers.append(updater.base_transition_handler)
-
-    base_control._update_handlers.append(updater.update_voltage_reading)
-    base_control._update_handlers.append(updater.update_torque_mode)
-    base_control._update_handlers.append(updater.update_startup_msg_base)
-
-    # can enable start logging here
-    logging = True
-
-    if logging:
-        log_dir = Path(__file__).parent / "logs"
-        base.group.start_log(str(log_dir), f"base_{datetime.datetime.now():%Y-%m-%d-%H-%M-%S}")
-
-    #######################
-    ## Main Control Loop ##
-    #######################
-
-    base_control.start()
-    while base_control.running and mast_control.running:
-        try:
-            inputs = updater.parse_mobile_io_feedback(m, timeout_ms=500)
-            if inputs is not None:
-                base_inputs, mast_inputs = inputs
-
-                if base_inputs.quit:
-                    break
-
-                base_control.receive_inputs(base_inputs)
-                mast_control.receive_inputs(mast_inputs)
-        except KeyboardInterrupt:
-            break
-
-    print('Quitting')
-    camera.clear_overlay_text()
-    mast_control.wait_for_shutdown(2)
-    base_control.wait_for_shutdown(5)
+    try:
+        run(updater, [base_control, mast_control], log=not args.no_log)
+    finally:
+        camera.clear_overlay_text()
