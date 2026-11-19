@@ -75,6 +75,7 @@ if __name__ == "__main__":
 
     mast = CameraMast(group)
     camera = HebiCamera.from_family('HEBI')
+    camera.stream_to('10.10.2.1', 1000)
     camera.set_overlay_text('HEBI Mast Control Demo')
 
     mast_control = MastController(mast, camera, CameraMastStartupState, CameraMastDisconnectedState, CameraMastExitState)
